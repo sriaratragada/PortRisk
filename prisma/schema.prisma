@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String      @id @default(uuid())
+  email      String      @unique
+  createdAt  DateTime    @default(now())
+  portfolios Portfolio[]
+  auditLogs  AuditLog[]
+}
+
+model Portfolio {
+  id          String       @id @default(uuid())
+  userId      String
+  name        String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  positions   Position[]
+  riskScores  RiskScore[]
+  stressTests StressTest[]
+  auditLogs   AuditLog[]
+  user        User         @relation(fields: [userId], references: [id])
+}
+
+model Position {
+  id          String    @id @default(uuid())
+  portfolioId String
+  ticker      String
+  shares      Float
+  avgCost     Float
+  assetClass  String    @default("equities")
+  addedAt     DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@unique([portfolioId, ticker])
+  @@index([portfolioId])
+}
+
+model RiskScore {
+  id               String    @id @default(uuid())
+  portfolioId      String
+  scoredAt         DateTime  @default(now())
+  sharpe           Float
+  maxDrawdown      Float
+  var95            Float
+  var95Amount      Float
+  drawdownProb3m   Float
+  drawdownProb6m   Float
+  drawdownProb12m  Float
+  riskTier         String
+  summary          String
+  inputs           Json
+  portfolio        Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@index([portfolioId, scoredAt(sort: Desc)])
+}
+
+model StressTest {
+  id                  String    @id @default(uuid())
+  portfolioId         String
+  scenarioName        String
+  runAt               DateTime  @default(now())
+  projectedValue      Float
+  newRiskTier         String
+  recoveryDays        Int
+  inputs              Json
+  results             Json
+  portfolio           Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@index([portfolioId, runAt(sort: Desc)])
+}
+
+model AuditLog {
+  id              String    @id @default(uuid())
+  userId          String
+  portfolioId     String
+  timestamp       DateTime  @default(now())
+  actionType      String
+  beforeState     Json
+  afterState      Json
+  riskTierBefore  String?
+  riskTierAfter   String?
+  metadata        Json?
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolio       Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@index([userId, timestamp(sort: Desc)])
+  @@index([portfolioId, timestamp(sort: Desc)])
+}
