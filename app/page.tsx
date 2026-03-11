@@ -1,5 +1,5 @@
 import { Dashboard } from "@/components/dashboard";
-import { hydratePortfolioRisk } from "@/lib/portfolio";
+import { hydratePortfolioRisk } from "@/lib/portfolio-edge";
 import { RiskTier } from "@/lib/types";
 
 const demoPositions = [

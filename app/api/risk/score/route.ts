@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { requireUser } from "@/lib/auth";
-import { getPortfolioWithPositionsEdge, hydratePortfolioRisk } from "@/lib/portfolio";
+import { getPortfolioWithPositionsEdge, hydratePortfolioRisk } from "@/lib/portfolio-edge";
 import { badRequest, json, parseJson } from "@/lib/http";
 import { riskScoreSchema } from "@/lib/validation";
 

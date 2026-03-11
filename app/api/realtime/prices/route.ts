@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { badRequest, json } from "@/lib/http";
-import { hydratePortfolioRisk } from "@/lib/portfolio";
+import { hydratePortfolioRisk } from "@/lib/portfolio-edge";
 
 export const runtime = "edge";
 
