@@ -1,4 +1,4 @@
-import type { HoldingSnapshot, HistoricalPoint, PositionInput, RiskMetrics, RiskTier } from "./types";
+import type { HoldingSnapshot, HistoricalPoint, MarketQuote, PositionInput, RiskMetrics, RiskTier } from "./types";
 
 const RISK_FREE_RATE = 0.045;
 const TRADING_DAYS = 252;
@@ -197,21 +197,23 @@ export function buildPortfolioSeries(
 
 export function buildHoldingSnapshots(
   positions: PositionInput[],
-  latestPrices: Record<string, number>,
-  previousCloseByTicker: Record<string, number>
+  quotesByTicker: Record<string, MarketQuote>
 ) {
   const totalValue = positions.reduce(
-    (sum, position) => sum + position.shares * (latestPrices[position.ticker.toUpperCase()] ?? 0),
+    (sum, position) => sum + position.shares * (quotesByTicker[position.ticker.toUpperCase()]?.price ?? 0),
     0
   );
 
   return positions.map<HoldingSnapshot>((position) => {
     const ticker = position.ticker.toUpperCase();
-    const currentPrice = latestPrices[ticker] ?? 0;
-    const previousClose = previousCloseByTicker[ticker] ?? currentPrice;
+    const quote = quotesByTicker[ticker];
+    const currentPrice = quote?.price ?? 0;
+    const previousClose = quote?.previousClose ?? currentPrice;
     const currentValue = currentPrice * position.shares;
     const previousValue = previousClose * position.shares;
     const dailyPnl = currentValue - previousValue;
+    const costBasis = position.avgCost * position.shares;
+    const totalGain = currentValue - costBasis;
     return {
       ...position,
       ticker,
@@ -220,7 +222,11 @@ export function buildHoldingSnapshots(
       currentValue,
       weight: totalValue === 0 ? 0 : currentValue / totalValue,
       dailyPnl,
-      dailyPnlPercent: previousValue === 0 ? 0 : dailyPnl / previousValue
+      dailyPnlPercent: previousValue === 0 ? 0 : dailyPnl / previousValue,
+      totalGain,
+      totalGainPercent: costBasis === 0 ? 0 : totalGain / costBasis,
+      companyName: quote?.longName ?? quote?.shortName,
+      exchange: quote?.exchange
     };
   });
 }

@@ -51,17 +51,15 @@ export async function getPortfolioWithPositionsEdge(portfolioId: string, userId:
 export async function hydratePortfolioRisk(positions: PositionInput[], drawdownThreshold = 0.15) {
   const tickers = positions.map((position) => position.ticker.toUpperCase());
   const quotes = await fetchQuotes(tickers);
+  const quoteMap = Object.fromEntries(quotes.map((quote) => [quote.ticker.toUpperCase(), quote]));
   const histories = await Promise.all(tickers.map((ticker) => fetchHistoricalCloses(ticker, 252)));
   const latestPrices = Object.fromEntries(quotes.map((quote) => [quote.ticker.toUpperCase(), quote.price]));
-  const previousCloses = Object.fromEntries(
-    quotes.map((quote) => [quote.ticker.toUpperCase(), quote.previousClose])
-  );
   const historicalByTicker = Object.fromEntries(
     tickers.map((ticker, index) => [ticker, histories[index]])
   );
 
   const { series, metrics } = buildPortfolioSeries(positions, historicalByTicker, latestPrices);
-  const holdings = buildHoldingSnapshots(positions, latestPrices, previousCloses);
+  const holdings = buildHoldingSnapshots(positions, quoteMap);
   const dailyReturns = computeDailyReturns(series.map((point) => point.value));
   const probabilities = monteCarloDrawdownProbability(dailyReturns, drawdownThreshold);
 

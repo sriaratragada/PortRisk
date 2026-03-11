@@ -1,7 +1,8 @@
-import type { HistoricalPoint, MarketQuote } from "@/lib/types";
+import type { CompanyDetail, HistoricalPoint, MarketQuote } from "@/lib/types";
 
 const quoteCache = new Map<string, { expiresAt: number; data: MarketQuote }>();
 const historyCache = new Map<string, { expiresAt: number; data: HistoricalPoint[] }>();
+const detailCache = new Map<string, { expiresAt: number; data: CompanyDetail }>();
 
 type YahooQuoteResponse = {
   quoteResponse?: {
@@ -10,6 +11,13 @@ type YahooQuoteResponse = {
       regularMarketPrice?: number;
       regularMarketPreviousClose?: number;
       currency?: string;
+      shortName?: string;
+      longName?: string;
+      fullExchangeName?: string;
+      marketCap?: number;
+      trailingPE?: number;
+      fiftyTwoWeekLow?: number;
+      fiftyTwoWeekHigh?: number;
     }>;
   };
 };
@@ -19,6 +27,60 @@ type YahooQuoteRow = {
   regularMarketPrice?: number;
   regularMarketPreviousClose?: number;
   currency?: string;
+  shortName?: string;
+  longName?: string;
+  fullExchangeName?: string;
+  marketCap?: number;
+  trailingPE?: number;
+  fiftyTwoWeekLow?: number;
+  fiftyTwoWeekHigh?: number;
+};
+
+type YahooQuoteSummaryResponse = {
+  quoteSummary?: {
+    result?: Array<{
+      assetProfile?: {
+        sector?: string;
+        industry?: string;
+        website?: string;
+        longBusinessSummary?: string;
+        fullTimeEmployees?: number;
+      };
+      price?: {
+        shortName?: string;
+        longName?: string;
+        exchangeName?: string;
+        regularMarketPrice?: { raw?: number };
+        currency?: string;
+      };
+      summaryDetail?: {
+        fiftyTwoWeekLow?: { raw?: number };
+        fiftyTwoWeekHigh?: { raw?: number };
+        dividendYield?: { raw?: number };
+        beta?: { raw?: number };
+        trailingPE?: { raw?: number };
+        forwardPE?: { raw?: number };
+      };
+      defaultKeyStatistics?: {
+        marketCap?: { raw?: number };
+        enterpriseValue?: { raw?: number };
+      };
+      financialData?: {
+        currentRatio?: { raw?: number };
+        quickRatio?: { raw?: number };
+        debtToEquity?: { raw?: number };
+        revenueGrowth?: { raw?: number };
+        earningsGrowth?: { raw?: number };
+        profitMargins?: { raw?: number };
+        returnOnEquity?: { raw?: number };
+        totalCash?: { raw?: number };
+        totalDebt?: { raw?: number };
+        freeCashflow?: { raw?: number };
+        operatingCashflow?: { raw?: number };
+        targetMeanPrice?: { raw?: number };
+      };
+    }>;
+  };
 };
 
 type YahooChartResponse = {
@@ -48,6 +110,15 @@ function getChartUrl(symbol: string, range: string) {
   return url.toString();
 }
 
+function getQuoteSummaryUrl(symbol: string) {
+  const url = new URL(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}`);
+  url.searchParams.set(
+    "modules",
+    "assetProfile,price,summaryDetail,defaultKeyStatistics,financialData"
+  );
+  return url.toString();
+}
+
 async function fetchJson<T>(url: string, revalidateSeconds = 60): Promise<T> {
   const response = await fetch(url, {
     next: { revalidate: revalidateSeconds }
@@ -68,7 +139,14 @@ function toMarketQuote(row: YahooQuoteRow): MarketQuote {
     price,
     previousClose,
     changePercent: previousClose === 0 ? 0 : (price - previousClose) / previousClose,
-    currency: String(row.currency ?? "USD")
+    currency: String(row.currency ?? "USD"),
+    shortName: row.shortName,
+    longName: row.longName,
+    exchange: row.fullExchangeName,
+    marketCap: row.marketCap,
+    trailingPE: row.trailingPE,
+    fiftyTwoWeekLow: row.fiftyTwoWeekLow,
+    fiftyTwoWeekHigh: row.fiftyTwoWeekHigh
   };
 }
 
@@ -148,6 +226,69 @@ export async function fetchHistoricalCloses(symbol: string, days = 252): Promise
   });
 
   return data;
+}
+
+export async function fetchCompanyDetail(symbol: string): Promise<CompanyDetail> {
+  const key = symbol.toUpperCase();
+  const cached = detailCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data;
+  }
+
+  const [summaryPayload, quote, chart] = await Promise.all([
+    fetchJson<YahooQuoteSummaryResponse>(getQuoteSummaryUrl(key), 900),
+    fetchQuote(key),
+    fetchHistoricalCloses(key, 126)
+  ]);
+
+  const summary = summaryPayload.quoteSummary?.result?.[0];
+  if (!summary) {
+    throw new Error(`Company detail not found for ${key}`);
+  }
+
+  const data: CompanyDetail = {
+    ticker: key,
+    companyName: summary.price?.longName ?? summary.price?.shortName ?? quote.longName ?? quote.shortName ?? key,
+    exchange: summary.price?.exchangeName ?? quote.exchange ?? "Unknown",
+    currentPrice: summary.price?.regularMarketPrice?.raw ?? quote.price,
+    currency: summary.price?.currency ?? quote.currency,
+    marketCap: summary.defaultKeyStatistics?.marketCap?.raw ?? quote.marketCap,
+    sector: summary.assetProfile?.sector,
+    industry: summary.assetProfile?.industry,
+    website: summary.assetProfile?.website,
+    employeeCount: summary.assetProfile?.fullTimeEmployees,
+    summary: summary.assetProfile?.longBusinessSummary,
+    fiftyTwoWeekLow: summary.summaryDetail?.fiftyTwoWeekLow?.raw ?? quote.fiftyTwoWeekLow,
+    fiftyTwoWeekHigh: summary.summaryDetail?.fiftyTwoWeekHigh?.raw ?? quote.fiftyTwoWeekHigh,
+    trailingPE: summary.summaryDetail?.trailingPE?.raw ?? quote.trailingPE,
+    forwardPE: summary.summaryDetail?.forwardPE?.raw,
+    dividendYield: summary.summaryDetail?.dividendYield?.raw,
+    beta: summary.summaryDetail?.beta?.raw,
+    profitMargins: summary.financialData?.profitMargins?.raw,
+    revenueGrowth: summary.financialData?.revenueGrowth?.raw,
+    earningsGrowth: summary.financialData?.earningsGrowth?.raw,
+    debtToEquity: summary.financialData?.debtToEquity?.raw,
+    currentRatio: summary.financialData?.currentRatio?.raw,
+    quickRatio: summary.financialData?.quickRatio?.raw,
+    returnOnEquity: summary.financialData?.returnOnEquity?.raw,
+    totalCash: summary.financialData?.totalCash?.raw,
+    totalDebt: summary.financialData?.totalDebt?.raw,
+    freeCashflow: summary.financialData?.freeCashflow?.raw,
+    operatingCashflow: summary.financialData?.operatingCashflow?.raw,
+    targetMeanPrice: summary.financialData?.targetMeanPrice?.raw,
+    chart
+  };
+
+  detailCache.set(key, {
+    expiresAt: Date.now() + 15 * 60_000,
+    data
+  });
+
+  return data;
+}
+
+export async function fetchCompanyDetails(symbols: string[]) {
+  return Promise.all(symbols.map((symbol) => fetchCompanyDetail(symbol)));
 }
 
 export async function searchTickers(query: string) {
