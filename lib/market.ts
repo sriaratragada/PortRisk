@@ -165,10 +165,17 @@ export async function searchTickers(query: string) {
     }>;
   }>(url.toString(), 60);
 
-  return (result.quotes ?? []).map((quote) => ({
-    symbol: quote.symbol ?? "",
-    shortname: quote.shortname ?? "",
-    exchange: quote.exchange ?? "",
-    quoteType: quote.quoteType ?? ""
-  }));
+  return (result.quotes ?? [])
+    .map((quote) => ({
+      symbol: quote.symbol ?? "",
+      shortname: quote.shortname ?? "",
+      exchange: quote.exchange ?? "",
+      quoteType: quote.quoteType ?? ""
+    }))
+    .filter((quote) => quote.symbol && quote.quoteType.toLowerCase().includes("equity"))
+    .sort((left, right) => {
+      const leftPriority = left.exchange.includes("NYQ") || left.exchange.includes("NYSE") ? 0 : 1;
+      const rightPriority = right.exchange.includes("NYQ") || right.exchange.includes("NYSE") ? 0 : 1;
+      return leftPriority - rightPriority;
+    });
 }

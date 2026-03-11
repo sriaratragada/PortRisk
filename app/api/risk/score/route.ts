@@ -7,9 +7,10 @@ import { badRequest, json, parseJson } from "@/lib/http";
 import { riskScoreSchema } from "@/lib/validation";
 
 export const runtime = "edge";
+export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const auth = await requireUser(request);
+  const auth = await requireUser();
   if ("error" in auth) return auth.error;
 
   const limited = await enforceRateLimit(auth.user.id, "risk");

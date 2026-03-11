@@ -3,10 +3,13 @@ import { prisma } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
 import { requireUser } from "@/lib/auth";
 import { badRequest, json, parseJson } from "@/lib/http";
+import { ensureAppUserRecord } from "@/lib/user";
 import { portfolioCreateSchema } from "@/lib/validation";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
-  const auth = await requireUser(request);
+  const auth = await requireUser();
   if ("error" in auth) {
     return auth.error;
   }
@@ -27,11 +30,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireUser(request);
+  const auth = await requireUser();
   if ("error" in auth) {
     return auth.error;
   }
 
+  await ensureAppUserRecord(auth.user);
   const payload = await parseJson(request, portfolioCreateSchema);
   const positions = payload.positions ?? [];
   const portfolio = await prisma.$transaction(async (tx) => {

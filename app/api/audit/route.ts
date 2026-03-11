@@ -4,8 +4,10 @@ import { requireUser } from "@/lib/auth";
 import { badRequest, json } from "@/lib/http";
 import { enforceRateLimit } from "@/lib/ratelimit";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
-  const auth = await requireUser(request);
+  const auth = await requireUser();
   if ("error" in auth) return auth.error;
 
   const limited = await enforceRateLimit(auth.user.id, "default");
@@ -16,6 +18,7 @@ export async function GET(request: NextRequest) {
   const page = Number(request.nextUrl.searchParams.get("page") ?? "1");
   const pageSize = Number(request.nextUrl.searchParams.get("pageSize") ?? "20");
   const actionType = request.nextUrl.searchParams.get("actionType") ?? undefined;
+  const portfolioId = request.nextUrl.searchParams.get("portfolioId") ?? undefined;
   const from = request.nextUrl.searchParams.get("from");
   const to = request.nextUrl.searchParams.get("to");
 
@@ -26,6 +29,7 @@ export async function GET(request: NextRequest) {
   const where = {
     userId: auth.user.id,
     actionType,
+    portfolioId,
     timestamp: {
       gte: from ? new Date(from) : undefined,
       lte: to ? new Date(to) : undefined

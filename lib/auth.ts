@@ -1,11 +1,11 @@
-import { NextRequest } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase";
+import type { User } from "@supabase/supabase-js";
+import { redirect } from "next/navigation";
+import { createSupabaseRouteHandlerClient, createSupabaseServerComponentClient } from "@/lib/supabase";
+import { ensureAppUserRecord } from "@/lib/user";
 
-export async function requireUser(request: NextRequest) {
-  const authorization = request.headers.get("authorization");
-  const token = authorization?.replace(/^Bearer\s+/i, "");
-  const supabase = createSupabaseServerClient(token);
-  const { data, error } = await supabase.auth.getUser(token);
+export async function requireUser() {
+  const supabase = createSupabaseRouteHandlerClient();
+  const { data, error } = await supabase.auth.getUser();
 
   if (error || !data.user) {
     return {
@@ -17,4 +17,28 @@ export async function requireUser(request: NextRequest) {
   }
 
   return { user: data.user };
+}
+
+export async function getServerUser() {
+  const supabase = createSupabaseServerComponentClient();
+  const { data, error } = await supabase.auth.getUser();
+  if (error) {
+    return null;
+  }
+
+  return data.user ?? null;
+}
+
+export async function requireServerUser() {
+  const user = await getServerUser();
+  if (!user) {
+    redirect("/login");
+  }
+
+  await ensureAppUserRecord(user);
+  return user;
+}
+
+export function getUserDisplayName(user: User) {
+  return user.email?.split("@")[0] ?? "Operator";
 }

@@ -3,8 +3,10 @@ import { requireUser } from "@/lib/auth";
 import { searchTickers } from "@/lib/market";
 import { badRequest, json } from "@/lib/http";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
-  const auth = await requireUser(request);
+  const auth = await requireUser();
   if ("error" in auth) {
     return auth.error;
   }

@@ -11,12 +11,14 @@ const patchSchema = z.object({
   positions: z.array(positionSchema).optional()
 });
 
+export const dynamic = "force-dynamic";
+
 type Context = {
   params: Promise<{ portfolioId: string }>;
 };
 
 export async function GET(request: NextRequest, context: Context) {
-  const auth = await requireUser(request);
+  const auth = await requireUser();
   if ("error" in auth) return auth.error;
   const { portfolioId } = await context.params;
 
@@ -31,6 +33,10 @@ export async function GET(request: NextRequest, context: Context) {
       stressTests: {
         orderBy: { runAt: "desc" },
         take: 10
+      },
+      auditLogs: {
+        orderBy: { timestamp: "desc" },
+        take: 20
       }
     }
   });
@@ -43,7 +49,7 @@ export async function GET(request: NextRequest, context: Context) {
 }
 
 export async function PATCH(request: NextRequest, context: Context) {
-  const auth = await requireUser(request);
+  const auth = await requireUser();
   if ("error" in auth) return auth.error;
   const { portfolioId } = await context.params;
   const payload = patchSchema.parse(await request.json());
@@ -55,6 +61,15 @@ export async function PATCH(request: NextRequest, context: Context) {
   if (!existing) {
     return badRequest("Portfolio not found", 404);
   }
+
+  const nextPositions = (payload.positions ?? existing.positions).map((position) => ({
+    ticker: position.ticker.toUpperCase(),
+    shares: position.shares,
+    avgCost: position.avgCost,
+    assetClass: position.assetClass
+  }));
+  const beforePositions = new Map(existing.positions.map((position) => [position.ticker.toUpperCase(), position]));
+  const afterPositions = new Map(nextPositions.map((position) => [position.ticker.toUpperCase(), position]));
 
   const portfolio = await prisma.$transaction(async (tx) => {
     if (payload.positions) {
@@ -79,15 +94,56 @@ export async function PATCH(request: NextRequest, context: Context) {
       include: { positions: true }
     });
 
-    await writeAuditLog(tx, {
-      userId: auth.user.id,
-      portfolioId,
-      actionType: "ALLOCATION_COMMITTED",
-      beforeState: existing,
-      afterState: updated,
-      riskTierBefore: null,
-      riskTierAfter: null
-    });
+    const auditEvents = [];
+    for (const [ticker, before] of beforePositions.entries()) {
+      if (!afterPositions.has(ticker)) {
+        auditEvents.push({
+          actionType: "POSITION_REMOVED" as const,
+          beforeState: before,
+          afterState: {}
+        });
+        continue;
+      }
+
+      const after = afterPositions.get(ticker)!;
+      if (before.shares !== after.shares || before.avgCost !== after.avgCost) {
+        auditEvents.push({
+          actionType: "POSITION_RESIZED" as const,
+          beforeState: before,
+          afterState: after
+        });
+      }
+    }
+
+    for (const [ticker, after] of afterPositions.entries()) {
+      if (!beforePositions.has(ticker)) {
+        auditEvents.push({
+          actionType: "POSITION_ADDED" as const,
+          beforeState: {},
+          afterState: after
+        });
+      }
+    }
+
+    if (auditEvents.length === 0) {
+      auditEvents.push({
+        actionType: "ALLOCATION_COMMITTED" as const,
+        beforeState: existing,
+        afterState: updated
+      });
+    }
+
+    for (const event of auditEvents) {
+      await writeAuditLog(tx, {
+        userId: auth.user.id,
+        portfolioId,
+        actionType: event.actionType,
+        beforeState: event.beforeState,
+        afterState: event.afterState,
+        riskTierBefore: null,
+        riskTierAfter: null
+      });
+    }
 
     return updated;
   });
@@ -96,7 +152,7 @@ export async function PATCH(request: NextRequest, context: Context) {
 }
 
 export async function DELETE(request: NextRequest, context: Context) {
-  const auth = await requireUser(request);
+  const auth = await requireUser();
   if ("error" in auth) return auth.error;
   const { portfolioId } = await context.params;
 

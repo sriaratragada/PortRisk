@@ -159,6 +159,26 @@ npm run prisma:migrate
 npm run dev
 ```
 
+## Authentication Setup
+
+This app now uses Supabase Auth with email/password login and cookie-backed session persistence for App Router pages, route handlers, and middleware.
+
+In Supabase:
+
+- Enable `Email` under `Authentication -> Providers`
+- Decide whether email confirmation is required
+- Set your site URL to your local or deployed app URL
+
+Protected routes:
+
+- `/` requires an authenticated session
+- `/login` and `/signup` redirect authenticated users back into the app
+
+User persistence:
+
+- On first authenticated app load, the app upserts a matching row in the `User` table using the Supabase auth user id and email
+- All portfolios, audit logs, risk scores, and stress tests remain scoped to that user id
+
 ## Performance Verification
 
 Run these after provisioning the database:
