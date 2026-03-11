@@ -1,8 +1,7 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/db";
-import { writeAuditLog } from "@/lib/audit";
 import { requireUser } from "@/lib/auth";
 import { badRequest, json, parseJson } from "@/lib/http";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { ensureAppUserRecord } from "@/lib/user";
 import { portfolioCreateSchema } from "@/lib/validation";
 
@@ -14,19 +13,18 @@ export async function GET(request: NextRequest) {
     return auth.error;
   }
 
-  const portfolios = await prisma.portfolio.findMany({
-    where: { userId: auth.user.id },
-    include: {
-      positions: true,
-      riskScores: {
-        orderBy: { scoredAt: "desc" },
-        take: 1
-      }
-    },
-    orderBy: { updatedAt: "desc" }
-  });
+  const supabase = createSupabaseAdminClient();
+  const { data: portfolios, error } = await supabase
+    .from("Portfolio")
+    .select("id,name,updatedAt,positions:Position(id),riskScores:RiskScore(riskTier,scoredAt)")
+    .eq("userId", auth.user.id)
+    .order("updatedAt", { ascending: false });
 
-  return json({ portfolios });
+  if (error) {
+    return badRequest(error.message, 500);
+  }
+
+  return json({ portfolios: portfolios ?? [] });
 }
 
 export async function POST(request: NextRequest) {
@@ -38,37 +36,49 @@ export async function POST(request: NextRequest) {
   await ensureAppUserRecord(auth.user);
   const payload = await parseJson(request, portfolioCreateSchema);
   const positions = payload.positions ?? [];
-  const portfolio = await prisma.$transaction(async (tx) => {
-    const created = await tx.portfolio.create({
-      data: {
-        userId: auth.user.id,
-        name: payload.name,
-        positions: {
-          create: positions.map((position) => ({
-            ticker: position.ticker.toUpperCase(),
-            shares: position.shares,
-            avgCost: position.avgCost,
-            assetClass: position.assetClass
-          }))
-        }
-      },
-      include: {
-        positions: true
-      }
-    });
-
-    await writeAuditLog(tx, {
+  const supabase = createSupabaseAdminClient();
+  const { data: portfolio, error } = await supabase
+    .from("Portfolio")
+    .insert({
       userId: auth.user.id,
-      portfolioId: created.id,
-      actionType: "ALLOCATION_COMMITTED",
-      beforeState: {},
-      afterState: created,
-      riskTierBefore: null,
-      riskTierAfter: null
-    });
+      name: payload.name
+    })
+    .select()
+    .single();
 
-    return created;
+  if (error || !portfolio) {
+    return badRequest(error?.message ?? "Failed to create portfolio", 500);
+  }
+
+  if (positions.length > 0) {
+    const { error: positionError } = await supabase.from("Position").insert(
+      positions.map((position) => ({
+        portfolioId: portfolio.id,
+        ticker: position.ticker.toUpperCase(),
+        shares: position.shares,
+        avgCost: position.avgCost,
+        assetClass: position.assetClass
+      }))
+    );
+
+    if (positionError) {
+      return badRequest(positionError.message, 500);
+    }
+  }
+
+  const { error: auditError } = await supabase.from("AuditLog").insert({
+    userId: auth.user.id,
+    portfolioId: portfolio.id,
+    actionType: "ALLOCATION_COMMITTED",
+    beforeState: {},
+    afterState: portfolio,
+    riskTierBefore: null,
+    riskTierAfter: null
   });
+
+  if (auditError) {
+    return badRequest(auditError.message, 500);
+  }
 
   return json({ portfolio }, { status: 201 });
 }

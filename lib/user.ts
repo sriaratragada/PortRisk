@@ -1,19 +1,25 @@
 import type { User as SupabaseUser } from "@supabase/supabase-js";
-import { prisma } from "@/lib/db";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export async function ensureAppUserRecord(user: SupabaseUser) {
   if (!user.email) {
     throw new Error("Authenticated user is missing email");
   }
 
-  return prisma.user.upsert({
-    where: { email: user.email },
-    update: {
-      email: user.email
-    },
-    create: {
-      id: user.id,
-      email: user.email
-    }
-  });
+  const supabase = createSupabaseAdminClient();
+  const payload = {
+    id: user.id,
+    email: user.email
+  };
+  const { data, error } = await supabase
+    .from("User")
+    .upsert(payload, { onConflict: "id" })
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
 }
