@@ -140,6 +140,11 @@ npm install
 
 2. Configure environment variables from [.env.example](/Users/sriatragada/Downloads/PortfolioRiskEngine/.env.example).
 
+For Supabase on Vercel with Prisma:
+
+- `DATABASE_URL` should use the pooled connection string and include `?pgbouncer=true&connection_limit=1`
+- `DIRECT_URL` should use the direct Postgres connection string and include `?sslmode=require`
+
 3. Generate Prisma client and apply migrations:
 
 ```bash
