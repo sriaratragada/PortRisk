@@ -4,7 +4,7 @@ import { enforceRateLimit } from "@/lib/ratelimit";
 import { badRequest, json } from "@/lib/http";
 import { hydratePortfolioRisk } from "@/lib/portfolio-edge";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get("x-cron-secret");

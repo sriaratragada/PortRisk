@@ -6,7 +6,7 @@ import { buildStressSummary, estimateRecoveryDays, getPortfolioWithPositionsEdge
 import { badRequest, json, parseJson } from "@/lib/http";
 import { stressSchema } from "@/lib/validation";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
