@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
-import { createSupabaseAdminClient } from "@/lib/supabase";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { requireEdgeUser } from "@/lib/auth-edge";
 import { enforceRateLimit } from "@/lib/ratelimit";
-import { requireUser } from "@/lib/auth";
 import { buildStressSummary, estimateRecoveryDays, getPortfolioWithPositionsEdge, hydratePortfolioRisk, scoreStressedPortfolio, STRESS_SCENARIOS } from "@/lib/portfolio-edge";
 import { badRequest, json, parseJson } from "@/lib/http";
 import { stressSchema } from "@/lib/validation";
@@ -10,7 +10,7 @@ export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const auth = await requireUser();
+  const auth = await requireEdgeUser(request);
   if ("error" in auth) return auth.error;
 
   const limited = await enforceRateLimit(auth.user.id, "stress");

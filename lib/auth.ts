@@ -1,6 +1,6 @@
 import type { User } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
-import { createSupabaseRouteHandlerClient, createSupabaseServerComponentClient } from "@/lib/supabase";
+import { createSupabaseRouteHandlerClient, createSupabaseServerComponentClient } from "@/lib/supabase-server";
 import { ensureAppUserRecord } from "@/lib/user";
 
 export async function requireUser() {

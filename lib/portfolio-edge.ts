@@ -1,4 +1,4 @@
-import { createSupabaseAdminClient } from "@/lib/supabase";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { fetchHistoricalCloses, fetchQuotes } from "@/lib/market";
 import {
   buildHoldingSnapshots,

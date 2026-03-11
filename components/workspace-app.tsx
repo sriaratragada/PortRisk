@@ -174,6 +174,20 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  async function getAuthHeaders(): Promise<Record<string, string>> {
+    const supabase = createSupabaseBrowserClient();
+    const {
+      data: { session }
+    } = await supabase.auth.getSession();
+
+    const headers: Record<string, string> = {};
+    if (session?.access_token) {
+      headers.authorization = `Bearer ${session.access_token}`;
+    }
+
+    return headers;
+  }
+
   useEffect(() => {
     if (!selectedPortfolio) {
       setAllocationWeights({});
@@ -233,7 +247,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       const response = await fetch("/api/risk/score", {
         method: "POST",
         headers: {
-          "content-type": "application/json"
+          "content-type": "application/json",
+          ...(await getAuthHeaders())
         },
         body: JSON.stringify({
           positions: proposedPositions,
@@ -317,7 +332,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         fetch("/api/risk/score", {
           method: "POST",
           headers: {
-            "content-type": "application/json"
+            "content-type": "application/json",
+            ...(await getAuthHeaders())
           },
           body: JSON.stringify({
             portfolioId,
@@ -559,7 +575,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       const response = await fetch("/api/risk/score", {
         method: "POST",
         headers: {
-          "content-type": "application/json"
+          "content-type": "application/json",
+          ...(await getAuthHeaders())
         },
         body: JSON.stringify({
           portfolioId: selectedPortfolio.id,
@@ -600,7 +617,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       const response = await fetch("/api/stress", {
         method: "POST",
         headers: {
-          "content-type": "application/json"
+          "content-type": "application/json",
+          ...(await getAuthHeaders())
         },
         body: JSON.stringify({
           portfolioId: selectedPortfolio.id,
