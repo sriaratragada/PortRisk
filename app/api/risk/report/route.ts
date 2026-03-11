@@ -29,7 +29,14 @@ export async function GET(request: NextRequest) {
     avgCost: position.avgCost,
     assetClass: position.assetClass as "equities" | "bonds" | "commodities"
   }));
-  const hydrated = await hydratePortfolioRisk(positions);
-  const report = await buildRiskReport(portfolioId, hydrated.holdings, hydrated.metrics);
-  return json({ report });
+  try {
+    const hydrated = await hydratePortfolioRisk(positions);
+    const report = await buildRiskReport(portfolioId, hydrated.holdings, hydrated.metrics);
+    return json({ report });
+  } catch (error) {
+    return badRequest(
+      error instanceof Error ? error.message : "Failed to build risk report",
+      502
+    );
+  }
 }

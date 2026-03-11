@@ -81,6 +81,26 @@ function buildValueHistory(series: Array<{ date: string; value: number }>) {
   });
 }
 
+function buildFallbackHoldings(
+  positions: Array<{
+    ticker: string;
+    shares: number;
+    avgCost: number;
+    assetClass: "equities" | "bonds" | "commodities";
+  }>
+) {
+  return positions.map<HoldingSnapshot>((position) => ({
+    ...position,
+    currentPrice: 0,
+    currentValue: 0,
+    weight: 0,
+    dailyPnl: 0,
+    dailyPnlPercent: 0,
+    totalGain: 0,
+    totalGainPercent: 0
+  }));
+}
+
 export async function buildWorkspacePortfolio(portfolioId: string, userId: string) {
   const supabase = createSupabaseAdminClient();
   const [{ data: portfolio, error: portfolioError }, { data: positions }, { data: stressTests }, { data: auditLogs }] =
@@ -150,35 +170,63 @@ export async function buildWorkspacePortfolio(portfolioId: string, userId: strin
     } satisfies WorkspacePortfolio;
   }
 
-  const [hydrated, historySeries] = await Promise.all([
-    hydratePortfolioRisk(normalizedPositions),
-    hydratePortfolioHistory(normalizedPositions, "1M")
-  ]);
-  return {
-    id: portfolio.id,
-    name: portfolio.name,
-    updatedAt: portfolio.updatedAt,
-    holdings: hydrated.holdings,
-    positions: normalizedPositions,
-    metrics: hydrated.metrics,
-    valueHistory: buildValueHistory(historySeries),
-    auditLog: (auditLogs ?? []).map((entry) => ({
-      id: entry.id,
-      timestamp: entry.timestamp,
-      actionType: entry.actionType,
-      riskTierBefore: entry.riskTierBefore,
-      riskTierAfter: entry.riskTierAfter,
-      metadata: (entry.metadata as Record<string, unknown> | null) ?? null
-    })),
-    stressTests: (stressTests ?? []).map((entry) => ({
-      id: entry.id,
-      scenarioName: entry.scenarioName,
-      runAt: entry.runAt,
-      projectedValue: entry.projectedValue,
-      newRiskTier: entry.newRiskTier,
-      recoveryDays: entry.recoveryDays
-    }))
-  } satisfies WorkspacePortfolio;
+  try {
+    const [hydrated, historySeries] = await Promise.all([
+      hydratePortfolioRisk(normalizedPositions),
+      hydratePortfolioHistory(normalizedPositions, "1M")
+    ]);
+    return {
+      id: portfolio.id,
+      name: portfolio.name,
+      updatedAt: portfolio.updatedAt,
+      holdings: hydrated.holdings,
+      positions: normalizedPositions,
+      metrics: hydrated.metrics,
+      valueHistory: buildValueHistory(historySeries),
+      auditLog: (auditLogs ?? []).map((entry) => ({
+        id: entry.id,
+        timestamp: entry.timestamp,
+        actionType: entry.actionType,
+        riskTierBefore: entry.riskTierBefore,
+        riskTierAfter: entry.riskTierAfter,
+        metadata: (entry.metadata as Record<string, unknown> | null) ?? null
+      })),
+      stressTests: (stressTests ?? []).map((entry) => ({
+        id: entry.id,
+        scenarioName: entry.scenarioName,
+        runAt: entry.runAt,
+        projectedValue: entry.projectedValue,
+        newRiskTier: entry.newRiskTier,
+        recoveryDays: entry.recoveryDays
+      }))
+    } satisfies WorkspacePortfolio;
+  } catch {
+    return {
+      id: portfolio.id,
+      name: portfolio.name,
+      updatedAt: portfolio.updatedAt,
+      holdings: buildFallbackHoldings(normalizedPositions),
+      positions: normalizedPositions,
+      metrics: null,
+      valueHistory: [],
+      auditLog: (auditLogs ?? []).map((entry) => ({
+        id: entry.id,
+        timestamp: entry.timestamp,
+        actionType: entry.actionType,
+        riskTierBefore: entry.riskTierBefore,
+        riskTierAfter: entry.riskTierAfter,
+        metadata: (entry.metadata as Record<string, unknown> | null) ?? null
+      })),
+      stressTests: (stressTests ?? []).map((entry) => ({
+        id: entry.id,
+        scenarioName: entry.scenarioName,
+        runAt: entry.runAt,
+        projectedValue: entry.projectedValue,
+        newRiskTier: entry.newRiskTier,
+        recoveryDays: entry.recoveryDays
+      }))
+    } satisfies WorkspacePortfolio;
+  }
 }
 
 export async function getWorkspaceData(user: { id: string; email: string }): Promise<WorkspaceData> {

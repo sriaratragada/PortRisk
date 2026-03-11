@@ -39,6 +39,10 @@ export async function GET(request: NextRequest, context: Context) {
     avgCost: position.avgCost,
     assetClass: position.assetClass as "equities" | "bonds" | "commodities"
   }));
-  const series = await hydratePortfolioHistory(positions, range);
-  return json({ range, series });
+  try {
+    const series = await hydratePortfolioHistory(positions, range);
+    return json({ range, series });
+  } catch {
+    return json({ range, series: [] });
+  }
 }

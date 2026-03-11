@@ -31,6 +31,9 @@ export async function GET(request: NextRequest, context: Context) {
     const detail = await fetchCompanyDetail(ticker, range);
     return json({ detail });
   } catch (error) {
-    return badRequest(error instanceof Error ? error.message : "Failed to load company detail", 500);
+    return badRequest(
+      error instanceof Error ? error.message : "Failed to load company detail",
+      502
+    );
   }
 }

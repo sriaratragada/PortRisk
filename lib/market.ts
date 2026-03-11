@@ -134,6 +134,14 @@ function getQuoteSummaryUrl(symbol: string) {
 
 async function fetchJson<T>(url: string, revalidateSeconds = 60): Promise<T> {
   const response = await fetch(url, {
+    headers: {
+      accept: "application/json,text/plain,*/*",
+      "accept-language": "en-US,en;q=0.9",
+      "cache-control": "no-cache",
+      pragma: "no-cache",
+      "user-agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
+    },
     next: { revalidate: revalidateSeconds }
   });
 
