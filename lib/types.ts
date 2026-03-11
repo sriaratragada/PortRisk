@@ -1,4 +1,5 @@
 export type RiskTier = "LOW" | "MODERATE" | "ELEVATED" | "HIGH";
+export type ChartRange = "1D" | "1W" | "1M" | "3M" | "1Y" | "5Y" | "MAX";
 
 export type PositionInput = {
   ticker: string;

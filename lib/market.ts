@@ -1,8 +1,21 @@
-import type { CompanyDetail, HistoricalPoint, MarketQuote } from "@/lib/types";
+import type { ChartRange, CompanyDetail, HistoricalPoint, MarketQuote } from "@/lib/types";
 
 const quoteCache = new Map<string, { expiresAt: number; data: MarketQuote }>();
 const historyCache = new Map<string, { expiresAt: number; data: HistoricalPoint[] }>();
 const detailCache = new Map<string, { expiresAt: number; data: CompanyDetail }>();
+
+const RANGE_CONFIG: Record<
+  ChartRange,
+  { yahooRange: string; interval: string; revalidateSeconds: number }
+> = {
+  "1D": { yahooRange: "1d", interval: "5m", revalidateSeconds: 60 },
+  "1W": { yahooRange: "5d", interval: "30m", revalidateSeconds: 120 },
+  "1M": { yahooRange: "1mo", interval: "1d", revalidateSeconds: 300 },
+  "3M": { yahooRange: "3mo", interval: "1d", revalidateSeconds: 300 },
+  "1Y": { yahooRange: "1y", interval: "1d", revalidateSeconds: 900 },
+  "5Y": { yahooRange: "5y", interval: "1wk", revalidateSeconds: 1800 },
+  MAX: { yahooRange: "max", interval: "1mo", revalidateSeconds: 3600 }
+};
 
 type YahooQuoteResponse = {
   quoteResponse?: {
@@ -102,9 +115,9 @@ function getQuoteUrl(symbols: string[]) {
   return url.toString();
 }
 
-function getChartUrl(symbol: string, range: string) {
+function getChartUrl(symbol: string, range: string, interval: string) {
   const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`);
-  url.searchParams.set("interval", "1d");
+  url.searchParams.set("interval", interval);
   url.searchParams.set("range", range);
   url.searchParams.set("includePrePost", "false");
   return url.toString();
@@ -199,15 +212,21 @@ export async function fetchQuotes(symbols: string[]) {
   });
 }
 
-export async function fetchHistoricalCloses(symbol: string, days = 252): Promise<HistoricalPoint[]> {
-  const key = `${symbol.toUpperCase()}:${days}`;
+export async function fetchHistoricalSeries(
+  symbol: string,
+  range: ChartRange = "1Y"
+): Promise<HistoricalPoint[]> {
+  const key = `${symbol.toUpperCase()}:${range}`;
   const cached = historyCache.get(key);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.data;
   }
 
-  const range = days <= 63 ? "3mo" : days <= 126 ? "6mo" : "1y";
-  const payload = await fetchJson<YahooChartResponse>(getChartUrl(symbol.toUpperCase(), range), 300);
+  const config = RANGE_CONFIG[range];
+  const payload = await fetchJson<YahooChartResponse>(
+    getChartUrl(symbol.toUpperCase(), config.yahooRange, config.interval),
+    config.revalidateSeconds
+  );
   const result = payload.chart?.result?.[0];
   const timestamps = result?.timestamp ?? [];
   const closes = result?.indicators?.quote?.[0]?.close ?? [];
@@ -217,38 +236,53 @@ export async function fetchHistoricalCloses(symbol: string, days = 252): Promise
       date: new Date(timestamp * 1000).toISOString(),
       close: closes[index]
     }))
-    .filter((point): point is { date: string; close: number } => typeof point.close === "number")
-    .slice(-days);
+    .filter((point): point is { date: string; close: number } => typeof point.close === "number");
 
   historyCache.set(key, {
-    expiresAt: Date.now() + 5 * 60_000,
+    expiresAt: Date.now() + config.revalidateSeconds * 1000,
     data
   });
 
   return data;
 }
 
-export async function fetchCompanyDetail(symbol: string): Promise<CompanyDetail> {
-  const key = symbol.toUpperCase();
+export async function fetchHistoricalCloses(symbol: string, days = 252): Promise<HistoricalPoint[]> {
+  const range: ChartRange =
+    days <= 1 ? "1D" : days <= 5 ? "1W" : days <= 31 ? "1M" : days <= 92 ? "3M" : days <= 252 ? "1Y" : days <= 1260 ? "5Y" : "MAX";
+  const series = await fetchHistoricalSeries(symbol, range);
+  return series.slice(-days);
+}
+
+export async function fetchCompanyDetail(
+  symbol: string,
+  range: ChartRange = "1M"
+): Promise<CompanyDetail> {
+  const normalizedSymbol = symbol.toUpperCase();
+  const key = `${normalizedSymbol}:${range}`;
   const cached = detailCache.get(key);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.data;
   }
 
   const [summaryPayload, quote, chart] = await Promise.all([
-    fetchJson<YahooQuoteSummaryResponse>(getQuoteSummaryUrl(key), 900),
-    fetchQuote(key),
-    fetchHistoricalCloses(key, 126)
+    fetchJson<YahooQuoteSummaryResponse>(getQuoteSummaryUrl(normalizedSymbol), 900),
+    fetchQuote(normalizedSymbol),
+    fetchHistoricalSeries(normalizedSymbol, range)
   ]);
 
   const summary = summaryPayload.quoteSummary?.result?.[0];
   if (!summary) {
-    throw new Error(`Company detail not found for ${key}`);
+    throw new Error(`Company detail not found for ${normalizedSymbol}`);
   }
 
   const data: CompanyDetail = {
-    ticker: key,
-    companyName: summary.price?.longName ?? summary.price?.shortName ?? quote.longName ?? quote.shortName ?? key,
+    ticker: normalizedSymbol,
+    companyName:
+      summary.price?.longName ??
+      summary.price?.shortName ??
+      quote.longName ??
+      quote.shortName ??
+      normalizedSymbol,
     exchange: summary.price?.exchangeName ?? quote.exchange ?? "Unknown",
     currentPrice: summary.price?.regularMarketPrice?.raw ?? quote.price,
     currency: summary.price?.currency ?? quote.currency,

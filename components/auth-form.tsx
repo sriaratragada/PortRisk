@@ -64,10 +64,10 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   return (
     <div className="grid min-h-screen lg:grid-cols-[1.1fr_0.9fr]">
       <section className="relative hidden overflow-hidden bg-slate-950 lg:flex lg:flex-col lg:justify-between">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.3),transparent_28%),radial-gradient(circle_at_70%_20%,rgba(34,197,94,0.18),transparent_24%),linear-gradient(160deg,#020617_20%,#08111f_100%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.14),transparent_28%),radial-gradient(circle_at_70%_20%,rgba(255,255,255,0.05),transparent_24%),linear-gradient(160deg,#030303_20%,#0b0b0b_100%)]" />
         <div className="absolute inset-0 opacity-40 [background-image:linear-gradient(rgba(148,163,184,0.11)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.11)_1px,transparent_1px)] [background-size:34px_34px]" />
         <div className="relative px-12 py-12">
-          <p className="font-mono text-xs uppercase tracking-[0.35em] text-cyan-300">Portfolio Risk Engine</p>
+          <p className="font-mono text-xs uppercase tracking-[0.35em] text-zinc-300">Portfolio Risk Engine</p>
         </div>
         <div className="relative px-12 pb-16">
           <div className="max-w-xl space-y-6">
@@ -94,7 +94,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       </section>
 
       <section className="flex items-center justify-center px-6 py-12 sm:px-8">
-        <div className="w-full max-w-md rounded-[2rem] border border-slate-800 bg-panel/90 p-8 shadow-panel backdrop-blur">
+        <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-black/75 p-8 shadow-panel backdrop-blur">
           <div className="mb-8">
             <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
               {mode === "login" ? "Secure Login" : "Create Account"}
@@ -113,7 +113,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
             <label className="block space-y-2">
               <span className="text-sm text-slate-300">Email</span>
               <input
-                className="w-full rounded-2xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-sm outline-none transition focus:border-cyan-400"
+                className="w-full rounded-2xl border border-white/10 bg-black/60 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
                 type="email"
                 autoComplete="email"
                 value={email}
@@ -124,7 +124,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
             <label className="block space-y-2">
               <span className="text-sm text-slate-300">Password</span>
               <input
-                className="w-full rounded-2xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-sm outline-none transition focus:border-cyan-400"
+                className="w-full rounded-2xl border border-white/10 bg-black/60 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
                 type="password"
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
                 value={password}
@@ -148,7 +148,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
             <button
               type="submit"
               disabled={pending}
-              className="w-full rounded-2xl bg-cyan-300 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-70"
+              className="w-full rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {pending ? "Working..." : mode === "login" ? "Sign In" : "Create Account"}
             </button>
@@ -157,7 +157,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
           <p className="mt-6 text-sm text-slate-400">
             {mode === "login" ? "New here?" : "Already have an account?"}{" "}
             <Link
-              className="font-medium text-cyan-300 transition hover:text-cyan-200"
+              className="font-medium text-zinc-200 transition hover:text-white"
               href={mode === "login" ? "/signup" : "/login"}
             >
               {mode === "login" ? "Create an account" : "Sign in"}

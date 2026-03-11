@@ -1,5 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { hydratePortfolioRisk } from "@/lib/portfolio-edge";
+import { hydratePortfolioHistory, hydratePortfolioRisk } from "@/lib/portfolio-edge";
 import { HoldingSnapshot, RiskMetrics } from "@/lib/types";
 
 export type PortfolioSummary = {
@@ -42,6 +42,7 @@ export type WorkspacePortfolio = {
   metrics: RiskMetrics | null;
   valueHistory: Array<{
     date: string;
+    label: string;
     value: number;
     peak: number;
     drawdown: number;
@@ -63,8 +64,13 @@ function buildValueHistory(series: Array<{ date: string; value: number }>) {
   let peak = 0;
   return series.map((point) => {
     peak = Math.max(peak, point.value);
+    const timestamp = new Date(point.date);
     return {
       date: new Date(point.date).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric"
+      }),
+      label: timestamp.toLocaleDateString("en-US", {
         month: "short",
         day: "numeric"
       }),
@@ -144,7 +150,10 @@ export async function buildWorkspacePortfolio(portfolioId: string, userId: strin
     } satisfies WorkspacePortfolio;
   }
 
-  const hydrated = await hydratePortfolioRisk(normalizedPositions);
+  const [hydrated, historySeries] = await Promise.all([
+    hydratePortfolioRisk(normalizedPositions),
+    hydratePortfolioHistory(normalizedPositions, "1M")
+  ]);
   return {
     id: portfolio.id,
     name: portfolio.name,
@@ -152,7 +161,7 @@ export async function buildWorkspacePortfolio(portfolioId: string, userId: strin
     holdings: hydrated.holdings,
     positions: normalizedPositions,
     metrics: hydrated.metrics,
-    valueHistory: buildValueHistory(hydrated.series),
+    valueHistory: buildValueHistory(historySeries),
     auditLog: (auditLogs ?? []).map((entry) => ({
       id: entry.id,
       timestamp: entry.timestamp,

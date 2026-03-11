@@ -1,5 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { fetchHistoricalCloses, fetchQuotes } from "@/lib/market";
+import { fetchHistoricalCloses, fetchHistoricalSeries, fetchQuotes } from "@/lib/market";
 import {
   buildHoldingSnapshots,
   buildPortfolioSeries,
@@ -11,7 +11,7 @@ import {
   calculateVaR95,
   computeDailyReturns
 } from "@/lib/risk";
-import type { PositionInput, RiskMetrics } from "@/lib/types";
+import type { ChartRange, PositionInput, RiskMetrics } from "@/lib/types";
 
 export const STRESS_SCENARIOS: Record<
   string,
@@ -74,6 +74,25 @@ export async function hydratePortfolioRisk(positions: PositionInput[], drawdownT
       drawdownProb12m: probabilities[252]
     } satisfies RiskMetrics
   };
+}
+
+export async function hydratePortfolioHistory(
+  positions: PositionInput[],
+  range: ChartRange
+) {
+  const tickers = positions.map((position) => position.ticker.toUpperCase());
+  const quotes = await fetchQuotes(tickers);
+  const latestPrices = Object.fromEntries(
+    quotes.map((quote) => [quote.ticker.toUpperCase(), quote.price])
+  );
+  const histories = await Promise.all(
+    tickers.map((ticker) => fetchHistoricalSeries(ticker, range))
+  );
+  const historicalByTicker = Object.fromEntries(
+    tickers.map((ticker, index) => [ticker, histories[index]])
+  );
+
+  return buildPortfolioSeries(positions, historicalByTicker, latestPrices).series;
 }
 
 export function scoreStressedPortfolio(
