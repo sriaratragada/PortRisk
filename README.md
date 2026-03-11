@@ -22,7 +22,8 @@ Microservices would add inter-service auth, versioning, queueing, and observabil
 - Prisma schema and client
 - Supabase PostgreSQL + Auth + Realtime
 - Upstash Redis rate limiting
-- Yahoo Finance market data via `yahoo-finance2`
+- Twelve Data market quotes, search, and chart history
+- Financial Modeling Prep company profile and fundamentals
 - Vercel Edge Runtime for risk and stress routes
 
 ## Architecture
@@ -31,8 +32,8 @@ Microservices would add inter-service auth, versioning, queueing, and observabil
 app/
   api/
     portfolio/        Node runtime CRUD + transactional audit writes
-    risk/score/       Edge runtime portfolio scoring
-    stress/           Edge runtime scenario analysis
+    risk/score/       Node runtime portfolio scoring
+    stress/           Node runtime scenario analysis
     audit/            Audit retrieval
     realtime/prices/  Server-triggered realtime broadcasts
   page.tsx            Operator dashboard
@@ -40,7 +41,7 @@ components/
   dashboard.tsx       Full dashboard UI
 lib/
   risk.ts             Pure TypeScript portfolio math
-  market.ts           Yahoo Finance fetch + in-memory cache
+  market.ts           Twelve Data + FMP adapter with in-memory cache
   portfolio.ts        Portfolio hydration and scenario orchestration
   audit.ts            Immutable audit helpers
   ratelimit.ts        Upstash sliding-window enforcement
@@ -145,6 +146,17 @@ For Supabase on Vercel with Prisma:
 - `DATABASE_URL` should use the pooled connection string and include `?pgbouncer=true&connection_limit=1`
 - `DIRECT_URL` should use the direct Postgres connection string and include `?sslmode=require`
 
+For market data:
+
+- `TWELVE_DATA_API_KEY` powers ticker search, quotes, and price history
+- `FMP_API_KEY` powers company profile, balance-sheet, and growth metrics
+
+The app degrades gracefully when these keys are missing or the free providers are unavailable:
+
+- saved portfolios and holdings still load from Supabase
+- live prices may render as unavailable
+- charts can return empty series instead of crashing the workspace
+
 3. Generate Prisma client and apply migrations:
 
 ```bash
@@ -208,7 +220,7 @@ LIMIT 1;
 
 Target expectations:
 
-- Edge risk routes under 50ms excluding external market-data latency
+- Node risk routes under 50ms excluding external market-data latency
 - Monte Carlo 1,000-path run under 200ms
 - Upstash limiter overhead under 5ms
 
@@ -224,10 +236,12 @@ Deploy to Vercel with:
 - `UPSTASH_REDIS_REST_URL`
 - `UPSTASH_REDIS_REST_TOKEN`
 - `CRON_SECRET`
+- `TWELVE_DATA_API_KEY`
+- `FMP_API_KEY`
 
 Then confirm:
 
-- `/api/risk/score` and `/api/stress` are running with `runtime = "edge"`
+- `/api/risk/score` and `/api/stress` are running with `runtime = "nodejs"`
 - Supabase Realtime channels broadcast updates correctly
 - Vercel cron hits `/api/realtime/prices`
 

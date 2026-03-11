@@ -1,174 +1,310 @@
+import {
+  CHART_RANGE_CONFIG,
+  FMP_API_KEY,
+  FMP_BASE_URL,
+  TWELVE_DATA_API_KEY,
+  TWELVE_DATA_BASE_URL
+} from "@/lib/market-config";
 import type { ChartRange, CompanyDetail, HistoricalPoint, MarketQuote } from "@/lib/types";
 
 const quoteCache = new Map<string, { expiresAt: number; data: MarketQuote }>();
 const historyCache = new Map<string, { expiresAt: number; data: HistoricalPoint[] }>();
 const detailCache = new Map<string, { expiresAt: number; data: CompanyDetail }>();
 
-const RANGE_CONFIG: Record<
-  ChartRange,
-  { yahooRange: string; interval: string; revalidateSeconds: number }
-> = {
-  "1D": { yahooRange: "1d", interval: "5m", revalidateSeconds: 60 },
-  "1W": { yahooRange: "5d", interval: "30m", revalidateSeconds: 120 },
-  "1M": { yahooRange: "1mo", interval: "1d", revalidateSeconds: 300 },
-  "3M": { yahooRange: "3mo", interval: "1d", revalidateSeconds: 300 },
-  "1Y": { yahooRange: "1y", interval: "1d", revalidateSeconds: 900 },
-  "5Y": { yahooRange: "5y", interval: "1wk", revalidateSeconds: 1800 },
-  MAX: { yahooRange: "max", interval: "1mo", revalidateSeconds: 3600 }
-};
-
-type YahooQuoteResponse = {
-  quoteResponse?: {
-    result?: Array<{
-      symbol?: string;
-      regularMarketPrice?: number;
-      regularMarketPreviousClose?: number;
-      currency?: string;
-      shortName?: string;
-      longName?: string;
-      fullExchangeName?: string;
-      marketCap?: number;
-      trailingPE?: number;
-      fiftyTwoWeekLow?: number;
-      fiftyTwoWeekHigh?: number;
-    }>;
-  };
-};
-
-type YahooQuoteRow = {
+type TwelveDataQuoteResponse = {
   symbol?: string;
-  regularMarketPrice?: number;
-  regularMarketPreviousClose?: number;
+  name?: string;
+  exchange?: string;
   currency?: string;
-  shortName?: string;
-  longName?: string;
-  fullExchangeName?: string;
+  close?: string;
+  previous_close?: string;
+};
+
+type TwelveDataTimeSeriesResponse = {
+  values?: Array<{
+    datetime?: string;
+    close?: string;
+  }>;
+  meta?: {
+    symbol?: string;
+    interval?: string;
+    exchange?: string;
+    currency?: string;
+    type?: string;
+  };
+  status?: string;
+  code?: number;
+  message?: string;
+};
+
+type TwelveDataSymbolSearchResponse = {
+  data?: Array<{
+    symbol?: string;
+    instrument_name?: string;
+    exchange?: string;
+    mic_code?: string;
+    country?: string;
+    type?: string;
+  }>;
+  status?: string;
+};
+
+type FmpProfile = {
+  symbol?: string;
+  companyName?: string;
+  exchangeShortName?: string;
+  exchange?: string;
+  sector?: string;
+  industry?: string;
+  website?: string;
+  description?: string;
+  fullTimeEmployees?: string;
+  mktCap?: number;
+  price?: number;
+  beta?: number;
+  lastDiv?: number;
+  range?: string;
+};
+
+type FmpKeyMetrics = {
   marketCap?: number;
-  trailingPE?: number;
-  fiftyTwoWeekLow?: number;
-  fiftyTwoWeekHigh?: number;
+  peRatio?: number;
+  dividendYield?: number;
 };
 
-type YahooQuoteSummaryResponse = {
-  quoteSummary?: {
-    result?: Array<{
-      assetProfile?: {
-        sector?: string;
-        industry?: string;
-        website?: string;
-        longBusinessSummary?: string;
-        fullTimeEmployees?: number;
-      };
-      price?: {
-        shortName?: string;
-        longName?: string;
-        exchangeName?: string;
-        regularMarketPrice?: { raw?: number };
-        currency?: string;
-      };
-      summaryDetail?: {
-        fiftyTwoWeekLow?: { raw?: number };
-        fiftyTwoWeekHigh?: { raw?: number };
-        dividendYield?: { raw?: number };
-        beta?: { raw?: number };
-        trailingPE?: { raw?: number };
-        forwardPE?: { raw?: number };
-      };
-      defaultKeyStatistics?: {
-        marketCap?: { raw?: number };
-        enterpriseValue?: { raw?: number };
-      };
-      financialData?: {
-        currentRatio?: { raw?: number };
-        quickRatio?: { raw?: number };
-        debtToEquity?: { raw?: number };
-        revenueGrowth?: { raw?: number };
-        earningsGrowth?: { raw?: number };
-        profitMargins?: { raw?: number };
-        returnOnEquity?: { raw?: number };
-        totalCash?: { raw?: number };
-        totalDebt?: { raw?: number };
-        freeCashflow?: { raw?: number };
-        operatingCashflow?: { raw?: number };
-        targetMeanPrice?: { raw?: number };
-      };
-    }>;
-  };
+type FmpRatio = {
+  currentRatio?: number;
+  quickRatio?: number;
+  debtEquityRatio?: number;
+  returnOnEquity?: number;
+  netProfitMargin?: number;
 };
 
-type YahooChartResponse = {
-  chart?: {
-    result?: Array<{
-      timestamp?: number[];
-      indicators?: {
-        quote?: Array<{
-          close?: Array<number | null>;
-        }>;
-      };
-    }>;
-  };
+type FmpGrowth = {
+  revenueGrowth?: number;
+  netIncomeGrowth?: number;
+  epsgrowth?: number;
 };
 
-function getQuoteUrl(symbols: string[]) {
-  const url = new URL("https://query1.finance.yahoo.com/v7/finance/quote");
-  url.searchParams.set("symbols", symbols.join(","));
-  return url.toString();
+type FmpCashFlow = {
+  freeCashFlow?: number;
+  operatingCashFlow?: number;
+};
+
+type FmpBalanceSheet = {
+  totalDebt?: number;
+  cashAndCashEquivalents?: number;
+};
+
+type FundamentalSnapshot = {
+  profile?: FmpProfile;
+  metrics?: FmpKeyMetrics;
+  ratios?: FmpRatio;
+  growth?: FmpGrowth;
+  cashFlow?: FmpCashFlow;
+  balanceSheet?: FmpBalanceSheet;
+};
+
+function parseNumber(value: number | string | undefined | null) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.replace(/,/g, "").trim();
+    if (!normalized) return undefined;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  return undefined;
 }
 
-function getChartUrl(symbol: string, range: string, interval: string) {
-  const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`);
-  url.searchParams.set("interval", interval);
-  url.searchParams.set("range", range);
-  url.searchParams.set("includePrePost", "false");
-  return url.toString();
+function parseEmployeeCount(value: string | undefined) {
+  if (!value) return undefined;
+  const parsed = Number(value.replace(/[^\d.-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function getQuoteSummaryUrl(symbol: string) {
-  const url = new URL(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}`);
-  url.searchParams.set(
-    "modules",
-    "assetProfile,price,summaryDetail,defaultKeyStatistics,financialData"
-  );
-  return url.toString();
+function parseRangeValue(range: string | undefined, index: 0 | 1) {
+  if (!range) return undefined;
+  const parts = range.split("-").map((part) => parseNumber(part));
+  return parts[index];
 }
 
-async function fetchJson<T>(url: string, revalidateSeconds = 60): Promise<T> {
+function toIsoString(datetime: string) {
+  if (datetime.includes("T")) {
+    return new Date(datetime).toISOString();
+  }
+  if (datetime.includes(" ")) {
+    return new Date(datetime.replace(" ", "T") + "Z").toISOString();
+  }
+  return new Date(`${datetime}T00:00:00Z`).toISOString();
+}
+
+function createAuthError(provider: string, status: number) {
+  return new Error(`${provider} request failed with ${status}`);
+}
+
+async function fetchProviderJson<T>(
+  url: string,
+  provider: "Twelve Data" | "FMP",
+  revalidateSeconds: number
+): Promise<T> {
   const response = await fetch(url, {
     headers: {
-      accept: "application/json,text/plain,*/*",
-      "accept-language": "en-US,en;q=0.9",
-      "cache-control": "no-cache",
-      pragma: "no-cache",
-      "user-agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
+      accept: "application/json"
     },
     next: { revalidate: revalidateSeconds }
   });
 
   if (!response.ok) {
-    throw new Error(`Market data request failed with ${response.status}`);
+    throw createAuthError(provider, response.status);
   }
 
   return (await response.json()) as T;
 }
 
-function toMarketQuote(row: YahooQuoteRow): MarketQuote {
-  const price = Number(row.regularMarketPrice ?? 0);
-  const previousClose = Number(row.regularMarketPreviousClose ?? price);
+function getTwelveQuoteUrl(symbol: string) {
+  const url = new URL(`${TWELVE_DATA_BASE_URL}/quote`);
+  url.searchParams.set("apikey", TWELVE_DATA_API_KEY ?? "");
+  url.searchParams.set("symbol", symbol);
+  return url.toString();
+}
+
+function getTwelveTimeSeriesUrl(symbol: string, range: ChartRange) {
+  const config = CHART_RANGE_CONFIG[range];
+  const url = new URL(`${TWELVE_DATA_BASE_URL}/time_series`);
+  url.searchParams.set("apikey", TWELVE_DATA_API_KEY ?? "");
+  url.searchParams.set("symbol", symbol);
+  url.searchParams.set("interval", config.interval);
+  url.searchParams.set("outputsize", String(config.outputsize));
+  url.searchParams.set("order", "ASC");
+  url.searchParams.set("timezone", "UTC");
+  return { url: url.toString(), revalidateSeconds: config.revalidateSeconds };
+}
+
+function getTwelveSearchUrl(query: string) {
+  const url = new URL(`${TWELVE_DATA_BASE_URL}/symbol_search`);
+  url.searchParams.set("apikey", TWELVE_DATA_API_KEY ?? "");
+  url.searchParams.set("symbol", query);
+  url.searchParams.set("outputsize", "12");
+  return url.toString();
+}
+
+function getFmpUrl(path: string, query: Record<string, string> = {}) {
+  const url = new URL(`${FMP_BASE_URL}${path}`);
+  url.searchParams.set("apikey", FMP_API_KEY ?? "");
+  for (const [key, value] of Object.entries(query)) {
+    url.searchParams.set(key, value);
+  }
+  return url.toString();
+}
+
+export function normalizeTwelveQuote(
+  symbol: string,
+  quote: TwelveDataQuoteResponse,
+  profile?: FmpProfile,
+  metrics?: FmpKeyMetrics
+): MarketQuote {
+  const price = parseNumber(quote.close) ?? profile?.price ?? 0;
+  const previousClose =
+    parseNumber(quote.previous_close) ??
+    (price && profile?.price && profile.price !== price ? profile.price : undefined) ??
+    price;
+
   return {
-    ticker: String(row.symbol ?? "").toUpperCase(),
+    ticker: symbol.toUpperCase(),
     price,
     previousClose,
     changePercent: previousClose === 0 ? 0 : (price - previousClose) / previousClose,
-    currency: String(row.currency ?? "USD"),
-    shortName: row.shortName,
-    longName: row.longName,
-    exchange: row.fullExchangeName,
-    marketCap: row.marketCap,
-    trailingPE: row.trailingPE,
-    fiftyTwoWeekLow: row.fiftyTwoWeekLow,
-    fiftyTwoWeekHigh: row.fiftyTwoWeekHigh
+    currency: quote.currency ?? "USD",
+    shortName: quote.name ?? profile?.companyName,
+    longName: profile?.companyName ?? quote.name,
+    exchange: quote.exchange ?? profile?.exchangeShortName ?? profile?.exchange,
+    marketCap: metrics?.marketCap ?? profile?.mktCap,
+    trailingPE: metrics?.peRatio,
+    fiftyTwoWeekLow: parseRangeValue(profile?.range, 0),
+    fiftyTwoWeekHigh: parseRangeValue(profile?.range, 1)
   };
+}
+
+export function getRangeFromDays(days = 252): ChartRange {
+  if (days <= 1) return "1D";
+  if (days <= 5) return "1W";
+  if (days <= 31) return "1M";
+  if (days <= 92) return "3M";
+  if (days <= 252) return "1Y";
+  if (days <= 1260) return "5Y";
+  return "MAX";
+}
+
+async function fetchFmpProfile(symbol: string) {
+  const response = await fetchProviderJson<FmpProfile[]>(
+    getFmpUrl(`/profile/${encodeURIComponent(symbol)}`),
+    "FMP",
+    900
+  );
+  return response[0];
+}
+
+async function fetchFmpMetrics(symbol: string) {
+  const response = await fetchProviderJson<FmpKeyMetrics[]>(
+    getFmpUrl(`/key-metrics-ttm/${encodeURIComponent(symbol)}`),
+    "FMP",
+    900
+  );
+  return response[0];
+}
+
+async function fetchFmpRatios(symbol: string) {
+  const response = await fetchProviderJson<FmpRatio[]>(
+    getFmpUrl(`/ratios-ttm/${encodeURIComponent(symbol)}`),
+    "FMP",
+    900
+  );
+  return response[0];
+}
+
+async function fetchFmpGrowth(symbol: string) {
+  const response = await fetchProviderJson<FmpGrowth[]>(
+    getFmpUrl(`/financial-growth/${encodeURIComponent(symbol)}`, { limit: "1" }),
+    "FMP",
+    900
+  );
+  return response[0];
+}
+
+async function fetchFmpCashFlow(symbol: string) {
+  const response = await fetchProviderJson<FmpCashFlow[]>(
+    getFmpUrl(`/cash-flow-statement/${encodeURIComponent(symbol)}`, { limit: "1" }),
+    "FMP",
+    900
+  );
+  return response[0];
+}
+
+async function fetchFmpBalanceSheet(symbol: string) {
+  const response = await fetchProviderJson<FmpBalanceSheet[]>(
+    getFmpUrl(`/balance-sheet-statement/${encodeURIComponent(symbol)}`, { limit: "1" }),
+    "FMP",
+    900
+  );
+  return response[0];
+}
+
+async function fetchFundamentalSnapshot(symbol: string) {
+  const tasks = [
+    fetchFmpProfile(symbol).catch(() => undefined),
+    fetchFmpMetrics(symbol).catch(() => undefined),
+    fetchFmpRatios(symbol).catch(() => undefined),
+    fetchFmpGrowth(symbol).catch(() => undefined),
+    fetchFmpCashFlow(symbol).catch(() => undefined),
+    fetchFmpBalanceSheet(symbol).catch(() => undefined)
+  ] as const;
+
+  const [profile, metrics, ratios, growth, cashFlow, balanceSheet] = await Promise.all(tasks);
+  return { profile, metrics, ratios, growth, cashFlow, balanceSheet } satisfies FundamentalSnapshot;
 }
 
 export async function fetchQuote(symbol: string): Promise<MarketQuote> {
@@ -178,17 +314,22 @@ export async function fetchQuote(symbol: string): Promise<MarketQuote> {
     return cached.data;
   }
 
-  const payload = await fetchJson<YahooQuoteResponse>(getQuoteUrl([key]));
-  const row = payload.quoteResponse?.result?.[0];
-  if (!row) {
-    throw new Error(`Quote not found for ${key}`);
+  if (!TWELVE_DATA_API_KEY) {
+    throw new Error("TWELVE_DATA_API_KEY is not configured");
   }
 
-  const data = toMarketQuote(row);
+  const [quotePayload, fundamentals]: [TwelveDataQuoteResponse, FundamentalSnapshot] = await Promise.all([
+    fetchProviderJson<TwelveDataQuoteResponse>(getTwelveQuoteUrl(key), "Twelve Data", 60),
+    FMP_API_KEY ? fetchFundamentalSnapshot(key) : Promise.resolve({})
+  ]);
+
+  const data = normalizeTwelveQuote(key, quotePayload, fundamentals.profile, fundamentals.metrics);
+
   quoteCache.set(key, {
     expiresAt: Date.now() + 60_000,
     data
   });
+
   return data;
 }
 
@@ -200,15 +341,15 @@ export async function fetchQuotes(symbols: string[]) {
   });
 
   if (missing.length > 0) {
-    const payload = await fetchJson<YahooQuoteResponse>(getQuoteUrl(missing));
-    const rows = payload.quoteResponse?.result ?? [];
-    for (const row of rows) {
-      const data = toMarketQuote(row);
-      quoteCache.set(data.ticker, {
-        expiresAt: Date.now() + 60_000,
-        data
-      });
-    }
+    await Promise.all(
+      missing.map(async (symbol) => {
+        const quote = await fetchQuote(symbol);
+        quoteCache.set(symbol, {
+          expiresAt: Date.now() + 60_000,
+          data: quote
+        });
+      })
+    );
   }
 
   return uniqueSymbols.map((symbol) => {
@@ -218,6 +359,22 @@ export async function fetchQuotes(symbols: string[]) {
     }
     return cached;
   });
+}
+
+export function normalizeTimeSeries(payload: TwelveDataTimeSeriesResponse): HistoricalPoint[] {
+  return (payload.values ?? [])
+    .map((point) => {
+      const close = parseNumber(point.close);
+      const datetime = point.datetime;
+      if (!datetime || close === undefined) {
+        return null;
+      }
+      return {
+        date: toIsoString(datetime),
+        close
+      };
+    })
+    .filter((point): point is HistoricalPoint => point !== null);
 }
 
 export async function fetchHistoricalSeries(
@@ -230,24 +387,21 @@ export async function fetchHistoricalSeries(
     return cached.data;
   }
 
-  const config = RANGE_CONFIG[range];
-  const payload = await fetchJson<YahooChartResponse>(
-    getChartUrl(symbol.toUpperCase(), config.yahooRange, config.interval),
-    config.revalidateSeconds
-  );
-  const result = payload.chart?.result?.[0];
-  const timestamps = result?.timestamp ?? [];
-  const closes = result?.indicators?.quote?.[0]?.close ?? [];
+  if (!TWELVE_DATA_API_KEY) {
+    throw new Error("TWELVE_DATA_API_KEY is not configured");
+  }
 
-  const data = timestamps
-    .map((timestamp, index) => ({
-      date: new Date(timestamp * 1000).toISOString(),
-      close: closes[index]
-    }))
-    .filter((point): point is { date: string; close: number } => typeof point.close === "number");
+  const { url, revalidateSeconds } = getTwelveTimeSeriesUrl(symbol.toUpperCase(), range);
+  const payload = await fetchProviderJson<TwelveDataTimeSeriesResponse>(url, "Twelve Data", revalidateSeconds);
+
+  if (payload.status === "error") {
+    throw new Error(payload.message ?? `Twelve Data error for ${symbol.toUpperCase()}`);
+  }
+
+  const data = normalizeTimeSeries(payload);
 
   historyCache.set(key, {
-    expiresAt: Date.now() + config.revalidateSeconds * 1000,
+    expiresAt: Date.now() + revalidateSeconds * 1000,
     data
   });
 
@@ -255,9 +409,7 @@ export async function fetchHistoricalSeries(
 }
 
 export async function fetchHistoricalCloses(symbol: string, days = 252): Promise<HistoricalPoint[]> {
-  const range: ChartRange =
-    days <= 1 ? "1D" : days <= 5 ? "1W" : days <= 31 ? "1M" : days <= 92 ? "3M" : days <= 252 ? "1Y" : days <= 1260 ? "5Y" : "MAX";
-  const series = await fetchHistoricalSeries(symbol, range);
+  const series = await fetchHistoricalSeries(symbol, getRangeFromDays(days));
   return series.slice(-days);
 }
 
@@ -272,52 +424,49 @@ export async function fetchCompanyDetail(
     return cached.data;
   }
 
-  const [summaryPayload, quote, chart] = await Promise.all([
-    fetchJson<YahooQuoteSummaryResponse>(getQuoteSummaryUrl(normalizedSymbol), 900),
+  const [quote, chart, fundamentals]: [MarketQuote, HistoricalPoint[], FundamentalSnapshot] = await Promise.all([
     fetchQuote(normalizedSymbol),
-    fetchHistoricalSeries(normalizedSymbol, range)
+    fetchHistoricalSeries(normalizedSymbol, range),
+    FMP_API_KEY ? fetchFundamentalSnapshot(normalizedSymbol) : Promise.resolve({})
   ]);
 
-  const summary = summaryPayload.quoteSummary?.result?.[0];
-  if (!summary) {
-    throw new Error(`Company detail not found for ${normalizedSymbol}`);
-  }
+  const profile = fundamentals.profile;
+  const metrics = fundamentals.metrics;
+  const ratios = fundamentals.ratios;
+  const growth = fundamentals.growth;
+  const cashFlow = fundamentals.cashFlow;
+  const balanceSheet = fundamentals.balanceSheet;
 
   const data: CompanyDetail = {
     ticker: normalizedSymbol,
-    companyName:
-      summary.price?.longName ??
-      summary.price?.shortName ??
-      quote.longName ??
-      quote.shortName ??
-      normalizedSymbol,
-    exchange: summary.price?.exchangeName ?? quote.exchange ?? "Unknown",
-    currentPrice: summary.price?.regularMarketPrice?.raw ?? quote.price,
-    currency: summary.price?.currency ?? quote.currency,
-    marketCap: summary.defaultKeyStatistics?.marketCap?.raw ?? quote.marketCap,
-    sector: summary.assetProfile?.sector,
-    industry: summary.assetProfile?.industry,
-    website: summary.assetProfile?.website,
-    employeeCount: summary.assetProfile?.fullTimeEmployees,
-    summary: summary.assetProfile?.longBusinessSummary,
-    fiftyTwoWeekLow: summary.summaryDetail?.fiftyTwoWeekLow?.raw ?? quote.fiftyTwoWeekLow,
-    fiftyTwoWeekHigh: summary.summaryDetail?.fiftyTwoWeekHigh?.raw ?? quote.fiftyTwoWeekHigh,
-    trailingPE: summary.summaryDetail?.trailingPE?.raw ?? quote.trailingPE,
-    forwardPE: summary.summaryDetail?.forwardPE?.raw,
-    dividendYield: summary.summaryDetail?.dividendYield?.raw,
-    beta: summary.summaryDetail?.beta?.raw,
-    profitMargins: summary.financialData?.profitMargins?.raw,
-    revenueGrowth: summary.financialData?.revenueGrowth?.raw,
-    earningsGrowth: summary.financialData?.earningsGrowth?.raw,
-    debtToEquity: summary.financialData?.debtToEquity?.raw,
-    currentRatio: summary.financialData?.currentRatio?.raw,
-    quickRatio: summary.financialData?.quickRatio?.raw,
-    returnOnEquity: summary.financialData?.returnOnEquity?.raw,
-    totalCash: summary.financialData?.totalCash?.raw,
-    totalDebt: summary.financialData?.totalDebt?.raw,
-    freeCashflow: summary.financialData?.freeCashflow?.raw,
-    operatingCashflow: summary.financialData?.operatingCashflow?.raw,
-    targetMeanPrice: summary.financialData?.targetMeanPrice?.raw,
+    companyName: profile?.companyName ?? quote.longName ?? quote.shortName ?? normalizedSymbol,
+    exchange: profile?.exchangeShortName ?? profile?.exchange ?? quote.exchange ?? "Unknown",
+    currentPrice: quote.price,
+    currency: quote.currency,
+    marketCap: metrics?.marketCap ?? profile?.mktCap ?? quote.marketCap,
+    sector: profile?.sector,
+    industry: profile?.industry,
+    website: profile?.website,
+    employeeCount: parseEmployeeCount(profile?.fullTimeEmployees),
+    summary: profile?.description,
+    fiftyTwoWeekLow: quote.fiftyTwoWeekLow ?? parseRangeValue(profile?.range, 0),
+    fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh ?? parseRangeValue(profile?.range, 1),
+    trailingPE: metrics?.peRatio ?? quote.trailingPE,
+    forwardPE: undefined,
+    dividendYield: metrics?.dividendYield ?? profile?.lastDiv,
+    beta: profile?.beta,
+    profitMargins: ratios?.netProfitMargin,
+    revenueGrowth: growth?.revenueGrowth,
+    earningsGrowth: growth?.netIncomeGrowth ?? growth?.epsgrowth,
+    debtToEquity: ratios?.debtEquityRatio,
+    currentRatio: ratios?.currentRatio,
+    quickRatio: ratios?.quickRatio,
+    returnOnEquity: ratios?.returnOnEquity,
+    totalCash: balanceSheet?.cashAndCashEquivalents,
+    totalDebt: balanceSheet?.totalDebt,
+    freeCashflow: cashFlow?.freeCashFlow,
+    operatingCashflow: cashFlow?.operatingCashFlow,
+    targetMeanPrice: undefined,
     chart
   };
 
@@ -334,31 +483,39 @@ export async function fetchCompanyDetails(symbols: string[]) {
 }
 
 export async function searchTickers(query: string) {
-  const url = new URL("https://query1.finance.yahoo.com/v1/finance/search");
-  url.searchParams.set("q", query);
-  url.searchParams.set("quotesCount", "8");
-  url.searchParams.set("newsCount", "0");
+  if (!TWELVE_DATA_API_KEY) {
+    return [];
+  }
 
-  const result = await fetchJson<{
-    quotes?: Array<{
-      symbol?: string;
-      shortname?: string;
-      exchange?: string;
-      quoteType?: string;
-    }>;
-  }>(url.toString(), 60);
+  const result = await fetchProviderJson<TwelveDataSymbolSearchResponse>(
+    getTwelveSearchUrl(query),
+    "Twelve Data",
+    60
+  );
 
-  return (result.quotes ?? [])
+  const rows = (result.data ?? [])
     .map((quote) => ({
       symbol: quote.symbol ?? "",
-      shortname: quote.shortname ?? "",
-      exchange: quote.exchange ?? "",
-      quoteType: quote.quoteType ?? ""
+      shortname: quote.instrument_name ?? "",
+      exchange: quote.exchange ?? quote.mic_code ?? "",
+      quoteType: quote.type ?? ""
     }))
-    .filter((quote) => quote.symbol && quote.quoteType.toLowerCase().includes("equity"))
+    .filter((quote) => {
+      if (!quote.symbol) return false;
+      const type = quote.quoteType.toLowerCase();
+      return type.includes("stock") || type.includes("equity") || type.includes("etf");
+    })
     .sort((left, right) => {
-      const leftPriority = left.exchange.includes("NYQ") || left.exchange.includes("NYSE") ? 0 : 1;
-      const rightPriority = right.exchange.includes("NYQ") || right.exchange.includes("NYSE") ? 0 : 1;
-      return leftPriority - rightPriority;
+      const leftPriority =
+        left.exchange.includes("NYSE") || left.exchange.includes("XNYS") || left.exchange.includes("NYQ")
+          ? 0
+          : 1;
+      const rightPriority =
+        right.exchange.includes("NYSE") || right.exchange.includes("XNYS") || right.exchange.includes("NYQ")
+          ? 0
+          : 1;
+      return leftPriority - rightPriority || left.symbol.localeCompare(right.symbol);
     });
+
+  return rows.slice(0, 8);
 }
