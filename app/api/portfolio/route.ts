@@ -37,11 +37,15 @@ export async function POST(request: NextRequest) {
   const payload = await parseJson(request, portfolioCreateSchema);
   const positions = payload.positions ?? [];
   const supabase = createSupabaseAdminClient();
+  const portfolioId = crypto.randomUUID();
+  const now = new Date().toISOString();
   const { data: portfolio, error } = await supabase
     .from("Portfolio")
     .insert({
+      id: portfolioId,
       userId: auth.user.id,
-      name: payload.name
+      name: payload.name,
+      updatedAt: now
     })
     .select()
     .single();
@@ -53,11 +57,13 @@ export async function POST(request: NextRequest) {
   if (positions.length > 0) {
     const { error: positionError } = await supabase.from("Position").insert(
       positions.map((position) => ({
+        id: crypto.randomUUID(),
         portfolioId: portfolio.id,
         ticker: position.ticker.toUpperCase(),
         shares: position.shares,
         avgCost: position.avgCost,
-        assetClass: position.assetClass
+        assetClass: position.assetClass,
+        updatedAt: now
       }))
     );
 
@@ -67,6 +73,7 @@ export async function POST(request: NextRequest) {
   }
 
   const { error: auditError } = await supabase.from("AuditLog").insert({
+    id: crypto.randomUUID(),
     userId: auth.user.id,
     portfolioId: portfolio.id,
     actionType: "ALLOCATION_COMMITTED",

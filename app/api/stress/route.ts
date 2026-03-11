@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
 
   const supabase = createSupabaseAdminClient();
   const { error: stressError } = await supabase.from("StressTest").insert({
+    id: crypto.randomUUID(),
     portfolioId: payload.portfolioId,
     scenarioName: payload.scenarioName,
     projectedValue: stressed.projectedValue,
@@ -74,6 +75,7 @@ export async function POST(request: NextRequest) {
   }
 
   const { error: auditError } = await supabase.from("AuditLog").insert({
+    id: crypto.randomUUID(),
     userId: auth.user.id,
     portfolioId: payload.portfolioId,
     actionType: "STRESS_TEST_RUN",

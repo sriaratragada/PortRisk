@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
   if (payload.persist !== false && payload.portfolioId) {
     const supabase = createSupabaseAdminClient();
     const riskRow = {
+      id: crypto.randomUUID(),
       portfolioId: payload.portfolioId,
       sharpe: result.metrics.sharpe,
       maxDrawdown: result.metrics.maxDrawdown,
@@ -69,6 +70,7 @@ export async function POST(request: NextRequest) {
 
     const riskTierBefore = latestScore?.[1]?.riskTier ?? null;
     const { error: auditError } = await supabase.from("AuditLog").insert({
+      id: crypto.randomUUID(),
       userId: auth.user.id,
       portfolioId: payload.portfolioId,
       actionType: "RISK_SCORED",

@@ -90,6 +90,7 @@ export async function PATCH(request: NextRequest, context: Context) {
     avgCost: position.avgCost,
     assetClass: position.assetClass
   }));
+  const now = new Date().toISOString();
   const beforePositions = new Map<string, PortfolioPosition>(
     existing.positions.map((position: PortfolioPosition) => [position.ticker.toUpperCase(), position])
   );
@@ -99,7 +100,7 @@ export async function PATCH(request: NextRequest, context: Context) {
 
   const { data: portfolio, error: updateError } = await supabase
     .from("Portfolio")
-    .update({ name: payload.name ?? existing.name })
+    .update({ name: payload.name ?? existing.name, updatedAt: now })
     .eq("id", portfolioId)
     .eq("userId", auth.user.id)
     .select()
@@ -118,11 +119,13 @@ export async function PATCH(request: NextRequest, context: Context) {
     if (payload.positions.length > 0) {
       const { error: insertError } = await supabase.from("Position").insert(
         payload.positions.map((position) => ({
+          id: crypto.randomUUID(),
           portfolioId,
           ticker: position.ticker.toUpperCase(),
           shares: position.shares,
           avgCost: position.avgCost,
-          assetClass: position.assetClass
+          assetClass: position.assetClass,
+          updatedAt: now
         }))
       );
       if (insertError) {
@@ -172,6 +175,7 @@ export async function PATCH(request: NextRequest, context: Context) {
 
   const { error: auditError } = await supabase.from("AuditLog").insert(
     auditEvents.map((event) => ({
+      id: crypto.randomUUID(),
       userId: auth.user.id,
       portfolioId,
       actionType: event.actionType,
