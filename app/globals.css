@@ -8,12 +8,16 @@
   color-scheme: dark;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   @apply min-h-screen bg-surface text-slate-100 antialiased;
   background-image:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.08), transparent 24%),
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.03), transparent 28%),
-    linear-gradient(180deg, #050505 0%, #090909 100%);
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.09), transparent 18%),
+    radial-gradient(circle at 85% 0%, rgba(255, 255, 255, 0.05), transparent 20%),
+    linear-gradient(180deg, #030303 0%, #070707 42%, #0a0a0a 100%);
 }
 
 body::before {
@@ -21,9 +25,20 @@ body::before {
   position: fixed;
   inset: 0;
   background-image: theme("backgroundImage.grid");
-  background-size: 28px 28px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.6), transparent 90%);
+  background-size: 36px 36px;
+  opacity: 0.3;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.75), transparent 92%);
   pointer-events: none;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 18%),
+    radial-gradient(circle at center, transparent 58%, rgba(0, 0, 0, 0.42) 100%);
 }
 
 * {
@@ -44,6 +59,14 @@ select {
     box-shadow 180ms ease;
 }
 
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.24);
+  outline-offset: 2px;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -53,5 +76,29 @@ select {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes slideUpSoft {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fadeScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }

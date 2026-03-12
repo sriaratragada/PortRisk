@@ -107,7 +107,7 @@ function Panel({
   return (
     <section
       className={cn(
-        "rounded-[2rem] border border-slate-800/80 bg-panel/85 p-6 shadow-panel backdrop-blur",
+        "animate-[fadeIn_220ms_ease-out] rounded-[2rem] border border-white/10 bg-panel/80 p-6 shadow-panel backdrop-blur-xl",
         className
       )}
     >
@@ -142,11 +142,11 @@ function MetricStat({
   tone?: "default" | "positive" | "negative";
 }) {
   return (
-    <div className="rounded-3xl border border-slate-800 bg-slate-950/30 p-4">
+    <div className="rounded-[1.6rem] border border-white/10 bg-white/[0.025] p-4">
       <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{label}</p>
       <p
         className={cn(
-          "mt-3 text-3xl font-semibold",
+          "mt-3 text-3xl font-semibold tracking-[-0.03em]",
           tone === "positive" ? "text-success" : tone === "negative" ? "text-danger" : "text-white"
         )}
       >
@@ -167,7 +167,7 @@ function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="rounded-[2rem] border border-dashed border-slate-700 bg-slate-950/25 p-10 text-center">
+    <div className="rounded-[2rem] border border-dashed border-white/10 bg-white/[0.02] p-10 text-center">
       <h3 className="text-2xl font-semibold text-white">{title}</h3>
       <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-400">{copy}</p>
       {action ? <div className="mt-6">{action}</div> : null}
@@ -253,7 +253,7 @@ function RangeSelector({
   onChange: (range: ChartRange) => void;
 }) {
   return (
-    <div className="inline-flex rounded-full border border-white/10 bg-black/60 p-1">
+    <div className="inline-flex rounded-full border border-white/10 bg-black/60 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
       {chartRanges.map((range) => (
         <button
           key={range}
@@ -262,8 +262,8 @@ function RangeSelector({
           className={cn(
             "rounded-full px-3 py-1.5 text-xs font-medium transition duration-200",
             value === range
-              ? "bg-white text-black shadow-[0_8px_30px_rgba(255,255,255,0.12)]"
-              : "text-zinc-400 hover:text-white"
+              ? "bg-white text-black shadow-[0_10px_30px_rgba(255,255,255,0.14)]"
+              : "text-zinc-500 hover:text-white"
           )}
         >
           {range}
@@ -1178,7 +1178,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
   const portfolioSelector = (
     <select
-      className="rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+      className="rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35 focus:bg-black/65"
       value={selectedPortfolioId}
       onChange={(event) => {
         const nextId = event.target.value;
@@ -2390,15 +2390,15 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   );
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.06),transparent_22%),linear-gradient(180deg,#050505_0%,#090909_100%)]">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.04),transparent_18%),linear-gradient(180deg,#030303_0%,#090909_100%)]">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <header className="mb-6 flex flex-col gap-6 rounded-[2rem] border border-white/10 bg-black/55 px-6 py-5 shadow-panel backdrop-blur lg:flex-row lg:items-center lg:justify-between">
+        <header className="mb-6 flex flex-col gap-6 rounded-[2rem] border border-white/10 bg-black/55 px-6 py-5 shadow-panel backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="font-mono text-xs uppercase tracking-[0.35em] text-zinc-300">
               Portfolio Risk Engine
             </p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-white">
-              Authenticated risk workspace
+            <h1 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-white">
+              Investment workspace
             </h1>
             <p className="mt-2 text-sm text-slate-400">
               Logged in as {initialData.user.email}. Persisted portfolios, live quotes, company
@@ -2409,7 +2409,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             {portfolioSummaries.length > 0 ? portfolioSelector : null}
             <button
               onClick={() => setActiveTab("holdings")}
-              className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
+              className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-black shadow-[0_18px_40px_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:bg-zinc-100"
             >
               Add Position
             </button>
@@ -2422,10 +2422,10 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "rounded-full px-4 py-2 text-sm transition",
+                "rounded-full px-4 py-2 text-sm transition duration-200",
                 activeTab === tab.id
-                  ? "bg-white text-black"
-                  : "border border-white/10 bg-black/40 text-slate-300 hover:border-white/20 hover:text-white"
+                  ? "bg-white text-black shadow-[0_10px_30px_rgba(255,255,255,0.12)]"
+                  : "border border-white/10 bg-black/35 text-slate-300 hover:border-white/20 hover:bg-white/[0.03] hover:text-white"
               )}
             >
               {tab.label}
@@ -2436,8 +2436,10 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         {(statusMessage || errorMessage || portfolioLoading || isPending) && (
           <div
             className={cn(
-              "mb-6 rounded-2xl px-4 py-3 text-sm",
-              errorMessage ? "bg-danger/10 text-danger" : "bg-white/10 text-zinc-100"
+              "mb-6 rounded-2xl border px-4 py-3 text-sm backdrop-blur",
+              errorMessage
+                ? "border-danger/30 bg-danger/10 text-danger"
+                : "border-white/10 bg-white/[0.04] text-zinc-100"
             )}
           >
             {errorMessage ??
@@ -2456,7 +2458,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       </div>
 
       {(holdingDetailLoading || selectedHoldingDetail) && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/72 backdrop-blur-sm">
           <button
             type="button"
             className="absolute inset-0 cursor-default"
@@ -2465,7 +2467,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               setHoldingDetailLoading(false);
             }}
           />
-          <aside className="relative z-10 h-full w-full max-w-2xl overflow-y-auto border-l border-white/10 bg-black px-6 py-6 shadow-2xl">
+          <aside className="relative z-10 h-full w-full max-w-2xl animate-[slideUpSoft_240ms_ease-out] overflow-y-auto border-l border-white/10 bg-black/95 px-6 py-6 shadow-2xl">
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
                 <p className="font-mono text-xs uppercase tracking-[0.35em] text-zinc-300">
