@@ -157,6 +157,30 @@ function MetricStat({
   );
 }
 
+function InfoPill({
+  label,
+  value,
+  tone = "default"
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "positive" | "negative";
+}) {
+  return (
+    <div className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2.5">
+      <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">{label}</p>
+      <p
+        className={cn(
+          "mt-1 text-sm font-medium",
+          tone === "positive" ? "text-success" : tone === "negative" ? "text-danger" : "text-white"
+        )}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
 function EmptyState({
   title,
   copy,
@@ -234,6 +258,14 @@ function formatBigNumber(value?: number) {
     notation: "compact",
     maximumFractionDigits: 2
   }).format(value);
+}
+
+function formatCompactDate(value: string) {
+  return new Date(value).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  });
 }
 
 function benchmarkForName(name: string) {
@@ -1206,9 +1238,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
     return (
       <div className="space-y-6">
-        <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
+        <div className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
           <Panel
-            title="Portfolio Snapshot"
+            title="Portfolio Command"
             action={
               selectedMetrics ? (
                 <TierBadge tier={selectedMetrics.riskTier} />
@@ -1239,13 +1271,14 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 }
               />
             ) : (
-              <div className="grid gap-6 lg:grid-cols-[1fr_0.9fr]">
-                <div>
+              <div className="space-y-6">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="max-w-3xl">
                   <p className="text-sm uppercase tracking-[0.22em] text-slate-500">
                     {selectedPortfolio.name} • Benchmark {benchmarkForName(selectedPortfolio.name)}
                   </p>
                   <div className="mt-4 flex flex-wrap items-end gap-3">
-                    <h2 className="text-4xl font-semibold tracking-tight text-white">
+                    <h2 className="text-5xl font-semibold tracking-[-0.05em] text-white">
                       {selectedMetrics
                         ? formatCurrency(selectedMetrics.portfolioValue)
                         : "Awaiting positions"}
@@ -1253,7 +1286,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     {selectedMetrics ? (
                       <div
                         className={cn(
-                          "rounded-full px-3 py-1 text-sm",
+                          "rounded-full px-3.5 py-1.5 text-sm font-medium",
                           dailyPnl >= 0 ? "bg-success/15 text-success" : "bg-danger/15 text-danger"
                         )}
                       >
@@ -1265,24 +1298,30 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     {selectedMetrics?.summary ??
                       "This sleeve has no positions yet. Add holdings to start live valuation and risk scoring."}
                   </p>
-                  <div className="mt-5 flex flex-wrap gap-3 text-xs uppercase tracking-[0.2em] text-slate-500">
-                    <span>{selectedPortfolio.positions.length} positions</span>
-                    {selectedTopHolding ? (
-                      <span>
-                        Top weight {selectedTopHolding.ticker}{" "}
-                        {formatPercent(selectedTopHolding.weight)}
-                      </span>
-                    ) : null}
-                    {riskReport?.sectorConcentration[0] ? (
-                      <span>
-                        Top sector {riskReport.sectorConcentration[0].sector}{" "}
-                        {formatPercent(riskReport.sectorConcentration[0].weight)}
-                      </span>
-                    ) : null}
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <InfoPill label="Positions" value={`${selectedPortfolio.positions.length}`} />
+                    <InfoPill label="Updated" value={formatCompactDate(selectedPortfolio.updatedAt)} />
+                    <InfoPill
+                      label="Top Weight"
+                      value={
+                        selectedTopHolding
+                          ? `${selectedTopHolding.ticker} ${formatPercent(selectedTopHolding.weight)}`
+                          : "N/A"
+                      }
+                    />
+                    <InfoPill
+                      label="Top Sector"
+                      value={
+                        riskReport?.sectorConcentration[0]
+                          ? `${riskReport.sectorConcentration[0].sector} ${formatPercent(riskReport.sectorConcentration[0].weight)}`
+                          : "Loading"
+                      }
+                    />
                   </div>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-4">
                   <MetricStat
                     label="Sharpe Ratio"
                     value={selectedMetrics ? selectedMetrics.sharpe.toFixed(2) : "N/A"}
@@ -1296,10 +1335,10 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     value={selectedMetrics ? formatPercent(selectedMetrics.maxDrawdown) : "N/A"}
                   />
                   <MetricStat
-                    label="Top Position"
+                    label="Annual Volatility"
                     value={
-                      selectedTopHolding
-                        ? `${selectedTopHolding.ticker} ${formatPercent(selectedTopHolding.weight)}`
+                      selectedMetrics
+                        ? formatPercent(selectedMetrics.annualizedVolatility)
                         : "N/A"
                     }
                   />
@@ -1418,7 +1457,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
         <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
           <Panel
-            title="Performance"
+            title="Portfolio Performance"
             action={
               <div className="flex items-center gap-3">
                 <RangeSelector value={portfolioRange} onChange={setPortfolioRange} />
@@ -1437,7 +1476,27 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 copy="Add holdings to populate a trailing portfolio value history."
               />
             ) : (
-              <div className="h-80 animate-[fadeIn_220ms_ease-out]">
+              <div className="rounded-[1.8rem] border border-white/10 bg-gradient-to-b from-white/[0.035] to-transparent p-4">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Value curve</p>
+                    <p className="mt-2 text-lg font-medium text-white">
+                      {selectedPortfolio.name} over {portfolioRange}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <InfoPill
+                      label="Current"
+                      value={selectedMetrics ? formatCurrency(selectedMetrics.portfolioValue) : "N/A"}
+                    />
+                    <InfoPill
+                      label="Day Move"
+                      value={formatCurrency(dailyPnl)}
+                      tone={dailyPnl >= 0 ? "positive" : "negative"}
+                    />
+                  </div>
+                </div>
+                <div className="h-80 animate-[fadeIn_220ms_ease-out]">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={selectedPortfolio.valueHistory}>
                     <CartesianGrid stroke="rgba(148,163,184,0.14)" vertical={false} />
@@ -1454,25 +1513,26 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     <Area
                       type="monotone"
                       dataKey="drawdown"
-                      fill="rgba(239,68,68,0.18)"
-                      stroke="rgba(239,68,68,0.25)"
+                      fill="rgba(239,68,68,0.12)"
+                      stroke="rgba(239,68,68,0.2)"
                     />
                     <Line
                       type="monotone"
                       dataKey="peak"
-                      stroke="#52525b"
+                      stroke="rgba(255,255,255,0.22)"
                       dot={false}
-                      strokeWidth={1.4}
+                      strokeWidth={1.2}
                     />
                     <Line
                       type="monotone"
                       dataKey="value"
                       stroke="#fafafa"
                       dot={false}
-                      strokeWidth={2.2}
+                      strokeWidth={2.5}
                     />
                   </LineChart>
                 </ResponsiveContainer>
+              </div>
               </div>
             )}
           </Panel>
@@ -1851,33 +1911,39 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             />
           ) : (
             <div className="space-y-4">
-              <MetricStat
-                label="Sharpe Ratio"
-                value={selectedMetrics.sharpe.toFixed(2)}
-                helper="Annualized excess return per unit of volatility."
-              />
-              <MetricStat
-                label="Maximum Drawdown"
-                value={formatPercent(selectedMetrics.maxDrawdown)}
-                helper="Peak-to-trough loss over the trailing year."
-              />
-              <MetricStat
-                label="VaR (95%)"
-                value={`${formatPercent(selectedMetrics.var95)} / ${formatCurrency(
-                  selectedMetrics.var95Amount
-                )}`}
-                helper="Parametric one-day value at risk."
-              />
-              <MetricStat
-                label="Annualized Volatility"
-                value={formatPercent(selectedMetrics.annualizedVolatility)}
-              />
-              <div className="rounded-3xl border border-slate-800 bg-slate-950/30 p-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <MetricStat
+                  label="Sharpe Ratio"
+                  value={selectedMetrics.sharpe.toFixed(2)}
+                  helper="Annualized excess return per unit of volatility."
+                />
+                <MetricStat
+                  label="Maximum Drawdown"
+                  value={formatPercent(selectedMetrics.maxDrawdown)}
+                  helper="Peak-to-trough loss over the trailing year."
+                />
+                <MetricStat
+                  label="VaR (95%)"
+                  value={`${formatPercent(selectedMetrics.var95)} / ${formatCurrency(
+                    selectedMetrics.var95Amount
+                  )}`}
+                  helper="Parametric one-day value at risk."
+                />
+                <MetricStat
+                  label="Annualized Volatility"
+                  value={formatPercent(selectedMetrics.annualizedVolatility)}
+                />
+              </div>
+              <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5">
+                <div className="mb-4 flex flex-wrap gap-2">
+                  <InfoPill label="Portfolio Value" value={formatCurrency(selectedMetrics.portfolioValue)} />
+                  <InfoPill label="Annual Return" value={formatPercent(selectedMetrics.annualizedReturn)} />
+                </div>
                 <p className="text-sm leading-7 text-slate-300">{selectedMetrics.summary}</p>
               </div>
               <button
                 onClick={() => void rerunRiskScore(true)}
-                className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
+                className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:-translate-y-0.5 hover:bg-zinc-200"
               >
                 Re-run Risk Score
               </button>
@@ -1892,6 +1958,14 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               copy="Risk charts appear once positions have market history."
             />
           ) : (
+            <div className="rounded-[1.8rem] border border-white/10 bg-gradient-to-b from-white/[0.035] to-transparent p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Forward drawdown risk</p>
+                  <p className="mt-2 text-lg font-medium text-white">Monte Carlo term structure</p>
+                </div>
+                <InfoPill label="Tier" value={selectedMetrics.riskTier} />
+              </div>
             <div className="h-96">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart
@@ -1911,12 +1985,13 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   <Area
                     type="monotone"
                     dataKey="probability"
-                    stroke="#22d3ee"
-                    fill="rgba(34,211,238,0.18)"
+                    stroke="#fafafa"
+                    fill="rgba(255,255,255,0.1)"
                     strokeWidth={2}
                   />
                 </AreaChart>
               </ResponsiveContainer>
+            </div>
             </div>
           )}
         </Panel>
@@ -1938,11 +2013,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             />
           ) : riskReport ? (
             <div className="space-y-5">
-              <div className="rounded-3xl border border-slate-800 bg-slate-950/30 p-4">
+              <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5">
                 <p className="text-sm leading-7 text-slate-300">{riskReport.summary}</p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-3xl border border-slate-800 bg-slate-950/30 p-4">
+                <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-4">
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Market Regime</p>
                   <p className="mt-3 text-xl font-semibold text-white">
                     {riskReport.marketContext.trend}
@@ -1953,7 +2028,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     {formatPercent(riskReport.marketContext.volatility)}.
                   </p>
                 </div>
-                <div className="rounded-3xl border border-slate-800 bg-slate-950/30 p-4">
+                <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-4">
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
                     Top Single Name
                   </p>
@@ -1974,10 +2049,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 <div className="mt-3 space-y-3">
                   {riskReport.vulnerabilities.length > 0 ? (
                     riskReport.vulnerabilities.map((item) => (
-                      <div
-                        key={item}
-                        className="rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger"
-                      >
+                      <div key={item} className="rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
                         {item}
                       </div>
                     ))
@@ -1993,10 +2065,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 <div className="mt-3 space-y-3">
                   {riskReport.resilienceFactors.length > 0 ? (
                     riskReport.resilienceFactors.map((item) => (
-                      <div
-                        key={item}
-                        className="rounded-2xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success"
-                      >
+                      <div key={item} className="rounded-2xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
                         {item}
                       </div>
                     ))
@@ -2473,7 +2542,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 <p className="font-mono text-xs uppercase tracking-[0.35em] text-zinc-300">
                   Holding Detail
                 </p>
-                <h2 className="mt-3 text-2xl font-semibold text-white">
+                <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-white">
                   {selectedHoldingDetail?.ticker ?? "Loading"}
                 </h2>
                 <p className="mt-2 text-sm text-slate-400">
@@ -2499,36 +2568,45 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               </div>
             ) : (
               <div className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <MetricStat
-                    label="Current Price"
-                    value={formatCurrency(selectedHoldingDetail.currentPrice)}
-                  />
-                  <MetricStat
-                    label="Market Cap"
-                    value={formatBigNumber(selectedHoldingDetail.marketCap)}
-                  />
-                  <MetricStat
-                    label="52 Week Range"
-                    value={`${formatCurrency(
-                      selectedHoldingDetail.fiftyTwoWeekLow ?? 0
-                    )} - ${formatCurrency(selectedHoldingDetail.fiftyTwoWeekHigh ?? 0)}`}
-                  />
-                  <MetricStat
-                    label="Trailing P/E"
-                    value={
-                      selectedHoldingDetail.trailingPE != null
-                        ? selectedHoldingDetail.trailingPE.toFixed(2)
-                        : "N/A"
-                    }
-                  />
+                <div className="rounded-[1.9rem] border border-white/10 bg-gradient-to-b from-white/[0.04] to-transparent p-5">
+                  <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+                    <div>
+                      <p className="text-sm uppercase tracking-[0.22em] text-slate-500">
+                        {selectedHoldingDetail.exchange || "Exchange N/A"} • {selectedHoldingDetail.sector || "Sector N/A"}
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-end gap-3">
+                        <p className="text-4xl font-semibold tracking-[-0.05em] text-white">
+                          {formatCurrency(selectedHoldingDetail.currentPrice)}
+                        </p>
+                        <span className="text-sm text-slate-400">
+                          {selectedHoldingDetail.industry || "Industry N/A"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <InfoPill label="Market Cap" value={formatBigNumber(selectedHoldingDetail.marketCap)} />
+                      <InfoPill
+                        label="52W Range"
+                        value={`${formatCurrency(selectedHoldingDetail.fiftyTwoWeekLow ?? 0)} - ${formatCurrency(selectedHoldingDetail.fiftyTwoWeekHigh ?? 0)}`}
+                      />
+                      <InfoPill
+                        label="Trailing P/E"
+                        value={
+                          selectedHoldingDetail.trailingPE != null
+                            ? selectedHoldingDetail.trailingPE.toFixed(2)
+                            : "N/A"
+                        }
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div className="rounded-3xl border border-slate-800 bg-slate-950/30 p-4">
+                <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5">
                   <div className="flex flex-wrap gap-3 text-xs uppercase tracking-[0.2em] text-slate-500">
                     <span>{selectedHoldingDetail.exchange || "Exchange N/A"}</span>
                     <span>{selectedHoldingDetail.sector || "Sector N/A"}</span>
                     <span>{selectedHoldingDetail.industry || "Industry N/A"}</span>
+                    {selectedHoldingDetail.website ? <span>{selectedHoldingDetail.website}</span> : null}
                   </div>
                   {selectedHoldingDetail.summary ? (
                     <p className="mt-4 text-sm leading-7 text-slate-300">
@@ -2537,7 +2615,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   ) : null}
                 </div>
 
-                <div className="rounded-3xl border border-slate-800 bg-slate-950/30 p-4">
+                <div className="rounded-[1.8rem] border border-white/10 bg-gradient-to-b from-white/[0.035] to-transparent p-5">
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
                     Recent Price Trend
                   </p>
@@ -2580,7 +2658,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-3xl border border-slate-800 bg-slate-950/30 p-4">
+                  <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5">
                     <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
                       Balance Sheet
                     </p>
@@ -2592,7 +2670,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       <p>Total Cash: {formatBigNumber(selectedHoldingDetail.totalCash)}</p>
                     </div>
                   </div>
-                  <div className="rounded-3xl border border-slate-800 bg-slate-950/30 p-4">
+                  <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5">
                     <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
                       Operating Quality
                     </p>
