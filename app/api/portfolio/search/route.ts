@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { searchTickers } from "@/lib/market";
+import { fetchQuotes, searchTickers } from "@/lib/market";
 import { badRequest, json } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -17,5 +17,26 @@ export async function GET(request: NextRequest) {
   }
 
   const results = await searchTickers(query);
-  return json({ results });
+  const symbols = results.map((result) => result.symbol).filter(Boolean).slice(0, 6);
+
+  let quotesByTicker = new Map<string, Awaited<ReturnType<typeof fetchQuotes>>[number]>();
+  if (symbols.length > 0) {
+    try {
+      const quotes = await fetchQuotes(symbols);
+      quotesByTicker = new Map(quotes.map((quote) => [quote.ticker, quote]));
+    } catch {
+      quotesByTicker = new Map();
+    }
+  }
+
+  return json({
+    results: results.map((result) => {
+      const quote = quotesByTicker.get(result.symbol.toUpperCase());
+      return {
+        ...result,
+        currentPrice: quote?.price ?? null,
+        changePercent: quote?.changePercent ?? null
+      };
+    })
+  });
 }

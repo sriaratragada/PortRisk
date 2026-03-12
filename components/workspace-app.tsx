@@ -53,6 +53,8 @@ type SearchResult = {
   shortname: string;
   exchange: string;
   quoteType: string;
+  currentPrice?: number | null;
+  changePercent?: number | null;
 };
 
 type PortfolioCardStats = {
@@ -266,6 +268,15 @@ function formatCompactDate(value: string) {
     day: "numeric",
     year: "numeric"
   });
+}
+
+function median(values: number[]) {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1]! + sorted[middle]!) / 2
+    : sorted[middle]!;
 }
 
 function benchmarkForName(name: string) {
@@ -702,6 +713,38 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         .slice()
         .sort((left, right) => right.currentValue - left.currentValue) ?? [],
     [selectedPortfolio]
+  );
+  const totalReturn = useMemo(
+    () => selectedPortfolio?.holdings.reduce((sum, holding) => sum + holding.totalGain, 0) ?? 0,
+    [selectedPortfolio]
+  );
+  const totalReturnPercent = useMemo(() => {
+    const currentValue =
+      selectedPortfolio?.holdings.reduce((sum, holding) => sum + holding.currentValue, 0) ?? 0;
+    const costBasis = currentValue - totalReturn;
+    return costBasis > 0 ? totalReturn / costBasis : 0;
+  }, [selectedPortfolio, totalReturn]);
+  const biggestGainer = useMemo(
+    () =>
+      sortedHoldings
+        .filter((holding) => holding.dailyPnl > 0)
+        .sort((left, right) => right.dailyPnl - left.dailyPnl)[0] ?? null,
+    [sortedHoldings]
+  );
+  const biggestLoser = useMemo(
+    () =>
+      sortedHoldings
+        .filter((holding) => holding.dailyPnl < 0)
+        .sort((left, right) => left.dailyPnl - right.dailyPnl)[0] ?? null,
+    [sortedHoldings]
+  );
+  const medianWeight = useMemo(
+    () => median(sortedHoldings.map((holding) => holding.weight)),
+    [sortedHoldings]
+  );
+  const topThreeConcentration = useMemo(
+    () => sortedHoldings.slice(0, 3).reduce((sum, holding) => sum + holding.weight, 0),
+    [sortedHoldings]
   );
 
   async function refreshPortfolioList() {
@@ -1238,7 +1281,53 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
     return (
       <div className="space-y-6">
-        <div className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
+        <Panel title="Portfolio Summary Strip">
+          {!selectedPortfolio ? (
+            <EmptyState
+              title="Create your first strategy sleeve"
+              copy="Build separate large-cap, mid-cap, small-cap, or flexicap portfolios and track each sleeve with its own risk state."
+              action={
+                <form
+                  onSubmit={createPortfolio}
+                  className="mx-auto flex max-w-md flex-col gap-3 sm:flex-row"
+                >
+                  <input
+                    value={createPortfolioName}
+                    onChange={(event) => setCreatePortfolioName(event.target.value)}
+                    placeholder="Large Cap"
+                    className="flex-1 rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+                  />
+                  <button className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
+                    Create Portfolio
+                  </button>
+                </form>
+              }
+            />
+          ) : (
+            <div className="grid gap-3 lg:grid-cols-7">
+              <InfoPill label="Portfolio" value={selectedPortfolio.name} />
+              <InfoPill
+                label="Value"
+                value={selectedMetrics ? formatCurrency(selectedMetrics.portfolioValue) : "N/A"}
+              />
+              <InfoPill
+                label="Day Change"
+                value={formatCurrency(dailyPnl)}
+                tone={dailyPnl >= 0 ? "positive" : "negative"}
+              />
+              <InfoPill
+                label="Total Return"
+                value={formatPercent(totalReturnPercent)}
+                tone={totalReturn >= 0 ? "positive" : "negative"}
+              />
+              <InfoPill label="Risk Tier" value={selectedMetrics?.riskTier ?? "Unscored"} />
+              <InfoPill label="Benchmark" value={benchmarkForName(selectedPortfolio.name)} />
+              <InfoPill label="Positions" value={`${selectedPortfolio.positions.length}`} />
+            </div>
+          )}
+        </Panel>
+
+        <div className="grid gap-6 xl:grid-cols-[1.45fr_0.55fr]">
           <Panel
             title="Portfolio Command"
             action={
@@ -1251,24 +1340,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           >
             {!selectedPortfolio ? (
               <EmptyState
-                title="Create your first strategy sleeve"
-                copy="Build separate large-cap, mid-cap, small-cap, or flexicap portfolios and track each sleeve with its own risk state."
-                action={
-                  <form
-                    onSubmit={createPortfolio}
-                    className="mx-auto flex max-w-md flex-col gap-3 sm:flex-row"
-                  >
-                    <input
-                      value={createPortfolioName}
-                      onChange={(event) => setCreatePortfolioName(event.target.value)}
-                      placeholder="Large Cap"
-                      className="flex-1 rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
-                    />
-                    <button className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
-                      Create Portfolio
-                    </button>
-                  </form>
-                }
+                title="No active portfolio selected"
+                copy="Use the selector above or create a sleeve to populate the dashboard."
               />
             ) : (
               <div className="space-y-6">
@@ -1347,41 +1420,51 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             )}
           </Panel>
 
-          <Panel
-            title="Portfolio Builder"
-            action={<span className="text-xs text-slate-500">Multi-sleeve</span>}
-          >
-            <form onSubmit={createPortfolio} className="space-y-4">
-              <input
-                value={createPortfolioName}
-                onChange={(event) => setCreatePortfolioName(event.target.value)}
-                placeholder="Flexicap"
-                className="w-full rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
-              />
-              <button className="w-full rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
-                Create New Portfolio
-              </button>
+          <Panel title="Execution Stack" action={<span className="text-xs text-slate-500">At a glance</span>}>
+            <div className="space-y-3">
               <div className="grid gap-3">
-                {portfolioTemplates.map((template) => (
-                  <button
-                    key={template.name}
-                    type="button"
-                    onClick={() => setCreatePortfolioName(template.name)}
-                    className="rounded-3xl border border-white/10 bg-black/35 px-4 py-4 text-left transition hover:border-white/20 hover:bg-white/[0.03]"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-medium text-white">{template.name}</p>
-                      <span className="text-xs uppercase tracking-[0.2em] text-zinc-300">
-                        {template.benchmark}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-slate-400">
-                      {template.description}
-                    </p>
-                  </button>
-                ))}
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Top mover</p>
+                  <p className="mt-2 text-lg font-semibold text-white">{biggestGainer?.ticker ?? "N/A"}</p>
+                  <p className="mt-1 text-sm text-slate-400">
+                    {biggestGainer ? `${formatCurrency(biggestGainer.dailyPnl)} today` : "No positive movers yet"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Lagging name</p>
+                  <p className="mt-2 text-lg font-semibold text-white">{biggestLoser?.ticker ?? "N/A"}</p>
+                  <p className="mt-1 text-sm text-slate-400">
+                    {biggestLoser ? `${formatCurrency(biggestLoser.dailyPnl)} today` : "No negative movers yet"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Portfolio templates</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {portfolioTemplates.map((template) => (
+                      <button
+                        key={template.name}
+                        type="button"
+                        onClick={() => setCreatePortfolioName(template.name)}
+                        className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.04]"
+                      >
+                        {template.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </form>
+              <form onSubmit={createPortfolio} className="space-y-3">
+                <input
+                  value={createPortfolioName}
+                  onChange={(event) => setCreatePortfolioName(event.target.value)}
+                  placeholder="Flexicap"
+                  className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+                />
+                <button className="w-full rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
+                  Create New Portfolio
+                </button>
+              </form>
+            </div>
           </Panel>
         </div>
 
@@ -1587,50 +1670,115 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
   const renderHoldings = () => (
     <div className="space-y-6">
-      <Panel title="Portfolio Performance" action={<RangeSelector value={portfolioRange} onChange={setPortfolioRange} />}>
+      <Panel title="Holdings Command Strip">
+        {!selectedPortfolio ? (
+          <EmptyState
+            title="No portfolio selected"
+            copy="Select a sleeve to monitor holdings, top movers, and concentration."
+          />
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-6">
+            <InfoPill label="Selected" value={selectedPortfolio.name} />
+            <InfoPill
+              label="Portfolio Value"
+              value={selectedMetrics ? formatCurrency(selectedMetrics.portfolioValue) : "N/A"}
+            />
+            <InfoPill
+              label="Day Change"
+              value={formatCurrency(dailyPnl)}
+              tone={dailyPnl >= 0 ? "positive" : "negative"}
+            />
+            <InfoPill label="Holdings" value={`${sortedHoldings.length}`} />
+            <InfoPill label="Median Weight" value={formatPercent(medianWeight)} />
+            <InfoPill label="Top 3 Weight" value={formatPercent(topThreeConcentration)} />
+          </div>
+        )}
+      </Panel>
+
+      <Panel
+        title="Portfolio Performance"
+        action={<RangeSelector value={portfolioRange} onChange={setPortfolioRange} />}
+      >
         {!selectedPortfolio || selectedPortfolio.valueHistory.length === 0 ? (
           <EmptyState
             title="No performance history yet"
             copy="Select a portfolio and add holdings to see 1D through MAX performance."
           />
         ) : (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm uppercase tracking-[0.2em] text-slate-500">
-                  {selectedPortfolio.name}
-                </p>
-                <p className="mt-2 text-3xl font-semibold text-white">
-                  {selectedMetrics ? formatCurrency(selectedMetrics.portfolioValue) : "Awaiting price"}
-                </p>
+          <div className="grid gap-4 xl:grid-cols-[1.4fr_0.6fr]">
+            <div className="rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.035] to-transparent p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm uppercase tracking-[0.2em] text-slate-500">
+                    {selectedPortfolio.name}
+                  </p>
+                  <p className="mt-2 text-4xl font-semibold tracking-[-0.04em] text-white">
+                    {selectedMetrics ? formatCurrency(selectedMetrics.portfolioValue) : "Awaiting price"}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-400">
+                    Total return {formatCurrency(totalReturn)} • {formatPercent(totalReturnPercent)}
+                  </p>
+                </div>
+                <div
+                  className={cn(
+                    "rounded-lg px-4 py-2 text-sm font-medium",
+                    dailyPnl >= 0 ? "bg-success/15 text-success" : "bg-danger/15 text-danger"
+                  )}
+                >
+                  {formatCurrency(dailyPnl)} / {formatPercent(dailyPnlPercent)}
+                </div>
               </div>
-              <div
-                className={cn(
-                  "rounded-full px-4 py-2 text-sm",
-                  dailyPnl >= 0 ? "bg-success/15 text-success" : "bg-danger/15 text-danger"
-                )}
-              >
-                {formatCurrency(dailyPnl)} / {formatPercent(dailyPnlPercent)}
+              <div className="mt-4 h-72 animate-[fadeIn_220ms_ease-out]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={selectedPortfolio.valueHistory}>
+                    <CartesianGrid stroke="rgba(148,163,184,0.12)" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fill: "#94a3b8", fontSize: 12 }} minTickGap={24} />
+                    <YAxis tickFormatter={(value) => `$${Math.round(value / 1000)}k`} tick={{ fill: "#94a3b8", fontSize: 12 }} />
+                    <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                    <Area type="monotone" dataKey="drawdown" fill="rgba(239,68,68,0.12)" stroke="rgba(239,68,68,0.18)" />
+                    <Line type="monotone" dataKey="peak" stroke="rgba(255,255,255,0.18)" dot={false} strokeWidth={1.1} />
+                    <Line type="monotone" dataKey="value" stroke="#fafafa" dot={false} strokeWidth={2.4} />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
             </div>
-            <div className="h-72 animate-[fadeIn_220ms_ease-out]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={selectedPortfolio.valueHistory}>
-                  <CartesianGrid stroke="rgba(148,163,184,0.14)" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fill: "#94a3b8", fontSize: 12 }} minTickGap={24} />
-                  <YAxis tickFormatter={(value) => `$${Math.round(value / 1000)}k`} tick={{ fill: "#94a3b8", fontSize: 12 }} />
-                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                  <Area type="monotone" dataKey="drawdown" fill="rgba(239,68,68,0.14)" stroke="rgba(239,68,68,0.18)" />
-                  <Line type="monotone" dataKey="peak" stroke="#52525b" dot={false} strokeWidth={1.1} />
-                  <Line type="monotone" dataKey="value" stroke="#fafafa" dot={false} strokeWidth={2.2} />
-                </LineChart>
-              </ResponsiveContainer>
+
+            <div className="grid gap-3">
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Biggest gainer</p>
+                <p className="mt-2 text-lg font-semibold text-white">{biggestGainer?.ticker ?? "N/A"}</p>
+                <p className="mt-1 text-sm text-slate-400">
+                  {biggestGainer
+                    ? `${formatCurrency(biggestGainer.dailyPnl)} • ${formatPercent(biggestGainer.dailyPnlPercent)}`
+                    : "No positive movers"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Biggest loser</p>
+                <p className="mt-2 text-lg font-semibold text-white">{biggestLoser?.ticker ?? "N/A"}</p>
+                <p className="mt-1 text-sm text-slate-400">
+                  {biggestLoser
+                    ? `${formatCurrency(biggestLoser.dailyPnl)} • ${formatPercent(biggestLoser.dailyPnlPercent)}`
+                    : "No negative movers"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Concentration</p>
+                <p className="mt-2 text-lg font-semibold text-white">
+                  {topConcentration(sortedHoldings)?.ticker ?? "N/A"}
+                </p>
+                <p className="mt-1 text-sm text-slate-400">
+                  {topConcentration(sortedHoldings)
+                    ? `${formatPercent(topConcentration(sortedHoldings)?.weight ?? 0)} top weight`
+                    : "No holdings yet"}
+                </p>
+              </div>
             </div>
           </div>
         )}
       </Panel>
 
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+      <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
         <Panel title="Current Holdings" action={<span className="text-xs text-slate-500">Portfolio-scoped</span>}>
           {!selectedPortfolio ? (
             <EmptyState
@@ -1643,78 +1791,77 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               copy="Search by ticker and add your first NYSE-listed equity or ETF to begin live risk monitoring."
             />
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {sortedHoldings.map((holding) => (
                 <button
                   key={holding.ticker}
                   type="button"
                   onClick={() => void openHoldingDetail(holding.ticker)}
-                  className="w-full rounded-[1.75rem] border border-white/10 bg-black/40 p-5 text-left transition duration-200 hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/[0.04]"
+                  className="w-full rounded-xl border border-white/10 bg-black/40 p-4 text-left transition duration-200 hover:border-white/25 hover:bg-white/[0.045]"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div>
+                  <div className="grid gap-4 xl:grid-cols-[0.9fr_1.35fr_auto] xl:items-center">
+                    <div className="min-w-0">
                       <div className="flex items-center gap-3">
                         <p className="text-lg font-semibold text-white">{holding.ticker}</p>
-                        <span className="rounded-full bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                        <span className="rounded-lg bg-white/5 px-2.5 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-400">
                           {holding.assetClass ?? "equities"}
                         </span>
                       </div>
-                      <p className="mt-1 text-sm text-slate-400">
-                        {holding.companyName ?? holding.ticker}
-                      </p>
-                      <p className="mt-3 text-2xl font-semibold text-white">
-                        {formatCurrency(holding.currentPrice)}
-                      </p>
-                      <p className="mt-1 text-sm text-slate-500">
-                        Avg cost {formatCurrency(holding.avgCost)} • {holding.shares.toFixed(4)} shares
+                      <p className="mt-1 text-sm text-slate-400">{holding.companyName ?? holding.ticker}</p>
+                      <p className="mt-2 text-xs uppercase tracking-[0.2em] text-slate-500">
+                        {holding.exchange ?? "Exchange N/A"}
                       </p>
                     </div>
 
-                    <div className="grid min-w-[250px] gap-4 sm:grid-cols-2">
+                    <div className="grid min-w-[250px] gap-3 sm:grid-cols-4">
                       <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Position Value</p>
-                        <p className="mt-2 text-lg font-semibold text-white">{formatCurrency(holding.currentValue)}</p>
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Price</p>
+                        <p className="mt-1 text-lg font-semibold text-white">{formatCurrency(holding.currentPrice)}</p>
+                        <p className={cn("mt-1 text-xs", holding.dailyPnl >= 0 ? "text-success" : "text-danger")}>
+                          {formatCurrency(holding.dailyPnl)} today
+                        </p>
                       </div>
                       <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Weight</p>
-                        <p className="mt-2 text-lg font-semibold text-white">{formatPercent(holding.weight)}</p>
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Position</p>
+                        <p className="mt-1 text-lg font-semibold text-white">{formatCurrency(holding.currentValue)}</p>
+                        <p className="mt-1 text-xs text-slate-500">{formatPercent(holding.weight)} weight</p>
                       </div>
                       <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Total Gain/Loss</p>
-                        <p className={cn("mt-2 text-lg font-semibold", holding.totalGain >= 0 ? "text-success" : "text-danger")}>
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Total Return</p>
+                        <p className={cn("mt-1 text-lg font-semibold", holding.totalGain >= 0 ? "text-success" : "text-danger")}>
                           {formatCurrency(holding.totalGain)} • {formatPercent(holding.totalGainPercent)}
                         </p>
+                        <p className="mt-1 text-xs text-slate-500">Avg {formatCurrency(holding.avgCost)}</p>
                       </div>
                       <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Daily Move</p>
-                        <p className={cn("mt-2 text-lg font-semibold", holding.dailyPnl >= 0 ? "text-success" : "text-danger")}>
-                          {formatCurrency(holding.dailyPnl)} • {formatPercent(holding.dailyPnlPercent)}
-                        </p>
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Exposure</p>
+                        <p className="mt-1 text-lg font-semibold text-white">{holding.shares.toFixed(2)} sh</p>
+                        <p className="mt-1 text-xs text-slate-500">{holding.assetClass ?? "equities"}</p>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="mt-5 flex flex-wrap justify-end gap-3">
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        startEditingPosition(holding.ticker);
-                      }}
-                      className="rounded-full border border-white/12 px-4 py-2 text-sm text-zinc-200 transition hover:border-white/25 hover:bg-white/[0.04]"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void removePosition(holding.ticker);
-                      }}
-                      className="rounded-full border border-danger/40 px-4 py-2 text-sm text-danger"
-                    >
-                      Remove
-                    </button>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          startEditingPosition(holding.ticker);
+                        }}
+                        className="rounded-lg border border-white/12 px-4 py-2 text-sm text-zinc-200 transition hover:border-white/25 hover:bg-white/[0.04]"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void removePosition(holding.ticker);
+                        }}
+                        className="rounded-lg border border-danger/40 px-4 py-2 text-sm text-danger"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
                 </button>
               ))}
@@ -1734,161 +1881,156 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 <span className="text-sm text-slate-300">Target portfolio</span>
                 {portfolioSelector}
               </label>
-            <div className="relative">
-              <label className="mb-2 block text-sm text-slate-300">Search listed ticker</label>
-              <input
-                value={searchTerm}
-                onChange={(event) => {
-                  setSearchTerm(event.target.value);
-                  setPositionTicker("");
-                  setPositionName("");
-                }}
-                onKeyDown={handleSearchKeyDown}
-                placeholder="AAPL, KO, XOM..."
-                className="w-full rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
-              />
-              {searchResults.length > 0 && (
-                <div className="absolute left-0 right-0 z-20 mt-2 overflow-hidden rounded-2xl border border-white/10 bg-black/95 shadow-2xl">
-                  {searchResults.map((result, index) => (
-                    <button
-                      key={`${result.symbol}-${result.exchange}`}
-                      type="button"
-                      onClick={() => applySearchResult(result)}
-                      className={cn(
-                        "flex w-full items-start justify-between px-4 py-3 text-left text-sm transition",
-                        index === highlightedSearchIndex
-                          ? "bg-white/[0.06]"
-                          : "hover:bg-white/[0.03]"
-                      )}
-                    >
-                      <div>
-                        <p className="font-medium text-white">{result.symbol}</p>
-                        <p className="mt-1 text-slate-400">{result.shortname}</p>
-                      </div>
-                      <div className="text-right text-xs uppercase tracking-[0.2em] text-slate-500">
-                        <p>{result.exchange}</p>
-                        <p className="mt-1">{result.quoteType}</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+              <div className="relative">
+                <label className="mb-2 block text-sm text-slate-300">Search listed ticker</label>
+                <input
+                  value={searchTerm}
+                  onChange={(event) => {
+                    setSearchTerm(event.target.value);
+                    setPositionTicker("");
+                    setPositionName("");
+                  }}
+                  onKeyDown={handleSearchKeyDown}
+                  placeholder="AAPL, KO, XOM..."
+                  className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+                />
+                {searchResults.length > 0 && (
+                  <div className="absolute left-0 right-0 z-20 mt-2 overflow-hidden rounded-xl border border-white/10 bg-black/95 shadow-2xl">
+                    {searchResults.map((result, index) => (
+                      <button
+                        key={`${result.symbol}-${result.exchange}`}
+                        type="button"
+                        onClick={() => applySearchResult(result)}
+                        className={cn(
+                          "flex w-full items-start justify-between gap-4 px-4 py-3 text-left text-sm transition",
+                          index === highlightedSearchIndex ? "bg-white/[0.06]" : "hover:bg-white/[0.03]"
+                        )}
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-white">{result.symbol}</p>
+                            {result.currentPrice != null ? (
+                              <span className="text-xs text-slate-400">{formatCurrency(result.currentPrice)}</span>
+                            ) : null}
+                          </div>
+                          <p className="mt-1 text-slate-400">{result.shortname}</p>
+                        </div>
+                        <div className="text-right text-xs uppercase tracking-[0.2em] text-slate-500">
+                          <p>{result.exchange}</p>
+                          <p className="mt-1">{result.quoteType}</p>
+                          {result.changePercent != null ? (
+                            <p className={cn("mt-1", result.changePercent >= 0 ? "text-success" : "text-danger")}>
+                              {formatPercent(result.changePercent)}
+                            </p>
+                          ) : null}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-            <div className="rounded-3xl border border-white/10 bg-black/35 p-4">
-              <p className="text-sm text-slate-300">Selected ticker</p>
-              <div className="mt-3 flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-lg font-semibold text-white">
-                    {positionTicker || "Choose a ticker"}
-                  </p>
-                  {positionName ? (
-                    <p className="mt-1 text-sm text-slate-500">{positionName}</p>
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Selected security</p>
+                <div className="mt-3 flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-lg font-semibold text-white">
+                      {positionTicker || "Choose a ticker"}
+                    </p>
+                    {positionName ? <p className="mt-1 text-sm text-slate-500">{positionName}</p> : null}
+                  </div>
+                  {positionPreviewLoading ? (
+                    <span className="text-sm text-slate-500">Loading quote...</span>
+                  ) : positionPreview ? (
+                    <div className="text-right">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Current Price</p>
+                      <p className="mt-1 text-lg font-semibold text-white">
+                        {formatCurrency(positionPreview.currentPrice)}
+                      </p>
+                    </div>
                   ) : null}
                 </div>
-                {positionPreviewLoading ? (
-                  <span className="text-sm text-slate-500">Loading quote...</span>
-                ) : positionPreview ? (
-                  <div className="text-right">
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                      Current Price
-                    </p>
-                    <p className="mt-1 text-lg font-semibold text-white">
-                      {formatCurrency(positionPreview.currentPrice)}
-                    </p>
+                {positionPreview ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-lg border border-white/10 bg-black/40 p-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Sector</p>
+                      <p className="mt-2 text-sm text-white">{positionPreview.sector ?? "Unclassified"}</p>
+                    </div>
+                    <div className="rounded-lg border border-white/10 bg-black/40 p-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Market Cap</p>
+                      <p className="mt-2 text-sm text-white">{formatBigNumber(positionPreview.marketCap)}</p>
+                    </div>
                   </div>
                 ) : null}
               </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block space-y-2">
+                  <span className="text-sm text-slate-300">Shares</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    inputMode="decimal"
+                    value={positionShares}
+                    onChange={(event) => setPositionShares(event.target.value)}
+                    className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+                  />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm text-slate-300">Average cost</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    inputMode="decimal"
+                    value={positionAvgCost}
+                    onChange={(event) => setPositionAvgCost(event.target.value)}
+                    className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+                  />
+                </label>
+              </div>
+
+              <label className="block space-y-2">
+                <span className="text-sm text-slate-300">Asset class</span>
+                <select
+                  value={positionAssetClass}
+                  onChange={(event) =>
+                    setPositionAssetClass(event.target.value as "equities" | "bonds" | "commodities")
+                  }
+                  className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+                >
+                  <option value="equities">Equities</option>
+                  <option value="bonds">Bonds</option>
+                  <option value="commodities">Commodities</option>
+                </select>
+              </label>
+
               {positionPreview ? (
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Sector</p>
-                    <p className="mt-2 text-sm text-white">
-                      {positionPreview.sector ?? "Unclassified"}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                      Market Cap
-                    </p>
-                    <p className="mt-2 text-sm text-white">
-                      {formatBigNumber(positionPreview.marketCap)}
-                    </p>
-                  </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-300">
+                  Current market price is pulled live from market data. Average cost remains your entered cost basis.
                 </div>
               ) : null}
-            </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="block space-y-2">
-                <span className="text-sm text-slate-300">Shares</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  inputMode="decimal"
-                  value={positionShares}
-                  onChange={(event) => setPositionShares(event.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
-                />
-              </label>
-              <label className="block space-y-2">
-                <span className="text-sm text-slate-300">Average cost</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  inputMode="decimal"
-                  value={positionAvgCost}
-                  onChange={(event) => setPositionAvgCost(event.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
-                />
-              </label>
-            </div>
-
-            <label className="block space-y-2">
-              <span className="text-sm text-slate-300">Asset class</span>
-              <select
-                value={positionAssetClass}
-                onChange={(event) =>
-                  setPositionAssetClass(
-                    event.target.value as "equities" | "bonds" | "commodities"
-                  )
-                }
-                className="w-full rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
-              >
-                <option value="equities">Equities</option>
-                <option value="bonds">Bonds</option>
-                <option value="commodities">Commodities</option>
-              </select>
-            </label>
-
-            {positionPreview ? (
-              <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-300">
-                Current market price is pulled live from market data. Average cost remains your
-                entered cost basis.
-              </div>
-            ) : null}
-
-            <div className="flex gap-3">
-              <button className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
-                {editingTicker ? "Update Position" : "Add Position"}
-              </button>
-              {editingTicker ? (
-                <button
-                  type="button"
-                  onClick={resetPositionForm}
-                  className="rounded-2xl border border-slate-700 px-5 py-3 text-sm text-slate-300"
-                >
-                  Cancel
+              <div className="flex gap-3">
+                <button className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
+                  {editingTicker ? "Update Position" : "Add Position"}
                 </button>
-              ) : null}
-            </div>
-          </form>
-        )}
-      </Panel>
+                {editingTicker ? (
+                  <button
+                    type="button"
+                    onClick={resetPositionForm}
+                    className="rounded-xl border border-slate-700 px-5 py-3 text-sm text-slate-300"
+                  >
+                    Cancel
+                  </button>
+                ) : null}
+              </div>
+            </form>
+          )}
+        </Panel>
+      </div>
     </div>
-  </div>
   );
 
   const renderRisk = () => (
