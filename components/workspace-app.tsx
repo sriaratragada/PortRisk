@@ -76,10 +76,11 @@ const tabs: Array<{ id: TabId; label: string }> = [
 const chartRanges: ChartRange[] = ["1D", "1W", "1M", "3M", "1Y", "5Y", "MAX"];
 
 const portfolioTemplates = [
-  { name: "Large Cap", benchmark: "SPY", description: "Core large-cap sleeve anchored in dominant market leaders." },
-  { name: "Mid Cap", benchmark: "IWR", description: "Balanced mid-cap exposure for faster growth with moderate liquidity." },
-  { name: "Small Cap", benchmark: "IWM", description: "Higher-beta small-cap sleeve with more cyclical upside and risk." },
-  { name: "Flexicap", benchmark: "VTI", description: "Go-anywhere allocation across market caps and sectors." }
+  { name: "Growth", benchmark: "QQQ", description: "Focused on high capital appreciation through stock-heavy exposure and long-duration risk." },
+  { name: "Income", benchmark: "SCHD", description: "Built for recurring cash flow using dividend-paying equities and income-oriented holdings." },
+  { name: "Balanced", benchmark: "AOR", description: "A hybrid allocation that blends growth and income across stocks and bonds." },
+  { name: "Defensive/Conservative", benchmark: "AGG", description: "Prioritizes capital preservation with lower-volatility exposures and cash-like resilience." },
+  { name: "Speculative", benchmark: "ARKK", description: "High-risk, high-reward positioning intended for tactical and short-term market opportunities." }
 ] as const;
 
 const tierStyles: Record<RiskTier, string> = {
@@ -126,7 +127,7 @@ function Panel({
 
 function TierBadge({ tier }: { tier: RiskTier }) {
   return (
-    <span className={cn("rounded-full px-3 py-1 text-xs font-semibold ring-1", tierStyles[tier])}>
+    <span className={cn("rounded-md px-3 py-1 text-xs font-semibold ring-1", tierStyles[tier])}>
       {tier}
     </span>
   );
@@ -169,7 +170,7 @@ function InfoPill({
   tone?: "default" | "positive" | "negative";
 }) {
   return (
-    <div className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2.5">
+    <div className="rounded-lg border border-white/10 bg-white/[0.03] px-4 py-2.5">
       <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">{label}</p>
       <p
         className={cn(
@@ -281,10 +282,11 @@ function median(values: number[]) {
 
 function benchmarkForName(name: string) {
   const lower = name.toLowerCase();
-  if (lower.includes("large")) return "SPY";
-  if (lower.includes("mid")) return "IWR";
-  if (lower.includes("small")) return "IWM";
-  if (lower.includes("flex")) return "VTI";
+  if (lower.includes("growth")) return "QQQ";
+  if (lower.includes("income")) return "SCHD";
+  if (lower.includes("balanced")) return "AOR";
+  if (lower.includes("defensive") || lower.includes("conservative")) return "AGG";
+  if (lower.includes("speculative")) return "ARKK";
   return "SPY";
 }
 
@@ -296,14 +298,14 @@ function RangeSelector({
   onChange: (range: ChartRange) => void;
 }) {
   return (
-    <div className="inline-flex rounded-full border border-white/10 bg-black/60 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+    <div className="inline-flex rounded-lg border border-white/10 bg-black/60 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
       {chartRanges.map((range) => (
         <button
           key={range}
           type="button"
           onClick={() => onChange(range)}
           className={cn(
-            "rounded-full px-3 py-1.5 text-xs font-medium transition duration-200",
+            "rounded-md px-3 py-1.5 text-xs font-medium transition duration-200",
             value === range
               ? "bg-white text-black shadow-[0_10px_30px_rgba(255,255,255,0.14)]"
               : "text-zinc-500 hover:text-white"
@@ -312,6 +314,29 @@ function RangeSelector({
           {range}
         </button>
       ))}
+    </div>
+  );
+}
+
+function ChartTooltip({
+  active,
+  payload,
+  label,
+  formatter = formatCurrency
+}: {
+  active?: boolean;
+  payload?: Array<{ value?: number }>;
+  label?: string;
+  formatter?: (value: number) => string;
+}) {
+  if (!active || !payload?.length || typeof payload[0]?.value !== "number") {
+    return null;
+  }
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-black/92 px-3 py-2 shadow-2xl backdrop-blur">
+      {label ? <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{label}</p> : null}
+      <p className="mt-1 text-sm font-medium text-white">{formatter(payload[0].value)}</p>
     </div>
   );
 }
@@ -746,6 +771,32 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     () => sortedHoldings.slice(0, 3).reduce((sum, holding) => sum + holding.weight, 0),
     [sortedHoldings]
   );
+  const portfolioRangePerformance = useMemo(() => {
+    const history = selectedPortfolio?.valueHistory ?? [];
+    if (history.length < 2) {
+      return { absolute: 0, percent: 0 };
+    }
+    const first = history[0]?.value ?? 0;
+    const last = history[history.length - 1]?.value ?? 0;
+    const absolute = last - first;
+    return {
+      absolute,
+      percent: first > 0 ? absolute / first : 0
+    };
+  }, [selectedPortfolio?.valueHistory]);
+  const holdingRangePerformance = useMemo(() => {
+    const history = selectedHoldingDetail?.chart ?? [];
+    if (history.length < 2) {
+      return { absolute: 0, percent: 0 };
+    }
+    const first = history[0]?.close ?? 0;
+    const last = history[history.length - 1]?.close ?? 0;
+    const absolute = last - first;
+    return {
+      absolute,
+      percent: first > 0 ? absolute / first : 0
+    };
+  }, [selectedHoldingDetail?.chart]);
 
   async function refreshPortfolioList() {
     const response = await fetch("/api/portfolio", {
@@ -1253,7 +1304,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
   const portfolioSelector = (
     <select
-      className="rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35 focus:bg-black/65"
+      className="rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35 focus:bg-black/65"
       value={selectedPortfolioId}
       onChange={(event) => {
         const nextId = event.target.value;
@@ -1285,7 +1336,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           {!selectedPortfolio ? (
             <EmptyState
               title="Create your first strategy sleeve"
-              copy="Build separate large-cap, mid-cap, small-cap, or flexicap portfolios and track each sleeve with its own risk state."
+                copy="Build separate growth, income, balanced, defensive, or speculative sleeves and track each strategy with its own risk state."
               action={
                 <form
                   onSubmit={createPortfolio}
@@ -1294,12 +1345,12 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   <input
                     value={createPortfolioName}
                     onChange={(event) => setCreatePortfolioName(event.target.value)}
-                    placeholder="Large Cap"
+                      placeholder="Growth"
                     className="flex-1 rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
                   />
-                  <button className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
-                    Create Portfolio
-                  </button>
+                    <button className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
+                      Create Portfolio
+                    </button>
                 </form>
               }
             />
@@ -1316,9 +1367,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 tone={dailyPnl >= 0 ? "positive" : "negative"}
               />
               <InfoPill
-                label="Total Return"
-                value={formatPercent(totalReturnPercent)}
-                tone={totalReturn >= 0 ? "positive" : "negative"}
+                label={`${portfolioRange} Return`}
+                value={`${formatCurrency(portfolioRangePerformance.absolute)} • ${formatPercent(
+                  portfolioRangePerformance.percent
+                )}`}
+                tone={portfolioRangePerformance.absolute >= 0 ? "positive" : "negative"}
               />
               <InfoPill label="Risk Tier" value={selectedMetrics?.riskTier ?? "Unscored"} />
               <InfoPill label="Benchmark" value={benchmarkForName(selectedPortfolio.name)} />
@@ -1359,7 +1412,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     {selectedMetrics ? (
                       <div
                         className={cn(
-                          "rounded-full px-3.5 py-1.5 text-sm font-medium",
+                          "rounded-lg px-3.5 py-1.5 text-sm font-medium",
                           dailyPnl >= 0 ? "bg-success/15 text-success" : "bg-danger/15 text-danger"
                         )}
                       >
@@ -1457,7 +1510,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 <input
                   value={createPortfolioName}
                   onChange={(event) => setCreatePortfolioName(event.target.value)}
-                  placeholder="Flexicap"
+                  placeholder="Balanced"
                   className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
                 />
                 <button className="w-full rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
@@ -1592,7 +1645,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       tickFormatter={(value) => `$${Math.round(value / 1000)}k`}
                       tick={{ fill: "#94a3b8", fontSize: 12 }}
                     />
-                    <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                    <Tooltip content={<ChartTooltip formatter={formatCurrency} />} />
                     <Area
                       type="monotone"
                       dataKey="drawdown"
@@ -1628,7 +1681,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               />
             ) : (
               <div className="space-y-4">
-                <div className="rounded-3xl border border-white/10 bg-black/35 p-4">
+                <div className="rounded-xl border border-white/10 bg-black/35 p-4">
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
                     Largest Position
                   </p>
@@ -1641,7 +1694,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       : "No holdings yet"}
                   </p>
                 </div>
-                <div className="rounded-3xl border border-white/10 bg-black/35 p-4">
+                <div className="rounded-xl border border-white/10 bg-black/35 p-4">
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
                     Primary Sector
                   </p>
@@ -1654,7 +1707,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       : "Sector analysis appears once the risk report is loaded."}
                   </p>
                 </div>
-                <div className="rounded-3xl border border-white/10 bg-black/35 p-4">
+                <div className="rounded-xl border border-white/10 bg-black/35 p-4">
                   <p className="text-sm leading-7 text-slate-300">
                     {riskReport?.summary ??
                       "The risk narrative will summarize concentration, market regime, and balance-sheet resilience here."}
@@ -1716,12 +1769,13 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     {selectedMetrics ? formatCurrency(selectedMetrics.portfolioValue) : "Awaiting price"}
                   </p>
                   <p className="mt-2 text-sm text-slate-400">
-                    Total return {formatCurrency(totalReturn)} • {formatPercent(totalReturnPercent)}
+                    {portfolioRange} return {formatCurrency(portfolioRangePerformance.absolute)} •{" "}
+                    {formatPercent(portfolioRangePerformance.percent)}
                   </p>
                 </div>
                 <div
                   className={cn(
-                    "rounded-lg px-4 py-2 text-sm font-medium",
+                  "rounded-md px-4 py-2 text-sm font-medium",
                     dailyPnl >= 0 ? "bg-success/15 text-success" : "bg-danger/15 text-danger"
                   )}
                 >
@@ -1734,7 +1788,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     <CartesianGrid stroke="rgba(148,163,184,0.12)" vertical={false} />
                     <XAxis dataKey="label" tick={{ fill: "#94a3b8", fontSize: 12 }} minTickGap={24} />
                     <YAxis tickFormatter={(value) => `$${Math.round(value / 1000)}k`} tick={{ fill: "#94a3b8", fontSize: 12 }} />
-                    <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                    <Tooltip content={<ChartTooltip formatter={formatCurrency} />} />
                     <Area type="monotone" dataKey="drawdown" fill="rgba(239,68,68,0.12)" stroke="rgba(239,68,68,0.18)" />
                     <Line type="monotone" dataKey="peak" stroke="rgba(255,255,255,0.18)" dot={false} strokeWidth={1.1} />
                     <Line type="monotone" dataKey="value" stroke="#fafafa" dot={false} strokeWidth={2.4} />
@@ -2013,17 +2067,17 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               ) : null}
 
               <div className="flex gap-3">
-                <button className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
-                  {editingTicker ? "Update Position" : "Add Position"}
+              <button className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
+                {editingTicker ? "Update Position" : "Add Position"}
+              </button>
+              {editingTicker ? (
+                <button
+                  type="button"
+                  onClick={resetPositionForm}
+                  className="rounded-lg border border-slate-700 px-5 py-3 text-sm text-slate-300"
+                >
+                  Cancel
                 </button>
-                {editingTicker ? (
-                  <button
-                    type="button"
-                    onClick={resetPositionForm}
-                    className="rounded-xl border border-slate-700 px-5 py-3 text-sm text-slate-300"
-                  >
-                    Cancel
-                  </button>
                 ) : null}
               </div>
             </form>
@@ -2085,7 +2139,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               </div>
               <button
                 onClick={() => void rerunRiskScore(true)}
-                className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:-translate-y-0.5 hover:bg-zinc-200"
+                className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:-translate-y-0.5 hover:bg-zinc-200"
               >
                 Re-run Risk Score
               </button>
@@ -2123,7 +2177,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     tickFormatter={(value) => `${Math.round(value * 100)}%`}
                     tick={{ fill: "#94a3b8", fontSize: 12 }}
                   />
-                  <Tooltip formatter={(value: number) => formatPercent(value)} />
+                  <Tooltip content={<ChartTooltip formatter={formatPercent} />} />
                   <Area
                     type="monotone"
                     dataKey="probability"
@@ -2318,7 +2372,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       <Panel title="Scenario Runner">
         <div className="space-y-4">
           <select
-            className="w-full rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+            className="w-full rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
             value={stressScenario}
             onChange={(event) => setStressScenario(event.target.value)}
           >
@@ -2345,7 +2399,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                         [asset]: Number(event.target.value)
                       }))
                     }
-                    className="w-full rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+                    className="w-full rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
                   />
                 </label>
               ))}
@@ -2353,7 +2407,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           )}
           <button
             onClick={runStressScenario}
-            className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
+            className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
           >
             Run Stress Test
           </button>
@@ -2447,7 +2501,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             ))}
             <button
               onClick={commitAllocation}
-              className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
+              className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
             >
               Commit Allocation
             </button>
@@ -2494,7 +2548,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           <select
             value={auditActionType}
             onChange={(event) => setAuditActionType(event.target.value)}
-            className="rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+            className="rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
           >
             <option value="">All actions</option>
             <option value="POSITION_ADDED">Position Added</option>
@@ -2508,17 +2562,17 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             type="date"
             value={auditFrom}
             onChange={(event) => setAuditFrom(event.target.value)}
-            className="rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+            className="rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
           />
           <input
             type="date"
             value={auditTo}
             onChange={(event) => setAuditTo(event.target.value)}
-            className="rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+            className="rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
           />
           <button
             onClick={() => void refreshAudit()}
-            className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
+            className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
           >
             Apply
           </button>
@@ -2573,7 +2627,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           </div>
           <button
             onClick={logout}
-            className="rounded-2xl border border-danger/40 bg-danger/10 px-5 py-3 text-sm font-semibold text-danger"
+              className="rounded-lg border border-danger/40 bg-danger/10 px-5 py-3 text-sm font-semibold text-danger"
           >
             Log Out
           </button>
@@ -2620,7 +2674,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             {portfolioSummaries.length > 0 ? portfolioSelector : null}
             <button
               onClick={() => setActiveTab("holdings")}
-              className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-black shadow-[0_18px_40px_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:bg-zinc-100"
+              className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black shadow-[0_18px_40px_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:bg-zinc-100"
             >
               Add Position
             </button>
@@ -2633,7 +2687,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "rounded-full px-4 py-2 text-sm transition duration-200",
+                "rounded-lg px-4 py-2 text-sm transition duration-200",
                 activeTab === tab.id
                   ? "bg-white text-black shadow-[0_10px_30px_rgba(255,255,255,0.12)]"
                   : "border border-white/10 bg-black/35 text-slate-300 hover:border-white/20 hover:bg-white/[0.03] hover:text-white"
@@ -2698,7 +2752,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   setSelectedHoldingDetail(null);
                   setHoldingDetailLoading(false);
                 }}
-                className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
+                className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
               >
                 Close
               </button>
@@ -2710,8 +2764,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               </div>
             ) : (
               <div className="space-y-6">
-                <div className="rounded-[1.9rem] border border-white/10 bg-gradient-to-b from-white/[0.04] to-transparent p-5">
-                  <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+                <div className="rounded-[1.2rem] border border-white/10 bg-gradient-to-b from-white/[0.04] to-transparent p-5">
+                  <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr] lg:items-end">
                     <div>
                       <p className="text-sm uppercase tracking-[0.22em] text-slate-500">
                         {selectedHoldingDetail.exchange || "Exchange N/A"} • {selectedHoldingDetail.sector || "Sector N/A"}
@@ -2720,25 +2774,42 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                         <p className="text-4xl font-semibold tracking-[-0.05em] text-white">
                           {formatCurrency(selectedHoldingDetail.currentPrice)}
                         </p>
-                        <span className="text-sm text-slate-400">
-                          {selectedHoldingDetail.industry || "Industry N/A"}
+                        <span
+                          className={cn(
+                            "rounded-md border px-3 py-1 text-sm",
+                            holdingRangePerformance.absolute >= 0
+                              ? "border-success/30 bg-success/10 text-success"
+                              : "border-danger/30 bg-danger/10 text-danger"
+                          )}
+                        >
+                          {formatCurrency(holdingRangePerformance.absolute)} /{" "}
+                          {formatPercent(holdingRangePerformance.percent)}
                         </span>
                       </div>
+                      <p className="mt-2 text-sm text-slate-400">
+                        {selectedHoldingDetail.industry || "Industry N/A"} • {holdingRange} performance
+                      </p>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-3">
-                      <InfoPill label="Market Cap" value={formatBigNumber(selectedHoldingDetail.marketCap)} />
-                      <InfoPill
-                        label="52W Range"
-                        value={`${formatCurrency(selectedHoldingDetail.fiftyTwoWeekLow ?? 0)} - ${formatCurrency(selectedHoldingDetail.fiftyTwoWeekHigh ?? 0)}`}
-                      />
-                      <InfoPill
-                        label="Trailing P/E"
-                        value={
-                          selectedHoldingDetail.trailingPE != null
+                      <div className="rounded-lg border border-white/10 bg-black/35 p-3">
+                        <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Market Cap</p>
+                        <p className="mt-2 text-lg font-semibold text-white">{formatBigNumber(selectedHoldingDetail.marketCap)}</p>
+                      </div>
+                      <div className="rounded-lg border border-white/10 bg-black/35 p-3">
+                        <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">52W Range</p>
+                        <p className="mt-2 text-base font-semibold text-white">
+                          {formatCurrency(selectedHoldingDetail.fiftyTwoWeekLow ?? 0)} -{" "}
+                          {formatCurrency(selectedHoldingDetail.fiftyTwoWeekHigh ?? 0)}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-white/10 bg-black/35 p-3">
+                        <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Trailing P/E</p>
+                        <p className="mt-2 text-lg font-semibold text-white">
+                          {selectedHoldingDetail.trailingPE != null
                             ? selectedHoldingDetail.trailingPE.toFixed(2)
-                            : "N/A"
-                        }
-                      />
+                            : "N/A"}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2757,7 +2828,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   ) : null}
                 </div>
 
-                <div className="rounded-[1.8rem] border border-white/10 bg-gradient-to-b from-white/[0.035] to-transparent p-5">
+                <div className="rounded-[1.2rem] border border-white/10 bg-gradient-to-b from-white/[0.035] to-transparent p-5">
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
                     Recent Price Trend
                   </p>
@@ -2786,7 +2857,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                           tickFormatter={(value) => `$${Math.round(value)}`}
                           tick={{ fill: "#94a3b8", fontSize: 12 }}
                         />
-                        <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                        <Tooltip content={<ChartTooltip formatter={formatCurrency} />} />
                         <Line
                           type="monotone"
                           dataKey="close"
