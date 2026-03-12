@@ -96,6 +96,18 @@ type FmpBalanceSheet = {
   cashAndCashEquivalents?: number;
 };
 
+type FmpQuote = {
+  symbol?: string;
+  name?: string;
+  exchange?: string;
+  price?: number;
+  changesPercentage?: number;
+  marketCap?: number;
+  pe?: number;
+  yearLow?: number;
+  yearHigh?: number;
+};
+
 type FundamentalSnapshot = {
   profile?: FmpProfile;
   metrics?: FmpKeyMetrics;
@@ -103,6 +115,7 @@ type FundamentalSnapshot = {
   growth?: FmpGrowth;
   cashFlow?: FmpCashFlow;
   balanceSheet?: FmpBalanceSheet;
+  quote?: FmpQuote;
 };
 
 function parseNumber(value: number | string | undefined | null) {
@@ -187,9 +200,17 @@ function getTwelveTimeSeriesUrl(symbol: string, range: ChartRange) {
 function getTwelveSearchUrl(query: string) {
   const url = new URL(`${TWELVE_DATA_BASE_URL}/symbol_search`);
   url.searchParams.set("apikey", TWELVE_DATA_API_KEY ?? "");
-  url.searchParams.set("symbol", query);
+  url.searchParams.set("symbol", query.toUpperCase());
   url.searchParams.set("outputsize", "12");
   return url.toString();
+}
+
+function getFmpSearchUrl(query: string) {
+  return getFmpUrl("/search", {
+    query,
+    limit: "8",
+    exchange: "NASDAQ,NYSE,AMEX"
+  });
 }
 
 function getFmpUrl(path: string, query: Record<string, string> = {}) {
@@ -293,6 +314,15 @@ async function fetchFmpBalanceSheet(symbol: string) {
   return response[0];
 }
 
+async function fetchFmpQuote(symbol: string) {
+  const response = await fetchProviderJson<FmpQuote[]>(
+    getFmpUrl(`/quote/${encodeURIComponent(symbol)}`),
+    "FMP",
+    300
+  );
+  return response[0];
+}
+
 async function fetchFundamentalSnapshot(symbol: string) {
   const tasks = [
     fetchFmpProfile(symbol).catch(() => undefined),
@@ -300,11 +330,12 @@ async function fetchFundamentalSnapshot(symbol: string) {
     fetchFmpRatios(symbol).catch(() => undefined),
     fetchFmpGrowth(symbol).catch(() => undefined),
     fetchFmpCashFlow(symbol).catch(() => undefined),
-    fetchFmpBalanceSheet(symbol).catch(() => undefined)
+    fetchFmpBalanceSheet(symbol).catch(() => undefined),
+    fetchFmpQuote(symbol).catch(() => undefined)
   ] as const;
 
-  const [profile, metrics, ratios, growth, cashFlow, balanceSheet] = await Promise.all(tasks);
-  return { profile, metrics, ratios, growth, cashFlow, balanceSheet } satisfies FundamentalSnapshot;
+  const [profile, metrics, ratios, growth, cashFlow, balanceSheet, quote] = await Promise.all(tasks);
+  return { profile, metrics, ratios, growth, cashFlow, balanceSheet, quote } satisfies FundamentalSnapshot;
 }
 
 export async function fetchQuote(symbol: string): Promise<MarketQuote> {
@@ -436,22 +467,23 @@ export async function fetchCompanyDetail(
   const growth = fundamentals.growth;
   const cashFlow = fundamentals.cashFlow;
   const balanceSheet = fundamentals.balanceSheet;
+  const fmpQuote = fundamentals.quote;
 
   const data: CompanyDetail = {
     ticker: normalizedSymbol,
     companyName: profile?.companyName ?? quote.longName ?? quote.shortName ?? normalizedSymbol,
-    exchange: profile?.exchangeShortName ?? profile?.exchange ?? quote.exchange ?? "Unknown",
+    exchange: profile?.exchangeShortName ?? profile?.exchange ?? fmpQuote?.exchange ?? quote.exchange ?? "Unknown",
     currentPrice: quote.price,
     currency: quote.currency,
-    marketCap: metrics?.marketCap ?? profile?.mktCap ?? quote.marketCap,
+    marketCap: metrics?.marketCap ?? fmpQuote?.marketCap ?? profile?.mktCap ?? quote.marketCap,
     sector: profile?.sector,
     industry: profile?.industry,
     website: profile?.website,
     employeeCount: parseEmployeeCount(profile?.fullTimeEmployees),
     summary: profile?.description,
-    fiftyTwoWeekLow: quote.fiftyTwoWeekLow ?? parseRangeValue(profile?.range, 0),
-    fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh ?? parseRangeValue(profile?.range, 1),
-    trailingPE: metrics?.peRatio ?? quote.trailingPE,
+    fiftyTwoWeekLow: quote.fiftyTwoWeekLow ?? fmpQuote?.yearLow ?? parseRangeValue(profile?.range, 0),
+    fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh ?? fmpQuote?.yearHigh ?? parseRangeValue(profile?.range, 1),
+    trailingPE: metrics?.peRatio ?? fmpQuote?.pe ?? quote.trailingPE,
     forwardPE: undefined,
     dividendYield: metrics?.dividendYield ?? profile?.lastDiv,
     beta: profile?.beta,
@@ -491,9 +523,9 @@ export async function searchTickers(query: string) {
     getTwelveSearchUrl(query),
     "Twelve Data",
     60
-  );
+  ).catch(() => ({ data: [] }) as TwelveDataSymbolSearchResponse);
 
-  const rows = (result.data ?? [])
+  let rows = (result.data ?? [])
     .map((quote) => ({
       symbol: quote.symbol ?? "",
       shortname: quote.instrument_name ?? "",
@@ -517,5 +549,37 @@ export async function searchTickers(query: string) {
       return leftPriority - rightPriority || left.symbol.localeCompare(right.symbol);
     });
 
-  return rows.slice(0, 8);
+  if (rows.length === 0 && FMP_API_KEY) {
+    const fallback = await fetchProviderJson<
+      Array<{ symbol?: string; name?: string; exchangeShortName?: string }>
+    >(getFmpSearchUrl(query), "FMP", 60).catch(() => []);
+
+    rows = fallback
+      .map((quote) => ({
+        symbol: quote.symbol ?? "",
+        shortname: quote.name ?? "",
+        exchange: quote.exchangeShortName ?? "",
+        quoteType: "equity"
+      }))
+      .filter((quote) => quote.symbol);
+  }
+
+  const exactSymbol = query.trim().toUpperCase();
+  if (exactSymbol && !rows.some((row) => row.symbol.toUpperCase() === exactSymbol)) {
+    rows.unshift({
+      symbol: exactSymbol,
+      shortname: exactSymbol,
+      exchange: "",
+      quoteType: "equity"
+    });
+  }
+
+  const deduped = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) {
+    if (row.symbol && !deduped.has(row.symbol)) {
+      deduped.set(row.symbol, row);
+    }
+  }
+
+  return [...deduped.values()].slice(0, 8);
 }

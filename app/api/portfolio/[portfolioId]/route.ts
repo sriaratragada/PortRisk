@@ -208,7 +208,25 @@ export async function DELETE(request: NextRequest, context: Context) {
     return badRequest("Portfolio not found", 404);
   }
 
-  const { error: deleteError } = await supabase.from("Portfolio").delete().eq("id", portfolioId);
+  const cleanupTables = [
+    "AuditLog",
+    "RiskScore",
+    "StressTest",
+    "Position"
+  ] as const;
+
+  for (const table of cleanupTables) {
+    const { error: cleanupError } = await supabase.from(table).delete().eq("portfolioId", portfolioId);
+    if (cleanupError) {
+      return badRequest(cleanupError.message, 500);
+    }
+  }
+
+  const { error: deleteError } = await supabase
+    .from("Portfolio")
+    .delete()
+    .eq("id", portfolioId)
+    .eq("userId", auth.user.id);
   if (deleteError) {
     return badRequest(deleteError.message, 500);
   }

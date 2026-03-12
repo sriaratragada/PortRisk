@@ -1302,6 +1302,47 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     router.refresh();
   }
 
+  async function deletePortfolio() {
+    if (!selectedPortfolio) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete ${selectedPortfolio.name}? This will remove its holdings, scores, stress tests, and audit history.`);
+    if (!confirmed) {
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const response = await fetch(`/api/portfolio/${selectedPortfolio.id}`, {
+          method: "DELETE",
+          headers: {
+            ...(await getAuthHeaders())
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(await readErrorMessage(response));
+        }
+
+        await refreshPortfolioList();
+        const remaining = portfolioSummaries.filter((portfolio) => portfolio.id !== selectedPortfolio.id);
+        const nextPortfolioId = remaining[0]?.id ?? "";
+        setSelectedPortfolio(null);
+        setSelectedPortfolioId("");
+        setAuditRows([]);
+        setStressResult(null);
+        setRiskReport(null);
+        if (nextPortfolioId) {
+          await loadPortfolio(nextPortfolioId);
+        }
+        setStatusMessage("Portfolio deleted.");
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : "Failed to delete portfolio");
+      }
+    });
+  }
+
   const portfolioSelector = (
     <select
       className="rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35 focus:bg-black/65"
@@ -1949,7 +1990,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
                 />
                 {searchResults.length > 0 && (
-                  <div className="absolute left-0 right-0 z-20 mt-2 overflow-hidden rounded-xl border border-white/10 bg-black/95 shadow-2xl">
+                  <div className="absolute left-0 right-0 z-20 mt-2 max-h-80 overflow-y-auto rounded-xl border border-white/10 bg-black/95 shadow-2xl">
                     {searchResults.map((result, index) => (
                       <button
                         key={`${result.symbol}-${result.exchange}`}
@@ -1970,7 +2011,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                           <p className="mt-1 text-slate-400">{result.shortname}</p>
                         </div>
                         <div className="text-right text-xs uppercase tracking-[0.2em] text-slate-500">
-                          <p>{result.exchange}</p>
+                          <p>{result.exchange || "US"}</p>
                           <p className="mt-1">{result.quoteType}</p>
                           {result.changePercent != null ? (
                             <p className={cn("mt-1", result.changePercent >= 0 ? "text-success" : "text-danger")}>
@@ -2621,13 +2662,13 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
       <Panel title="Account">
         <div className="space-y-4">
-          <div className="rounded-3xl border border-slate-800 bg-slate-950/30 p-4">
+          <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-4">
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Email</p>
             <p className="mt-3 text-lg font-medium text-white">{initialData.user.email}</p>
           </div>
           <button
             onClick={logout}
-              className="rounded-lg border border-danger/40 bg-danger/10 px-5 py-3 text-sm font-semibold text-danger"
+            className="rounded-lg border border-danger/40 bg-danger/10 px-5 py-3 text-sm font-semibold text-danger"
           >
             Log Out
           </button>
@@ -2639,9 +2680,17 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           <p>Portfolios in workspace: {portfolioSummaries.length}</p>
           <p>Selected portfolio: {selectedPortfolio?.name ?? "None"}</p>
           <p>
-            Use separate sleeves for large cap, mid cap, small cap, or flexicap strategies,
+            Use separate sleeves for growth, income, balanced, defensive, or speculative strategies,
             then compare their concentration and risk states independently.
           </p>
+          {selectedPortfolio ? (
+            <button
+              onClick={deletePortfolio}
+              className="rounded-lg border border-danger/40 bg-danger/10 px-5 py-3 text-sm font-semibold text-danger"
+            >
+              Delete Portfolio
+            </button>
+          ) : null}
           <Link
             className="text-zinc-200 transition hover:text-white"
             href="https://github.com/sriaratragada/PortRisk"
