@@ -11,6 +11,7 @@ const patchSchema = z.object({
 });
 
 type PortfolioPosition = {
+  id?: string;
   ticker: string;
   shares: number;
   avgCost: number;
@@ -111,25 +112,42 @@ export async function PATCH(request: NextRequest, context: Context) {
   }
 
   if (payload.positions) {
-    const { error: deleteError } = await supabase.from("Position").delete().eq("portfolioId", portfolioId);
-    if (deleteError) {
-      return badRequest(deleteError.message, 500);
-    }
-
-    if (payload.positions.length > 0) {
-      const { error: insertError } = await supabase.from("Position").insert(
-        payload.positions.map((position) => ({
-          id: crypto.randomUUID(),
+    if (nextPositions.length > 0) {
+      const { error: upsertError } = await supabase.from("Position").upsert(
+        nextPositions.map((position) => ({
+          id:
+            existing.positions.find(
+              (existingPosition: PortfolioPosition & { id?: string }) =>
+                existingPosition.ticker.toUpperCase() === position.ticker.toUpperCase()
+            )?.id ?? crypto.randomUUID(),
           portfolioId,
           ticker: position.ticker.toUpperCase(),
           shares: position.shares,
           avgCost: position.avgCost,
           assetClass: position.assetClass,
           updatedAt: now
-        }))
+        })),
+        {
+          onConflict: "portfolioId,ticker"
+        }
       );
-      if (insertError) {
-        return badRequest(insertError.message, 500);
+      if (upsertError) {
+        return badRequest(upsertError.message, 500);
+      }
+    }
+
+    const removedTickers = existing.positions
+      .map((position: PortfolioPosition) => position.ticker.toUpperCase())
+      .filter((ticker: string) => !afterPositions.has(ticker));
+
+    if (removedTickers.length > 0) {
+      const { error: deleteError } = await supabase
+        .from("Position")
+        .delete()
+        .eq("portfolioId", portfolioId)
+        .in("ticker", removedTickers);
+      if (deleteError) {
+        return badRequest(deleteError.message, 500);
       }
     }
   }

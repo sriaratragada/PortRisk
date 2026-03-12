@@ -9,9 +9,9 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        surface: "#07111f",
-        panel: "#0f1c2f",
-        accent: "#0ea5e9",
+        surface: "#050505",
+        panel: "#0a0a0a",
+        accent: "#ffffff",
         success: "#22c55e",
         warning: "#facc15",
         elevated: "#f97316",
@@ -25,7 +25,7 @@ const config: Config = {
         panel: "0 24px 80px rgba(0, 0, 0, 0.35)"
       },
       backgroundImage: {
-        grid: "linear-gradient(rgba(148,163,184,0.09) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.09) 1px, transparent 1px)"
+        grid: "linear-gradient(rgba(255,255,255,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px)"
       }
     }
   },

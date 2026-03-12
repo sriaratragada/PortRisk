@@ -15,9 +15,9 @@ html {
 body {
   @apply min-h-screen bg-surface text-slate-100 antialiased;
   background-image:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.09), transparent 18%),
-    radial-gradient(circle at 85% 0%, rgba(255, 255, 255, 0.05), transparent 20%),
-    linear-gradient(180deg, #030303 0%, #070707 42%, #0a0a0a 100%);
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.045), transparent 16%),
+    radial-gradient(circle at 85% 0%, rgba(255, 255, 255, 0.025), transparent 18%),
+    linear-gradient(180deg, #010101 0%, #040404 46%, #070707 100%);
 }
 
 body::before {
@@ -37,13 +37,13 @@ body::after {
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 18%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 18%),
     radial-gradient(circle at center, transparent 58%, rgba(0, 0, 0, 0.42) 100%);
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
 
 button,

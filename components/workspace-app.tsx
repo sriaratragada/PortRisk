@@ -110,7 +110,7 @@ function Panel({
   return (
     <section
       className={cn(
-        "animate-[fadeIn_220ms_ease-out] rounded-[2rem] border border-white/10 bg-panel/80 p-6 shadow-panel backdrop-blur-xl",
+        "animate-[fadeIn_220ms_ease-out] rounded-2xl border border-white/10 bg-panel/90 p-5 shadow-panel backdrop-blur-xl",
         className
       )}
     >
@@ -145,7 +145,7 @@ function MetricStat({
   tone?: "default" | "positive" | "negative";
 }) {
   return (
-    <div className="rounded-[1.6rem] border border-white/10 bg-white/[0.025] p-4">
+    <div className="rounded-xl border border-white/10 bg-white/[0.025] p-4">
       <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{label}</p>
       <p
         className={cn(
@@ -194,7 +194,7 @@ function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="rounded-[2rem] border border-dashed border-white/10 bg-white/[0.02] p-10 text-center">
+    <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-10 text-center">
       <h3 className="text-2xl font-semibold text-white">{title}</h3>
       <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-400">{copy}</p>
       {action ? <div className="mt-6">{action}</div> : null}
@@ -271,6 +271,35 @@ function formatCompactDate(value: string) {
   });
 }
 
+function formatRangeBounds(low?: number, high?: number) {
+  if (low == null && high == null) {
+    return "N/A";
+  }
+  if (low != null && high != null) {
+    return `${formatCurrency(low)} - ${formatCurrency(high)}`;
+  }
+  return low != null ? `${formatCurrency(low)} - N/A` : `N/A - ${formatCurrency(high ?? 0)}`;
+}
+
+function labelForRange(range: ChartRange) {
+  switch (range) {
+    case "1D":
+      return "1D Change";
+    case "1W":
+      return "1W Return";
+    case "1M":
+      return "1M Return";
+    case "3M":
+      return "3M Return";
+    case "1Y":
+      return "1Y Return";
+    case "5Y":
+      return "5Y Return";
+    case "MAX":
+      return "MAX Return";
+  }
+}
+
 function median(values: number[]) {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
@@ -298,14 +327,14 @@ function RangeSelector({
   onChange: (range: ChartRange) => void;
 }) {
   return (
-    <div className="inline-flex rounded-lg border border-white/10 bg-black/60 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+    <div className="inline-flex rounded-md border border-white/10 bg-black/60 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
       {chartRanges.map((range) => (
         <button
           key={range}
           type="button"
           onClick={() => onChange(range)}
           className={cn(
-            "rounded-md px-3 py-1.5 text-xs font-medium transition duration-200",
+            "rounded-sm px-3 py-1.5 text-xs font-medium transition duration-200",
             value === range
               ? "bg-white text-black shadow-[0_10px_30px_rgba(255,255,255,0.14)]"
               : "text-zinc-500 hover:text-white"
@@ -369,6 +398,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [highlightedSearchIndex, setHighlightedSearchIndex] = useState(-1);
   const [positionTicker, setPositionTicker] = useState("");
   const [positionName, setPositionName] = useState("");
@@ -472,19 +502,29 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     if (!searchTerm.trim()) {
       setSearchResults([]);
       setHighlightedSearchIndex(-1);
+      setSearchLoading(false);
       return;
     }
 
     const handle = window.setTimeout(async () => {
-      const response = await fetch(
-        `/api/portfolio/search?q=${encodeURIComponent(searchTerm)}`
-      );
-      if (!response.ok) {
-        return;
+      setSearchLoading(true);
+      try {
+        const response = await fetch(`/api/portfolio/search?q=${encodeURIComponent(searchTerm)}`, {
+          headers: {
+            ...(await getAuthHeaders())
+          }
+        });
+        if (!response.ok) {
+          setSearchResults([]);
+          setHighlightedSearchIndex(-1);
+          return;
+        }
+        const data = (await response.json()) as { results: SearchResult[] };
+        setSearchResults(data.results);
+        setHighlightedSearchIndex(data.results.length > 0 ? 0 : -1);
+      } finally {
+        setSearchLoading(false);
       }
-      const data = (await response.json()) as { results: SearchResult[] };
-      setSearchResults(data.results);
-      setHighlightedSearchIndex(data.results.length > 0 ? 0 : -1);
     }, 250);
 
     return () => window.clearTimeout(handle);
@@ -784,6 +824,13 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       percent: first > 0 ? absolute / first : 0
     };
   }, [selectedPortfolio?.valueHistory]);
+  const selectedRangePortfolioValue = useMemo(() => {
+    const history = selectedPortfolio?.valueHistory ?? [];
+    if (history.length > 0) {
+      return history[history.length - 1]?.value ?? 0;
+    }
+    return selectedMetrics?.portfolioValue ?? 0;
+  }, [selectedMetrics?.portfolioValue, selectedPortfolio?.valueHistory]);
   const holdingRangePerformance = useMemo(() => {
     const history = selectedHoldingDetail?.chart ?? [];
     if (history.length < 2) {
@@ -1050,36 +1097,40 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     successMessage: string
   ) {
     if (!selectedPortfolio) {
-      return;
+      return false;
     }
 
-    startTransition(async () => {
-      setErrorMessage(null);
-      setStatusMessage(null);
-      try {
-        const response = await fetch(`/api/portfolio/${selectedPortfolio.id}`, {
-          method: "PATCH",
-          headers: {
-            "content-type": "application/json",
-            ...(await getAuthHeaders())
-          },
-          body: JSON.stringify({
-            positions: nextPositions
-          })
-        });
+    return new Promise<boolean>((resolve) => {
+      startTransition(async () => {
+        setErrorMessage(null);
+        setStatusMessage(null);
+        try {
+          const response = await fetch(`/api/portfolio/${selectedPortfolio.id}`, {
+            method: "PATCH",
+            headers: {
+              "content-type": "application/json",
+              ...(await getAuthHeaders())
+            },
+            body: JSON.stringify({
+              positions: nextPositions
+            })
+          });
 
-        if (!response.ok) {
-          throw new Error(await readErrorMessage(response));
+          if (!response.ok) {
+            throw new Error(await readErrorMessage(response));
+          }
+
+          await loadPortfolio(selectedPortfolio.id);
+          await refreshPortfolioList();
+          setStatusMessage(successMessage);
+          resolve(true);
+        } catch (error) {
+          setErrorMessage(
+            error instanceof Error ? error.message : "Failed to update portfolio"
+          );
+          resolve(false);
         }
-
-        await loadPortfolio(selectedPortfolio.id);
-        await refreshPortfolioList();
-        setStatusMessage(successMessage);
-      } catch (error) {
-        setErrorMessage(
-          error instanceof Error ? error.message : "Failed to update portfolio"
-        );
-      }
+      });
     });
   }
 
@@ -1125,8 +1176,10 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     const actionLabel =
       editingTicker || existing ? "Position updated." : "Position added.";
 
-    await commitPositions([...remaining, nextPosition], actionLabel);
-    resetPositionForm();
+    const saved = await commitPositions([...remaining, nextPosition], actionLabel);
+    if (saved) {
+      resetPositionForm();
+    }
   }
 
   function startEditingPosition(ticker: string) {
@@ -1387,9 +1440,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     value={createPortfolioName}
                     onChange={(event) => setCreatePortfolioName(event.target.value)}
                       placeholder="Growth"
-                    className="flex-1 rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+                    className="flex-1 rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
                   />
-                    <button className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
+                    <button className="rounded-md bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
                       Create Portfolio
                     </button>
                 </form>
@@ -1403,9 +1456,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 value={selectedMetrics ? formatCurrency(selectedMetrics.portfolioValue) : "N/A"}
               />
               <InfoPill
-                label="Day Change"
-                value={formatCurrency(dailyPnl)}
-                tone={dailyPnl >= 0 ? "positive" : "negative"}
+                label={labelForRange(portfolioRange)}
+                value={`${formatCurrency(portfolioRangePerformance.absolute)} • ${formatPercent(
+                  portfolioRangePerformance.percent
+                )}`}
+                tone={portfolioRangePerformance.absolute >= 0 ? "positive" : "negative"}
               />
               <InfoPill
                 label={`${portfolioRange} Return`}
@@ -1539,7 +1594,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                         key={template.name}
                         type="button"
                         onClick={() => setCreatePortfolioName(template.name)}
-                        className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.04]"
+                        className="rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.04]"
                       >
                         {template.name}
                       </button>
@@ -1552,9 +1607,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   value={createPortfolioName}
                   onChange={(event) => setCreatePortfolioName(event.target.value)}
                   placeholder="Balanced"
-                  className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+                  className="w-full rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
                 />
-                <button className="w-full rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
+                <button className="w-full rounded-md bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
                   Create New Portfolio
                 </button>
               </form>
@@ -1566,7 +1621,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           {portfolioSummaries.length === 0 ? (
             <EmptyState
               title="No portfolios yet"
-              copy="Create sleeves for large cap, mid cap, small cap, or flexicap and compare them here."
+              copy="Create sleeves for growth, income, balanced, defensive, or speculative strategies and compare them here."
             />
           ) : (
             <div className="grid gap-4 lg:grid-cols-4">
@@ -1577,7 +1632,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     key={portfolio.id}
                     onClick={() => void loadPortfolio(portfolio.id)}
                     className={cn(
-                      "rounded-[1.5rem] border p-5 text-left transition duration-200 hover:-translate-y-0.5",
+                      "rounded-xl border p-5 text-left transition duration-200 hover:-translate-y-0.5",
                       selectedPortfolioId === portfolio.id
                         ? "border-white/30 bg-white/[0.05]"
                         : "border-white/10 bg-black/30 hover:border-white/20"
@@ -1653,7 +1708,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 copy="Add holdings to populate a trailing portfolio value history."
               />
             ) : (
-              <div className="rounded-[1.8rem] border border-white/10 bg-gradient-to-b from-white/[0.035] to-transparent p-4">
+              <div className="rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.035] to-transparent p-4">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Value curve</p>
@@ -1686,7 +1741,15 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       tickFormatter={(value) => `$${Math.round(value / 1000)}k`}
                       tick={{ fill: "#94a3b8", fontSize: 12 }}
                     />
-                    <Tooltip content={<ChartTooltip formatter={formatCurrency} />} />
+                    <Tooltip
+                      cursor={{
+                        stroke: "rgba(255,255,255,0.28)",
+                        strokeWidth: 1,
+                        fill: "rgba(255,255,255,0.02)"
+                      }}
+                      wrapperStyle={{ outline: "none" }}
+                      content={<ChartTooltip formatter={formatCurrency} />}
+                    />
                     <Area
                       type="monotone"
                       dataKey="drawdown"
@@ -1807,7 +1870,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     {selectedPortfolio.name}
                   </p>
                   <p className="mt-2 text-4xl font-semibold tracking-[-0.04em] text-white">
-                    {selectedMetrics ? formatCurrency(selectedMetrics.portfolioValue) : "Awaiting price"}
+                    {selectedRangePortfolioValue > 0
+                      ? formatCurrency(selectedRangePortfolioValue)
+                      : "Awaiting price"}
                   </p>
                   <p className="mt-2 text-sm text-slate-400">
                     {portfolioRange} return {formatCurrency(portfolioRangePerformance.absolute)} •{" "}
@@ -1816,11 +1881,14 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 </div>
                 <div
                   className={cn(
-                  "rounded-md px-4 py-2 text-sm font-medium",
-                    dailyPnl >= 0 ? "bg-success/15 text-success" : "bg-danger/15 text-danger"
+                    "rounded-md px-4 py-2 text-sm font-medium",
+                    portfolioRangePerformance.absolute >= 0
+                      ? "bg-success/15 text-success"
+                      : "bg-danger/15 text-danger"
                   )}
                 >
-                  {formatCurrency(dailyPnl)} / {formatPercent(dailyPnlPercent)}
+                  {formatCurrency(portfolioRangePerformance.absolute)} /{" "}
+                  {formatPercent(portfolioRangePerformance.percent)}
                 </div>
               </div>
               <div className="mt-4 h-72 animate-[fadeIn_220ms_ease-out]">
@@ -1829,7 +1897,15 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     <CartesianGrid stroke="rgba(148,163,184,0.12)" vertical={false} />
                     <XAxis dataKey="label" tick={{ fill: "#94a3b8", fontSize: 12 }} minTickGap={24} />
                     <YAxis tickFormatter={(value) => `$${Math.round(value / 1000)}k`} tick={{ fill: "#94a3b8", fontSize: 12 }} />
-                    <Tooltip content={<ChartTooltip formatter={formatCurrency} />} />
+                    <Tooltip
+                      cursor={{
+                        stroke: "rgba(255,255,255,0.28)",
+                        strokeWidth: 1,
+                        fill: "rgba(255,255,255,0.02)"
+                      }}
+                      wrapperStyle={{ outline: "none" }}
+                      content={<ChartTooltip formatter={formatCurrency} />}
+                    />
                     <Area type="monotone" dataKey="drawdown" fill="rgba(239,68,68,0.12)" stroke="rgba(239,68,68,0.18)" />
                     <Line type="monotone" dataKey="peak" stroke="rgba(255,255,255,0.18)" dot={false} strokeWidth={1.1} />
                     <Line type="monotone" dataKey="value" stroke="#fafafa" dot={false} strokeWidth={2.4} />
@@ -1839,7 +1915,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             </div>
 
             <div className="grid gap-3">
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
                 <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Biggest gainer</p>
                 <p className="mt-2 text-lg font-semibold text-white">{biggestGainer?.ticker ?? "N/A"}</p>
                 <p className="mt-1 text-sm text-slate-400">
@@ -1892,7 +1968,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   key={holding.ticker}
                   type="button"
                   onClick={() => void openHoldingDetail(holding.ticker)}
-                  className="w-full rounded-xl border border-white/10 bg-black/40 p-4 text-left transition duration-200 hover:border-white/25 hover:bg-white/[0.045]"
+                  className="w-full rounded-lg border border-white/10 bg-black/40 p-4 text-left transition duration-200 hover:border-white/25 hover:bg-white/[0.045]"
                 >
                   <div className="grid gap-4 xl:grid-cols-[0.9fr_1.35fr_auto] xl:items-center">
                     <div className="min-w-0">
@@ -1942,7 +2018,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                           event.stopPropagation();
                           startEditingPosition(holding.ticker);
                         }}
-                        className="rounded-lg border border-white/12 px-4 py-2 text-sm text-zinc-200 transition hover:border-white/25 hover:bg-white/[0.04]"
+                        className="rounded-md border border-white/12 px-4 py-2 text-sm text-zinc-200 transition hover:border-white/25 hover:bg-white/[0.04]"
                       >
                         Edit
                       </button>
@@ -1952,7 +2028,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                           event.stopPropagation();
                           void removePosition(holding.ticker);
                         }}
-                        className="rounded-lg border border-danger/40 px-4 py-2 text-sm text-danger"
+                        className="rounded-md border border-danger/40 px-4 py-2 text-sm text-danger"
                       >
                         Remove
                       </button>
@@ -1987,10 +2063,13 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   }}
                   onKeyDown={handleSearchKeyDown}
                   placeholder="AAPL, KO, XOM..."
-                  className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+                  className="w-full rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
                 />
-                {searchResults.length > 0 && (
-                  <div className="absolute left-0 right-0 z-20 mt-2 max-h-80 overflow-y-auto rounded-xl border border-white/10 bg-black/95 shadow-2xl">
+                {(searchLoading || searchResults.length > 0) && (
+                  <div className="absolute left-0 right-0 z-20 mt-2 max-h-80 overflow-y-auto rounded-lg border border-white/10 bg-black/95 shadow-2xl">
+                    {searchLoading ? (
+                      <div className="px-4 py-3 text-sm text-slate-400">Searching listed tickers...</div>
+                    ) : null}
                     {searchResults.map((result, index) => (
                       <button
                         key={`${result.symbol}-${result.exchange}`}
@@ -2047,11 +2126,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 </div>
                 {positionPreview ? (
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-lg border border-white/10 bg-black/40 p-3">
+                    <div className="rounded-md border border-white/10 bg-black/40 p-3">
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Sector</p>
                       <p className="mt-2 text-sm text-white">{positionPreview.sector ?? "Unclassified"}</p>
                     </div>
-                    <div className="rounded-lg border border-white/10 bg-black/40 p-3">
+                    <div className="rounded-md border border-white/10 bg-black/40 p-3">
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Market Cap</p>
                       <p className="mt-2 text-sm text-white">{formatBigNumber(positionPreview.marketCap)}</p>
                     </div>
@@ -2801,7 +2880,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   setSelectedHoldingDetail(null);
                   setHoldingDetailLoading(false);
                 }}
-                className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
+                className="rounded-md border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
               >
                 Close
               </button>
@@ -2813,12 +2892,14 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               </div>
             ) : (
               <div className="space-y-6">
-                <div className="rounded-[1.2rem] border border-white/10 bg-gradient-to-b from-white/[0.04] to-transparent p-5">
+                <div className="rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.04] to-transparent p-5">
                   <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr] lg:items-end">
                     <div>
-                      <p className="text-sm uppercase tracking-[0.22em] text-slate-500">
-                        {selectedHoldingDetail.exchange || "Exchange N/A"} • {selectedHoldingDetail.sector || "Sector N/A"}
-                      </p>
+                      <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.2em] text-slate-500">
+                        <span>{selectedHoldingDetail.exchange || "Exchange N/A"}</span>
+                        {selectedHoldingDetail.sector ? <span>{selectedHoldingDetail.sector}</span> : null}
+                        {selectedHoldingDetail.industry ? <span>{selectedHoldingDetail.industry}</span> : null}
+                      </div>
                       <div className="mt-3 flex flex-wrap items-end gap-3">
                         <p className="text-4xl font-semibold tracking-[-0.05em] text-white">
                           {formatCurrency(selectedHoldingDetail.currentPrice)}
@@ -2840,18 +2921,20 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       </p>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-3">
-                      <div className="rounded-lg border border-white/10 bg-black/35 p-3">
+                      <div className="rounded-md border border-white/10 bg-black/35 p-3">
                         <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Market Cap</p>
                         <p className="mt-2 text-lg font-semibold text-white">{formatBigNumber(selectedHoldingDetail.marketCap)}</p>
                       </div>
-                      <div className="rounded-lg border border-white/10 bg-black/35 p-3">
+                      <div className="rounded-md border border-white/10 bg-black/35 p-3">
                         <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">52W Range</p>
                         <p className="mt-2 text-base font-semibold text-white">
-                          {formatCurrency(selectedHoldingDetail.fiftyTwoWeekLow ?? 0)} -{" "}
-                          {formatCurrency(selectedHoldingDetail.fiftyTwoWeekHigh ?? 0)}
+                          {formatRangeBounds(
+                            selectedHoldingDetail.fiftyTwoWeekLow,
+                            selectedHoldingDetail.fiftyTwoWeekHigh
+                          )}
                         </p>
                       </div>
-                      <div className="rounded-lg border border-white/10 bg-black/35 p-3">
+                      <div className="rounded-md border border-white/10 bg-black/35 p-3">
                         <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Trailing P/E</p>
                         <p className="mt-2 text-lg font-semibold text-white">
                           {selectedHoldingDetail.trailingPE != null
@@ -2863,7 +2946,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   </div>
                 </div>
 
-                <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5">
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
                   <div className="flex flex-wrap gap-3 text-xs uppercase tracking-[0.2em] text-slate-500">
                     <span>{selectedHoldingDetail.exchange || "Exchange N/A"}</span>
                     <span>{selectedHoldingDetail.sector || "Sector N/A"}</span>
@@ -2877,7 +2960,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   ) : null}
                 </div>
 
-                <div className="rounded-[1.2rem] border border-white/10 bg-gradient-to-b from-white/[0.035] to-transparent p-5">
+                <div className="rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.035] to-transparent p-5">
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
                     Recent Price Trend
                   </p>
@@ -2906,7 +2989,15 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                           tickFormatter={(value) => `$${Math.round(value)}`}
                           tick={{ fill: "#94a3b8", fontSize: 12 }}
                         />
-                        <Tooltip content={<ChartTooltip formatter={formatCurrency} />} />
+                        <Tooltip
+                          cursor={{
+                            stroke: "rgba(255,255,255,0.28)",
+                            strokeWidth: 1,
+                            fill: "rgba(255,255,255,0.02)"
+                          }}
+                          wrapperStyle={{ outline: "none" }}
+                          content={<ChartTooltip formatter={formatCurrency} />}
+                        />
                         <Line
                           type="monotone"
                           dataKey="close"
@@ -2920,7 +3011,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5">
+                  <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
                     <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
                       Balance Sheet
                     </p>
@@ -2932,7 +3023,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       <p>Total Cash: {formatBigNumber(selectedHoldingDetail.totalCash)}</p>
                     </div>
                   </div>
-                  <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5">
+                  <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
                     <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
                       Operating Quality
                     </p>
