@@ -29,7 +29,29 @@ export async function GET(request: NextRequest, context: Context) {
 
   try {
     const detail = await fetchCompanyDetail(ticker, range);
-    return json({ detail });
+    const missingSections = [
+      !detail.sector || !detail.industry ? "profile" : null,
+      detail.marketCap == null || detail.trailingPE == null ? "valuation" : null,
+      detail.currentRatio == null &&
+      detail.quickRatio == null &&
+      detail.debtToEquity == null &&
+      detail.totalDebt == null &&
+      detail.totalCash == null
+        ? "balanceSheet"
+        : null,
+      detail.revenueGrowth == null &&
+      detail.earningsGrowth == null &&
+      detail.profitMargins == null &&
+      detail.returnOnEquity == null
+        ? "operatingQuality"
+        : null
+    ].filter((section): section is string => section !== null);
+
+    return json({
+      detail,
+      degraded: missingSections.length > 0,
+      missingSections
+    });
   } catch (error) {
     return json(
       {

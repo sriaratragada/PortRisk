@@ -29,6 +29,7 @@ export async function getPortfolioWithPositionsEdge(portfolioId: string, userId:
     .select("id, userId, name, positions:Position(*)")
     .eq("id", portfolioId)
     .eq("userId", userId)
+    .is("archivedAt", null)
     .single();
 
   if (error || !data) {

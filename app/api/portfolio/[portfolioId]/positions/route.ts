@@ -32,6 +32,7 @@ export async function POST(request: NextRequest, context: Context) {
         .select("id")
         .eq("id", portfolioId)
         .eq("userId", auth.user.id)
+        .is("archivedAt", null)
         .single(),
       supabase
         .from("Position")

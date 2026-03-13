@@ -32,6 +32,7 @@ export async function PATCH(request: NextRequest, context: Context) {
     .select("id")
     .eq("id", portfolioId)
     .eq("userId", auth.user.id)
+    .is("archivedAt", null)
     .single();
 
   if (portfolioError || !portfolio) {
@@ -107,6 +108,7 @@ export async function DELETE(_request: NextRequest, context: Context) {
     .select("id")
     .eq("id", portfolioId)
     .eq("userId", auth.user.id)
+    .is("archivedAt", null)
     .single();
 
   if (portfolioError || !portfolio) {

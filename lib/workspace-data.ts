@@ -218,6 +218,7 @@ export async function getWorkspaceData(user: { id: string; email: string }): Pro
         .from("Portfolio")
         .select("id,name,updatedAt")
         .eq("userId", user.id)
+        .is("archivedAt", null)
         .order("updatedAt", { ascending: false }),
       supabase.from("Position").select("portfolioId,id"),
       supabase

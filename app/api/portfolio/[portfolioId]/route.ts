@@ -37,6 +37,7 @@ export async function GET(request: NextRequest, context: Context) {
         .select("*")
         .eq("id", portfolioId)
         .eq("userId", auth.user.id)
+        .is("archivedAt", null)
         .single(),
       supabase.from("Position").select("*").eq("portfolioId", portfolioId).order("ticker", { ascending: true }),
       supabase.from("RiskScore").select("*").eq("portfolioId", portfolioId).order("scoredAt", { ascending: false }).limit(10),
@@ -72,6 +73,7 @@ export async function PATCH(request: NextRequest, context: Context) {
       .select("*")
       .eq("id", portfolioId)
       .eq("userId", auth.user.id)
+      .is("archivedAt", null)
       .single(),
     supabase.from("Position").select("*").eq("portfolioId", portfolioId)
   ]);
@@ -218,36 +220,48 @@ export async function DELETE(request: NextRequest, context: Context) {
   const supabase = createSupabaseAdminClient();
   const { data: existing, error } = await supabase
     .from("Portfolio")
-    .select("id")
+    .select("id,name,archivedAt")
     .eq("id", portfolioId)
     .eq("userId", auth.user.id)
+    .is("archivedAt", null)
     .single();
   if (error || !existing) {
     return badRequest("Portfolio not found", 404);
   }
 
-  const cleanupTables = [
-    "AuditLog",
-    "RiskScore",
-    "StressTest",
-    "Position"
-  ] as const;
-
-  for (const table of cleanupTables) {
-    const { error: cleanupError } = await supabase.from(table).delete().eq("portfolioId", portfolioId);
-    if (cleanupError) {
-      return badRequest(cleanupError.message, 500);
-    }
-  }
-
-  const { error: deleteError } = await supabase
+  const now = new Date().toISOString();
+  const { error: archiveError } = await supabase
     .from("Portfolio")
-    .delete()
+    .update({
+      archivedAt: now,
+      updatedAt: now
+    })
     .eq("id", portfolioId)
     .eq("userId", auth.user.id);
-  if (deleteError) {
-    return badRequest(deleteError.message, 500);
+  if (archiveError) {
+    return badRequest(archiveError.message, 500);
   }
 
-  return json({ deleted: true });
+  const { error: auditError } = await supabase.from("AuditLog").insert({
+    id: crypto.randomUUID(),
+    userId: auth.user.id,
+    portfolioId,
+    actionType: "PORTFOLIO_ARCHIVED",
+    beforeState: existing,
+    afterState: {
+      ...existing,
+      archivedAt: now
+    },
+    riskTierBefore: null,
+    riskTierAfter: null,
+    metadata: {
+      archivedAt: now
+    }
+  });
+
+  if (auditError) {
+    return badRequest(auditError.message, 500);
+  }
+
+  return json({ archived: true });
 }

@@ -428,6 +428,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     initialData.selectedPortfolio?.id ?? ""
   );
   const [portfolioLoading, setPortfolioLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -725,7 +726,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     }
 
     let cancelled = false;
-    setPortfolioLoading(true);
+    setHistoryLoading(true);
     void loadPortfolioHistory(selectedPortfolioId, portfolioRange)
       .then((history) => {
         if (cancelled) return;
@@ -745,7 +746,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       })
       .finally(() => {
         if (!cancelled) {
-          setPortfolioLoading(false);
+          setHistoryLoading(false);
         }
       });
 
@@ -896,7 +897,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         riskScores: Array<{ riskTier: string }>;
       }>;
     };
-    setPortfolioSummaries(mapSummary(data.portfolios));
+    const summaries = mapSummary(data.portfolios);
+    setPortfolioSummaries(summaries);
+    return summaries;
   }
 
   async function loadPortfolioHistory(portfolioId: string, range: ChartRange) {
@@ -1522,7 +1525,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       return;
     }
 
-    const confirmed = window.confirm(`Delete ${selectedPortfolio.name}? This will remove its holdings, scores, stress tests, and audit history.`);
+    const confirmed = window.confirm(
+      `Archive ${selectedPortfolio.name}? It will disappear from the active workspace but remain in compliance history.`
+    );
     if (!confirmed) {
       return;
     }
@@ -1540,8 +1545,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           throw new Error(await readErrorMessage(response));
         }
 
-        await refreshPortfolioList();
-        const remaining = portfolioSummaries.filter((portfolio) => portfolio.id !== selectedPortfolio.id);
+        const remaining = await refreshPortfolioList();
         const nextPortfolioId = remaining[0]?.id ?? "";
         setSelectedPortfolio(null);
         setSelectedPortfolioId("");
@@ -1551,9 +1555,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         if (nextPortfolioId) {
           await loadPortfolio(nextPortfolioId);
         }
-        setStatusMessage("Portfolio deleted.");
+        setStatusMessage("Portfolio archived.");
       } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : "Failed to delete portfolio");
+        setErrorMessage(error instanceof Error ? error.message : "Failed to archive portfolio");
       }
     });
   }
@@ -1618,14 +1622,12 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 value={selectedMetrics ? formatCurrency(selectedMetrics.portfolioValue) : "N/A"}
               />
               <InfoPill
-                label={labelForRange(portfolioRange)}
-                value={`${formatCurrency(portfolioRangePerformance.absolute)} • ${formatPercent(
-                  portfolioRangePerformance.percent
-                )}`}
-                tone={portfolioRangePerformance.absolute >= 0 ? "positive" : "negative"}
+                label="Day Change"
+                value={`${formatCurrency(dailyPnl)} • ${formatPercent(dailyPnlPercent)}`}
+                tone={dailyPnl >= 0 ? "positive" : "negative"}
               />
               <InfoPill
-                label={`${portfolioRange} Return`}
+                label={labelForRange(portfolioRange)}
                 value={`${formatCurrency(portfolioRangePerformance.absolute)} • ${formatPercent(
                   portfolioRangePerformance.percent
                 )}`}
@@ -1645,7 +1647,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               selectedMetrics ? (
                 <TierBadge tier={selectedMetrics.riskTier} />
               ) : (
-                <span className="text-xs text-slate-500">Unfunded</span>
+                <span className="text-xs text-slate-500">
+                  {selectedPortfolio?.positions.length ? "Pricing unavailable" : "Unfunded"}
+                </span>
               )
             }
           >
@@ -1665,7 +1669,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     <h2 className="text-5xl font-semibold tracking-[-0.05em] text-white">
                       {selectedMetrics
                         ? formatCurrency(selectedMetrics.portfolioValue)
-                        : "Awaiting positions"}
+                        : selectedPortfolio.positions.length > 0
+                          ? "Pricing unavailable"
+                          : "Awaiting positions"}
                     </h2>
                     {selectedMetrics ? (
                       <div
@@ -1680,7 +1686,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   </div>
                   <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-400">
                     {selectedMetrics?.summary ??
-                      "This sleeve has no positions yet. Add holdings to start live valuation and risk scoring."}
+                      (selectedPortfolio.positions.length > 0
+                        ? "Positions are saved, but live pricing or risk hydration is currently unavailable."
+                        : "This sleeve has no positions yet. Add holdings to start live valuation and risk scoring.")}
                   </p>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -1699,7 +1707,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       value={
                         riskReport?.sectorConcentration[0]
                           ? `${riskReport.sectorConcentration[0].sector} ${formatPercent(riskReport.sectorConcentration[0].weight)}`
-                          : "Loading"
+                          : riskReportLoading
+                            ? "Loading"
+                            : "Unclassified"
                       }
                     />
                   </div>
@@ -1881,7 +1891,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   <div className="flex gap-2">
                     <InfoPill
                       label="Current"
-                      value={selectedMetrics ? formatCurrency(selectedMetrics.portfolioValue) : "N/A"}
+                      value={
+                        selectedRangePortfolioValue > 0
+                          ? formatCurrency(selectedRangePortfolioValue)
+                          : "N/A"
+                      }
                     />
                     <InfoPill
                       label="Day Move"
@@ -1890,7 +1904,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     />
                   </div>
                 </div>
-                <div className="h-80 animate-[fadeIn_220ms_ease-out]">
+                <div className={cn("h-80 transition-opacity duration-200", historyLoading && "opacity-70")}>
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={selectedPortfolio.valueHistory}>
                     <CartesianGrid stroke="rgba(148,163,184,0.14)" vertical={false} />
@@ -1965,12 +1979,15 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     Primary Sector
                   </p>
                   <p className="mt-3 text-xl font-semibold text-white">
-                    {riskReport?.sectorConcentration[0]?.sector ?? "Loading"}
+                    {riskReport?.sectorConcentration[0]?.sector ??
+                      (riskReportLoading ? "Loading" : "Unclassified")}
                   </p>
                   <p className="mt-2 text-sm text-slate-400">
                     {riskReport?.sectorConcentration[0]
                       ? `${formatPercent(riskReport.sectorConcentration[0].weight)} portfolio weight`
-                      : "Sector analysis appears once the risk report is loaded."}
+                      : riskReportLoading
+                        ? "Sector analysis is loading."
+                        : "Sector data unavailable for the current holdings."}
                   </p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/35 p-4">
@@ -2053,7 +2070,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   {formatPercent(portfolioRangePerformance.percent)}
                 </div>
               </div>
-              <div className="mt-4 h-72 animate-[fadeIn_220ms_ease-out]">
+              <div className={cn("mt-4 h-72 transition-opacity duration-200", historyLoading && "opacity-70")}>
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={selectedPortfolio.valueHistory}>
                     <CartesianGrid stroke="rgba(148,163,184,0.12)" vertical={false} />
@@ -2933,7 +2950,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               onClick={deletePortfolio}
               className="rounded-lg border border-danger/40 bg-danger/10 px-5 py-3 text-sm font-semibold text-danger"
             >
-              Delete Portfolio
+              Archive Portfolio
             </button>
           ) : null}
           <Link

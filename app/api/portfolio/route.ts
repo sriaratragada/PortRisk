@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
     .from("Portfolio")
     .select("id,name,updatedAt,positions:Position(id),riskScores:RiskScore(riskTier,scoredAt)")
     .eq("userId", auth.user.id)
+    .is("archivedAt", null)
     .order("updatedAt", { ascending: false });
 
   if (error) {

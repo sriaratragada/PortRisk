@@ -455,11 +455,18 @@ export async function fetchCompanyDetail(
     return cached.data;
   }
 
-  const [quote, chart, fundamentals]: [MarketQuote, HistoricalPoint[], FundamentalSnapshot] = await Promise.all([
+  const [quoteResult, chartResult, fundamentalsResult] = await Promise.allSettled([
     fetchQuote(normalizedSymbol),
     fetchHistoricalSeries(normalizedSymbol, range),
     FMP_API_KEY ? fetchFundamentalSnapshot(normalizedSymbol) : Promise.resolve({})
   ]);
+
+  const quote = quoteResult.status === "fulfilled" ? quoteResult.value : undefined;
+  const chart = chartResult.status === "fulfilled" ? chartResult.value : [];
+  const fundamentals: FundamentalSnapshot =
+    fundamentalsResult.status === "fulfilled"
+      ? (fundamentalsResult.value as FundamentalSnapshot)
+      : {};
 
   const profile = fundamentals.profile;
   const metrics = fundamentals.metrics;
@@ -469,21 +476,26 @@ export async function fetchCompanyDetail(
   const balanceSheet = fundamentals.balanceSheet;
   const fmpQuote = fundamentals.quote;
 
+  if (!quote && !profile && !fmpQuote && chart.length === 0) {
+    throw new Error(`Failed to load company detail for ${normalizedSymbol}`);
+  }
+
   const data: CompanyDetail = {
     ticker: normalizedSymbol,
-    companyName: profile?.companyName ?? quote.longName ?? quote.shortName ?? normalizedSymbol,
-    exchange: profile?.exchangeShortName ?? profile?.exchange ?? fmpQuote?.exchange ?? quote.exchange ?? "Unknown",
-    currentPrice: quote.price,
-    currency: quote.currency,
-    marketCap: metrics?.marketCap ?? fmpQuote?.marketCap ?? profile?.mktCap ?? quote.marketCap,
+    companyName: profile?.companyName ?? quote?.longName ?? quote?.shortName ?? fmpQuote?.name ?? normalizedSymbol,
+    exchange:
+      profile?.exchangeShortName ?? profile?.exchange ?? fmpQuote?.exchange ?? quote?.exchange ?? "Unknown",
+    currentPrice: quote?.price ?? fmpQuote?.price ?? 0,
+    currency: quote?.currency ?? "USD",
+    marketCap: metrics?.marketCap ?? fmpQuote?.marketCap ?? profile?.mktCap ?? quote?.marketCap,
     sector: profile?.sector,
     industry: profile?.industry,
     website: profile?.website,
     employeeCount: parseEmployeeCount(profile?.fullTimeEmployees),
     summary: profile?.description,
-    fiftyTwoWeekLow: quote.fiftyTwoWeekLow ?? fmpQuote?.yearLow ?? parseRangeValue(profile?.range, 0),
-    fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh ?? fmpQuote?.yearHigh ?? parseRangeValue(profile?.range, 1),
-    trailingPE: metrics?.peRatio ?? fmpQuote?.pe ?? quote.trailingPE,
+    fiftyTwoWeekLow: quote?.fiftyTwoWeekLow ?? fmpQuote?.yearLow ?? parseRangeValue(profile?.range, 0),
+    fiftyTwoWeekHigh: quote?.fiftyTwoWeekHigh ?? fmpQuote?.yearHigh ?? parseRangeValue(profile?.range, 1),
+    trailingPE: metrics?.peRatio ?? fmpQuote?.pe ?? quote?.trailingPE,
     forwardPE: undefined,
     dividendYield: metrics?.dividendYield ?? profile?.lastDiv,
     beta: profile?.beta,
@@ -511,7 +523,12 @@ export async function fetchCompanyDetail(
 }
 
 export async function fetchCompanyDetails(symbols: string[]) {
-  return Promise.all(symbols.map((symbol) => fetchCompanyDetail(symbol)));
+  const results = await Promise.allSettled(symbols.map((symbol) => fetchCompanyDetail(symbol)));
+  return results
+    .filter(
+      (result): result is PromiseFulfilledResult<CompanyDetail> => result.status === "fulfilled"
+    )
+    .map((result) => result.value);
 }
 
 export async function searchTickers(query: string) {
