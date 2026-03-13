@@ -34,9 +34,13 @@ export async function GET(request: NextRequest) {
     const report = await buildRiskReport(portfolioId, hydrated.holdings, hydrated.metrics);
     return json({ report });
   } catch (error) {
-    return badRequest(
-      error instanceof Error ? error.message : "Failed to build risk report",
-      502
+    return json(
+      {
+        report: null,
+        degraded: true,
+        error: error instanceof Error ? error.message : "Failed to build risk report"
+      },
+      { status: 200 }
     );
   }
 }

@@ -209,22 +209,27 @@ export function buildHoldingSnapshots(
     const quote = quotesByTicker[ticker];
     const currentPrice = quote?.price ?? 0;
     const previousClose = quote?.previousClose ?? currentPrice;
-    const currentValue = currentPrice * position.shares;
-    const previousValue = previousClose * position.shares;
-    const dailyPnl = currentValue - previousValue;
+    const hasQuote = typeof quote?.price === "number" && Number.isFinite(quote.price);
+    const currentValue = hasQuote ? currentPrice * position.shares : null;
+    const previousValue = hasQuote ? previousClose * position.shares : null;
+    const dailyPnl =
+      currentValue != null && previousValue != null ? currentValue - previousValue : null;
     const costBasis = position.avgCost * position.shares;
-    const totalGain = currentValue - costBasis;
+    const totalGain = currentValue != null ? currentValue - costBasis : null;
     return {
       ...position,
       ticker,
       assetClass: position.assetClass ?? "equities",
-      currentPrice,
+      currentPrice: hasQuote ? currentPrice : null,
       currentValue,
-      weight: totalValue === 0 ? 0 : currentValue / totalValue,
+      weight: totalValue === 0 || currentValue == null ? null : currentValue / totalValue,
       dailyPnl,
-      dailyPnlPercent: previousValue === 0 ? 0 : dailyPnl / previousValue,
+      dailyPnlPercent:
+        previousValue == null || previousValue === 0 || dailyPnl == null
+          ? null
+          : dailyPnl / previousValue,
       totalGain,
-      totalGainPercent: costBasis === 0 ? 0 : totalGain / costBasis,
+      totalGainPercent: costBasis === 0 || totalGain == null ? null : totalGain / costBasis,
       companyName: quote?.longName ?? quote?.shortName,
       exchange: quote?.exchange
     };

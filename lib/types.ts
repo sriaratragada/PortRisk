@@ -29,13 +29,13 @@ export type HistoricalPoint = {
 };
 
 export type HoldingSnapshot = PositionInput & {
-  currentPrice: number;
-  currentValue: number;
-  weight: number;
-  dailyPnl: number;
-  dailyPnlPercent: number;
-  totalGain: number;
-  totalGainPercent: number;
+  currentPrice: number | null;
+  currentValue: number | null;
+  weight: number | null;
+  dailyPnl: number | null;
+  dailyPnlPercent: number | null;
+  totalGain: number | null;
+  totalGainPercent: number | null;
   companyName?: string;
   exchange?: string;
 };

@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { buildFallbackHoldings } from "@/lib/holdings";
 import { hydratePortfolioHistory, hydratePortfolioRisk } from "@/lib/portfolio-edge";
 import { HoldingSnapshot, RiskMetrics } from "@/lib/types";
 
@@ -79,26 +80,6 @@ function buildValueHistory(series: Array<{ date: string; value: number }>) {
       drawdown: point.value - peak
     };
   });
-}
-
-function buildFallbackHoldings(
-  positions: Array<{
-    ticker: string;
-    shares: number;
-    avgCost: number;
-    assetClass: "equities" | "bonds" | "commodities";
-  }>
-) {
-  return positions.map<HoldingSnapshot>((position) => ({
-    ...position,
-    currentPrice: 0,
-    currentValue: 0,
-    weight: 0,
-    dailyPnl: 0,
-    dailyPnlPercent: 0,
-    totalGain: 0,
-    totalGainPercent: 0
-  }));
 }
 
 export async function buildWorkspacePortfolio(portfolioId: string, userId: string) {

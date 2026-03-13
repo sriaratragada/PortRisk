@@ -5,7 +5,10 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(value: number) {
+export function formatCurrency(value: number | null | undefined) {
+  if (value == null || Number.isNaN(value)) {
+    return "N/A";
+  }
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -13,7 +16,10 @@ export function formatCurrency(value: number) {
   }).format(value);
 }
 
-export function formatPercent(value: number, digits = 2) {
+export function formatPercent(value: number | null | undefined, digits = 2) {
+  if (value == null || Number.isNaN(value)) {
+    return "N/A";
+  }
   return `${(value * 100).toFixed(digits)}%`;
 }
 

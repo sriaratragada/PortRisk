@@ -31,9 +31,20 @@ export async function GET(request: NextRequest, context: Context) {
     const detail = await fetchCompanyDetail(ticker, range);
     return json({ detail });
   } catch (error) {
-    return badRequest(
-      error instanceof Error ? error.message : "Failed to load company detail",
-      502
+    return json(
+      {
+        detail: {
+          ticker: ticker.toUpperCase(),
+          companyName: ticker.toUpperCase(),
+          exchange: "N/A",
+          currentPrice: 0,
+          currency: "USD",
+          chart: []
+        },
+        degraded: true,
+        error: error instanceof Error ? error.message : "Failed to load company detail"
+      },
+      { status: 200 }
     );
   }
 }

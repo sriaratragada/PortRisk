@@ -18,7 +18,7 @@ export async function buildRiskReport(
   for (const holding of holdings) {
     const detail = detailByTicker.get(holding.ticker.toUpperCase());
     const sector = detail?.sector ?? "Unclassified";
-    sectorWeights.set(sector, (sectorWeights.get(sector) ?? 0) + holding.weight);
+    sectorWeights.set(sector, (sectorWeights.get(sector) ?? 0) + (holding.weight ?? 0));
   }
 
   const sectorConcentration = [...sectorWeights.entries()]
@@ -31,7 +31,7 @@ export async function buildRiskReport(
       return {
         ticker: holding.ticker,
         companyName: formatName(detail?.companyName ?? holding.companyName, holding.ticker),
-        weight: holding.weight
+        weight: holding.weight ?? 0
       };
     })
     .sort((left, right) => right.weight - left.weight)

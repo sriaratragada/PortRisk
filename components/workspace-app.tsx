@@ -24,10 +24,12 @@ import {
 } from "recharts";
 import { STRESS_SCENARIOS } from "@/lib/portfolio-edge";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { buildFallbackHoldings } from "@/lib/holdings";
 import type {
   ChartRange,
   CompanyDetail,
   HoldingSnapshot,
+  PositionInput,
   RiskReport,
   RiskTier
 } from "@/lib/types";
@@ -373,7 +375,37 @@ function ChartTooltip({
 function topConcentration(holdings: HoldingSnapshot[]) {
   return holdings
     .slice()
-    .sort((left, right) => right.weight - left.weight)[0] ?? null;
+    .sort((left, right) => (right.weight ?? 0) - (left.weight ?? 0))[0] ?? null;
+}
+
+function mergeHydratedHoldings(
+  positions: WorkspacePortfolio["positions"],
+  hydrated: WorkspacePortfolio["holdings"]
+) {
+  const hydratedMap = new Map(hydrated.map((holding) => [holding.ticker.toUpperCase(), holding]));
+  return positions.map((position) => {
+    const matched = hydratedMap.get(position.ticker.toUpperCase());
+    return matched
+      ? {
+          ...matched,
+          shares: position.shares,
+          avgCost: position.avgCost,
+          assetClass: position.assetClass
+        }
+      : buildFallbackHoldings([position])[0]!;
+  });
+}
+
+function buildFallbackCompanyDetail(holding: HoldingSnapshot): CompanyDetail {
+  return {
+    ticker: holding.ticker,
+    companyName: holding.companyName ?? holding.ticker,
+    exchange: holding.exchange ?? "N/A",
+    currentPrice: holding.currentPrice ?? 0,
+    currency: "USD",
+    sector: holding.assetClass?.toUpperCase(),
+    chart: []
+  };
 }
 
 async function readErrorMessage(response: Response) {
@@ -443,7 +475,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           [initialData.selectedPortfolio.id]: {
             portfolioValue: initialData.selectedPortfolio.metrics?.portfolioValue ?? null,
             dailyPnl: initialData.selectedPortfolio.holdings.reduce(
-              (sum, holding) => sum + holding.dailyPnl,
+              (sum, holding) => sum + (holding.dailyPnl ?? 0),
               0
             ),
             topWeight: topConcentration(initialData.selectedPortfolio.holdings)?.weight ?? null
@@ -474,7 +506,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       ...current,
       [portfolio.id]: {
         portfolioValue: portfolio.metrics?.portfolioValue ?? null,
-        dailyPnl: portfolio.holdings.reduce((sum, holding) => sum + holding.dailyPnl, 0),
+        dailyPnl: portfolio.holdings.reduce((sum, holding) => sum + (holding.dailyPnl ?? 0), 0),
         topWeight: topConcentration(portfolio.holdings)?.weight ?? null
       }
     }));
@@ -491,7 +523,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     setAuditRows(selectedPortfolio.auditLog);
     setAllocationWeights(
       Object.fromEntries(
-        selectedPortfolio.holdings.map((holding) => [holding.ticker, holding.weight])
+        selectedPortfolio.holdings.map((holding) => [holding.ticker, holding.weight ?? 0])
       )
     );
     setProposedMetrics(selectedPortfolio.metrics);
@@ -580,7 +612,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           (normalized[holding.ticker] ?? 0);
         return {
           ticker: holding.ticker,
-          shares: holding.currentPrice === 0 ? 0 : targetValue / holding.currentPrice,
+          shares: !holding.currentPrice ? 0 : targetValue / holding.currentPrice,
           avgCost: holding.avgCost,
           assetClass: holding.assetClass ?? "equities"
         };
@@ -672,7 +704,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           }
           return;
         }
-        const data = (await response.json()) as { report: RiskReport };
+        const data = (await response.json()) as { report: RiskReport | null };
         if (!controller.signal.aborted) {
           setRiskReport(data.report);
         }
@@ -761,13 +793,13 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
   const selectedMetrics = selectedPortfolio?.metrics ?? null;
   const dailyPnl = useMemo(
-    () => selectedPortfolio?.holdings.reduce((sum, holding) => sum + holding.dailyPnl, 0) ?? 0,
+    () => selectedPortfolio?.holdings.reduce((sum, holding) => sum + (holding.dailyPnl ?? 0), 0) ?? 0,
     [selectedPortfolio]
   );
   const dailyPnlPercent = useMemo(
     () =>
       selectedPortfolio?.holdings.reduce(
-        (sum, holding) => sum + holding.dailyPnlPercent * holding.weight,
+        (sum, holding) => sum + (holding.dailyPnlPercent ?? 0) * (holding.weight ?? 0),
         0
       ) ?? 0,
     [selectedPortfolio]
@@ -776,39 +808,39 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     () =>
       selectedPortfolio?.holdings
         .slice()
-        .sort((left, right) => right.currentValue - left.currentValue) ?? [],
+        .sort((left, right) => (right.currentValue ?? 0) - (left.currentValue ?? 0)) ?? [],
     [selectedPortfolio]
   );
   const totalReturn = useMemo(
-    () => selectedPortfolio?.holdings.reduce((sum, holding) => sum + holding.totalGain, 0) ?? 0,
+    () => selectedPortfolio?.holdings.reduce((sum, holding) => sum + (holding.totalGain ?? 0), 0) ?? 0,
     [selectedPortfolio]
   );
   const totalReturnPercent = useMemo(() => {
     const currentValue =
-      selectedPortfolio?.holdings.reduce((sum, holding) => sum + holding.currentValue, 0) ?? 0;
+      selectedPortfolio?.holdings.reduce((sum, holding) => sum + (holding.currentValue ?? 0), 0) ?? 0;
     const costBasis = currentValue - totalReturn;
     return costBasis > 0 ? totalReturn / costBasis : 0;
   }, [selectedPortfolio, totalReturn]);
   const biggestGainer = useMemo(
     () =>
       sortedHoldings
-        .filter((holding) => holding.dailyPnl > 0)
-        .sort((left, right) => right.dailyPnl - left.dailyPnl)[0] ?? null,
+        .filter((holding) => (holding.dailyPnl ?? 0) > 0)
+        .sort((left, right) => (right.dailyPnl ?? 0) - (left.dailyPnl ?? 0))[0] ?? null,
     [sortedHoldings]
   );
   const biggestLoser = useMemo(
     () =>
       sortedHoldings
-        .filter((holding) => holding.dailyPnl < 0)
-        .sort((left, right) => left.dailyPnl - right.dailyPnl)[0] ?? null,
+        .filter((holding) => (holding.dailyPnl ?? 0) < 0)
+        .sort((left, right) => (left.dailyPnl ?? 0) - (right.dailyPnl ?? 0))[0] ?? null,
     [sortedHoldings]
   );
   const medianWeight = useMemo(
-    () => median(sortedHoldings.map((holding) => holding.weight)),
+    () => median(sortedHoldings.map((holding) => holding.weight ?? 0)),
     [sortedHoldings]
   );
   const topThreeConcentration = useMemo(
-    () => sortedHoldings.slice(0, 3).reduce((sum, holding) => sum + holding.weight, 0),
+    () => sortedHoldings.slice(0, 3).reduce((sum, holding) => sum + (holding.weight ?? 0), 0),
     [sortedHoldings]
   );
   const portfolioRangePerformance = useMemo(() => {
@@ -897,8 +929,17 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     if (!response.ok) {
       throw new Error(await readErrorMessage(response));
     }
-    const data = (await response.json()) as { detail: CompanyDetail };
-    setSelectedHoldingDetail(data.detail);
+    const data = (await response.json()) as { detail: CompanyDetail; degraded?: boolean };
+    const fallbackHolding = selectedPortfolio?.holdings.find((holding) => holding.ticker === ticker);
+    setSelectedHoldingDetail(
+      data.degraded && fallbackHolding
+        ? {
+            ...buildFallbackCompanyDetail(fallbackHolding),
+            ...data.detail,
+            companyName: fallbackHolding.companyName ?? data.detail.companyName
+          }
+        : data.detail
+    );
   }
 
   async function loadPortfolio(portfolioId: string) {
@@ -907,23 +948,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
     try {
       const authHeaders = await getAuthHeaders();
-      const [portfolioResponse, riskResponse, history] = await Promise.all([
-        fetch(`/api/portfolio/${portfolioId}`, {
-          headers: authHeaders
-        }),
-        fetch("/api/risk/score", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...authHeaders
-          },
-          body: JSON.stringify({
-            portfolioId,
-            persist: false
-          })
-        }),
-        loadPortfolioHistory(portfolioId, portfolioRange)
-      ]);
+      const portfolioResponse = await fetch(`/api/portfolio/${portfolioId}`, {
+        headers: authHeaders
+      });
 
       if (!portfolioResponse.ok) {
         throw new Error(await readErrorMessage(portfolioResponse));
@@ -957,28 +984,79 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         name: portfolioData.portfolio.name,
         updatedAt: portfolioData.portfolio.updatedAt,
         positions: portfolioData.portfolio.positions,
-        holdings: [],
+        holdings: buildFallbackHoldings(portfolioData.portfolio.positions),
         metrics: null,
-        valueHistory: history,
+        valueHistory: [],
         auditLog: portfolioData.portfolio.auditLogs,
         stressTests: portfolioData.portfolio.stressTests
       };
-
-      if (portfolioData.portfolio.positions.length > 0 && riskResponse.ok) {
-        const riskData = (await riskResponse.json()) as {
-          holdings: WorkspacePortfolio["holdings"];
-          series: Array<{ date: string; value: number }>;
-          metrics: WorkspacePortfolio["metrics"];
-        };
-        nextPortfolio.holdings = riskData.holdings;
-        nextPortfolio.metrics = riskData.metrics;
-      }
 
       setSelectedPortfolio(nextPortfolio);
       setSelectedPortfolioId(portfolioId);
       setAuditRows(nextPortfolio.auditLog);
       setRiskReport(null);
       setStressResult(null);
+
+      const requests: Promise<void>[] = [
+        loadPortfolioHistory(portfolioId, portfolioRange)
+          .then((history) => {
+            setSelectedPortfolio((current) =>
+              current && current.id === portfolioId
+                ? {
+                    ...current,
+                    valueHistory: history
+                  }
+                : current
+            );
+          })
+          .catch(() => {
+            setSelectedPortfolio((current) =>
+              current && current.id === portfolioId
+                ? {
+                    ...current,
+                    valueHistory: current.valueHistory
+                  }
+                : current
+            );
+          })
+      ];
+
+      if (portfolioData.portfolio.positions.length > 0) {
+        requests.push(
+          fetch("/api/risk/score", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              ...authHeaders
+            },
+            body: JSON.stringify({
+              portfolioId,
+              persist: false
+            })
+          })
+            .then(async (riskResponse) => {
+              if (!riskResponse.ok) {
+                return;
+              }
+              const riskData = (await riskResponse.json()) as {
+                holdings: WorkspacePortfolio["holdings"];
+                metrics: WorkspacePortfolio["metrics"];
+              };
+              setSelectedPortfolio((current) =>
+                current && current.id === portfolioId
+                  ? {
+                      ...current,
+                      holdings: mergeHydratedHoldings(current.positions, riskData.holdings ?? []),
+                      metrics: riskData.metrics ?? current.metrics
+                    }
+                  : current
+              );
+            })
+            .catch(() => undefined)
+        );
+      }
+
+      await Promise.allSettled(requests);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to load portfolio");
     } finally {
@@ -1092,7 +1170,91 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     setPositionPreview(null);
   }
 
-  async function commitPositions(
+  async function saveSinglePosition(
+    position: PositionInput,
+    mode: "create" | "update",
+    successMessage: string
+  ) {
+    if (!selectedPortfolio) {
+      return false;
+    }
+
+    return new Promise<boolean>((resolve) => {
+      startTransition(async () => {
+        setErrorMessage(null);
+        setStatusMessage(null);
+        try {
+          const authHeaders = await getAuthHeaders();
+          const endpoint =
+            mode === "update"
+              ? `/api/portfolio/${selectedPortfolio.id}/positions/${encodeURIComponent(position.ticker)}`
+              : `/api/portfolio/${selectedPortfolio.id}/positions`;
+          const response = await fetch(endpoint, {
+            method: mode === "update" ? "PATCH" : "POST",
+            headers: {
+              "content-type": "application/json",
+              ...authHeaders
+            },
+            body: JSON.stringify(position)
+          });
+
+          if (!response.ok) {
+            throw new Error(await readErrorMessage(response));
+          }
+
+          await loadPortfolio(selectedPortfolio.id);
+          await refreshPortfolioList();
+          setStatusMessage(successMessage);
+          resolve(true);
+        } catch (error) {
+          setErrorMessage(
+            error instanceof Error ? error.message : "Failed to update portfolio"
+          );
+          resolve(false);
+        }
+      });
+    });
+  }
+
+  async function deleteSinglePosition(ticker: string, successMessage: string) {
+    if (!selectedPortfolio) {
+      return false;
+    }
+
+    return new Promise<boolean>((resolve) => {
+      startTransition(async () => {
+        setErrorMessage(null);
+        setStatusMessage(null);
+        try {
+          const response = await fetch(
+            `/api/portfolio/${selectedPortfolio.id}/positions/${encodeURIComponent(ticker)}`,
+            {
+              method: "DELETE",
+              headers: {
+                ...(await getAuthHeaders())
+              }
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(await readErrorMessage(response));
+          }
+
+          await loadPortfolio(selectedPortfolio.id);
+          await refreshPortfolioList();
+          setStatusMessage(successMessage);
+          resolve(true);
+        } catch (error) {
+          setErrorMessage(
+            error instanceof Error ? error.message : "Failed to update portfolio"
+          );
+          resolve(false);
+        }
+      });
+    });
+  }
+
+  async function commitAllocationPositions(
     nextPositions: WorkspacePortfolio["positions"],
     successMessage: string
   ) {
@@ -1126,7 +1288,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           resolve(true);
         } catch (error) {
           setErrorMessage(
-            error instanceof Error ? error.message : "Failed to update portfolio"
+            error instanceof Error ? error.message : "Failed to commit allocation"
           );
           resolve(false);
         }
@@ -1167,16 +1329,15 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       assetClass: positionAssetClass
     } as WorkspacePortfolio["positions"][number];
 
-    const existing = selectedPortfolio.positions.find(
-      (position) => position.ticker === normalizedTicker
-    );
-    const remaining = selectedPortfolio.positions.filter(
-      (position) => position.ticker !== normalizedTicker
-    );
+    const existing = selectedPortfolio.positions.find((position) => position.ticker === normalizedTicker);
     const actionLabel =
       editingTicker || existing ? "Position updated." : "Position added.";
 
-    const saved = await commitPositions([...remaining, nextPosition], actionLabel);
+    const saved = await saveSinglePosition(
+      nextPosition,
+      editingTicker || existing ? "update" : "create",
+      actionLabel
+    );
     if (saved) {
       resetPositionForm();
     }
@@ -1210,10 +1371,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       return;
     }
 
-    const nextPositions = selectedPortfolio.positions.filter(
-      (position) => position.ticker !== ticker
-    );
-    await commitPositions(nextPositions, `${ticker} removed from portfolio.`);
+    await deleteSinglePosition(ticker, `${ticker} removed from portfolio.`);
   }
 
   async function openHoldingDetail(ticker: string) {
@@ -1222,6 +1380,10 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     try {
       await loadHoldingDetail(ticker, holdingRange);
     } catch (error) {
+      const fallbackHolding = selectedPortfolio?.holdings.find((holding) => holding.ticker === ticker);
+      if (fallbackHolding) {
+        setSelectedHoldingDetail(buildFallbackCompanyDetail(fallbackHolding));
+      }
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to load company detail"
       );
@@ -1338,13 +1500,13 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         selectedMetrics.portfolioValue * (normalized[holding.ticker] ?? 0);
       return {
         ticker: holding.ticker,
-        shares: holding.currentPrice === 0 ? 0 : targetValue / holding.currentPrice,
+        shares: !holding.currentPrice ? 0 : targetValue / holding.currentPrice,
         avgCost: holding.avgCost,
         assetClass: holding.assetClass ?? "equities"
       };
     });
 
-    await commitPositions(nextPositions, "Allocation committed.");
+    await commitAllocationPositions(nextPositions, "Allocation committed.");
     await rerunRiskScore(true);
   }
 
@@ -1988,9 +2150,13 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       <div>
                         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Price</p>
                         <p className="mt-1 text-lg font-semibold text-white">{formatCurrency(holding.currentPrice)}</p>
-                        <p className={cn("mt-1 text-xs", holding.dailyPnl >= 0 ? "text-success" : "text-danger")}>
-                          {formatCurrency(holding.dailyPnl)} today
-                        </p>
+                        {holding.dailyPnl != null ? (
+                          <p className={cn("mt-1 text-xs", holding.dailyPnl >= 0 ? "text-success" : "text-danger")}>
+                            {formatCurrency(holding.dailyPnl)} today
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-xs text-slate-500">Quote unavailable</p>
+                        )}
                       </div>
                       <div>
                         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Position</p>
@@ -1999,7 +2165,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       </div>
                       <div>
                         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Total Return</p>
-                        <p className={cn("mt-1 text-lg font-semibold", holding.totalGain >= 0 ? "text-success" : "text-danger")}>
+                        <p className={cn("mt-1 text-lg font-semibold", (holding.totalGain ?? 0) >= 0 ? "text-success" : "text-danger")}>
                           {formatCurrency(holding.totalGain)} • {formatPercent(holding.totalGainPercent)}
                         </p>
                         <p className="mt-1 text-xs text-slate-500">Avg {formatCurrency(holding.avgCost)}</p>
@@ -2902,7 +3068,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       </div>
                       <div className="mt-3 flex flex-wrap items-end gap-3">
                         <p className="text-4xl font-semibold tracking-[-0.05em] text-white">
-                          {formatCurrency(selectedHoldingDetail.currentPrice)}
+                          {formatCurrency(
+                            selectedHoldingDetail.currentPrice > 0
+                              ? selectedHoldingDetail.currentPrice
+                              : null
+                          )}
                         </p>
                         <span
                           className={cn(

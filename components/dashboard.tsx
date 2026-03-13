@@ -99,7 +99,7 @@ function buildDrawdownSeries(valueHistory: PortfolioViewModel["valueHistory"]) {
 export function Dashboard({ initialPortfolio }: { initialPortfolio: PortfolioViewModel }) {
   const [portfolio, setPortfolio] = useState(initialPortfolio);
   const [proposedWeights, setProposedWeights] = useState<Record<string, number>>(() =>
-    Object.fromEntries(initialPortfolio.holdings.map((holding) => [holding.ticker, holding.weight]))
+    Object.fromEntries(initialPortfolio.holdings.map((holding) => [holding.ticker, holding.weight ?? 0]))
   );
   const [stressScenario, setStressScenario] = useState("2008 Financial Crisis");
   const [stressResult, setStressResult] = useState<Record<string, unknown> | null>(null);
@@ -142,10 +142,13 @@ export function Dashboard({ initialPortfolio }: { initialPortfolio: PortfolioVie
     const holdings = portfolio.holdings.map((holding) => {
       const targetWeight = normalized[holding.ticker] ?? 0;
       const targetValue = currentValue * targetWeight;
-      const shares = holding.currentPrice === 0 ? 0 : targetValue / holding.currentPrice;
+      const shares = !holding.currentPrice ? 0 : targetValue / holding.currentPrice;
       return { ...holding, shares, weight: targetWeight, currentValue: targetValue };
     });
-    const projectedVar = holdings.reduce((sum, holding) => sum + holding.weight * Math.abs(holding.dailyPnlPercent), 0);
+    const projectedVar = holdings.reduce(
+      (sum, holding) => sum + (holding.weight ?? 0) * Math.abs(holding.dailyPnlPercent ?? 0),
+      0
+    );
 
     return {
       portfolioValue: currentValue,
@@ -196,7 +199,7 @@ export function Dashboard({ initialPortfolio }: { initialPortfolio: PortfolioVie
       const targetValue = portfolio.metrics.portfolioValue * (normalized[holding.ticker] ?? 0);
       return {
         ticker: holding.ticker,
-        shares: holding.currentPrice === 0 ? 0 : targetValue / holding.currentPrice,
+        shares: !holding.currentPrice ? 0 : targetValue / holding.currentPrice,
         avgCost: holding.avgCost,
         assetClass: holding.assetClass
       };
@@ -236,8 +239,8 @@ export function Dashboard({ initialPortfolio }: { initialPortfolio: PortfolioVie
             <div>
               <div className="flex items-end gap-3">
                 <h1 className="text-4xl font-semibold tracking-tight">{formatCurrency(portfolio.metrics.portfolioValue)}</h1>
-                <div className={cn("rounded-full px-3 py-1 text-sm", portfolio.holdings.reduce((sum, holding) => sum + holding.dailyPnl, 0) >= 0 ? "bg-success/15 text-success" : "bg-danger/15 text-danger")}>
-                  {formatCurrency(portfolio.holdings.reduce((sum, holding) => sum + holding.dailyPnl, 0))} / {formatPercent(portfolio.holdings.reduce((sum, holding) => sum + holding.dailyPnlPercent * holding.weight, 0))}
+                <div className={cn("rounded-full px-3 py-1 text-sm", portfolio.holdings.reduce((sum, holding) => sum + (holding.dailyPnl ?? 0), 0) >= 0 ? "bg-success/15 text-success" : "bg-danger/15 text-danger")}>
+                  {formatCurrency(portfolio.holdings.reduce((sum, holding) => sum + (holding.dailyPnl ?? 0), 0))} / {formatPercent(portfolio.holdings.reduce((sum, holding) => sum + (holding.dailyPnlPercent ?? 0) * (holding.weight ?? 0), 0))}
                 </div>
               </div>
               <p className="mt-3 max-w-xl text-sm text-slate-400">
@@ -346,7 +349,7 @@ export function Dashboard({ initialPortfolio }: { initialPortfolio: PortfolioVie
                     <td className="py-4">{formatCurrency(holding.avgCost)}</td>
                     <td className="py-4">{formatCurrency(holding.currentPrice)}</td>
                     <td className="py-4">{formatCurrency(holding.currentValue)}</td>
-                    <td className={cn("py-4", holding.dailyPnl >= 0 ? "text-success" : "text-danger")}>
+                    <td className={cn("py-4", (holding.dailyPnl ?? 0) >= 0 ? "text-success" : "text-danger")}>
                       {formatCurrency(holding.dailyPnl)}
                     </td>
                     <td className="py-4">{formatPercent(holding.weight)}</td>

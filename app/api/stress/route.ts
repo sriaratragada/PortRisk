@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
   }
 
   const basePrices = Object.fromEntries(
-    current.holdings.map((holding) => [holding.ticker.toUpperCase(), holding.currentPrice])
+    current.holdings.map((holding) => [holding.ticker.toUpperCase(), holding.currentPrice ?? 0])
   );
   const stressed = scoreStressedPortfolio(positions, basePrices, scenario);
   const recoveryDays = estimateRecoveryDays(

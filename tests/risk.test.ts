@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   annualizeReturns,
+  buildHoldingSnapshots,
   calculateMaximumDrawdown,
   calculateSharpeRatio,
   calculateVaR95,
@@ -52,4 +53,19 @@ test("monteCarloDrawdownProbability returns bounded horizon probabilities", () =
 test("annualizeReturns multiplies mean daily return by trading days", () => {
   const result = annualizeReturns([0.001, 0.002, 0.003]);
   assert.equal(result, 0.002 * 252);
+});
+
+test("buildHoldingSnapshots preserves saved holdings when quotes are unavailable", () => {
+  const holdings = buildHoldingSnapshots(
+    [{ ticker: "AAPL", shares: 10, avgCost: 100, assetClass: "equities" }],
+    {}
+  );
+
+  assert.equal(holdings.length, 1);
+  assert.equal(holdings[0]?.ticker, "AAPL");
+  assert.equal(holdings[0]?.shares, 10);
+  assert.equal(holdings[0]?.avgCost, 100);
+  assert.equal(holdings[0]?.currentPrice, null);
+  assert.equal(holdings[0]?.currentValue, null);
+  assert.equal(holdings[0]?.weight, null);
 });
