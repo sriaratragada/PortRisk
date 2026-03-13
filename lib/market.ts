@@ -175,6 +175,7 @@ function scoreSearchRow(row: SearchRow, query: string) {
 }
 
 function dedupeAndRankSearchRows(rows: SearchRow[], query: string) {
+  const normalizedQuery = normalizeText(query);
   const deduped = new Map<string, SearchRow>();
   for (const row of rows) {
     const symbol = normalizeText(row.symbol);
@@ -187,13 +188,25 @@ function dedupeAndRankSearchRows(rows: SearchRow[], query: string) {
     }
   }
 
-  return [...deduped.values()]
+  const ranked = [...deduped.values()]
     .sort((left, right) => {
       const scoreDiff = scoreSearchRow(right, query) - scoreSearchRow(left, query);
       if (scoreDiff !== 0) return scoreDiff;
       return left.symbol.localeCompare(right.symbol);
     })
-    .slice(0, 10);
+    .filter((row) => Boolean(row.symbol));
+
+  const symbolPrefixMatches = ranked.filter((row) => normalizeText(row.symbol).startsWith(normalizedQuery));
+  if (symbolPrefixMatches.length > 0) {
+    return symbolPrefixMatches.slice(0, 10);
+  }
+
+  const namePrefixMatches = ranked.filter((row) => normalizeText(row.shortname).startsWith(normalizedQuery));
+  if (namePrefixMatches.length > 0) {
+    return namePrefixMatches.slice(0, 10);
+  }
+
+  return ranked.slice(0, 10);
 }
 
 function toIsoString(datetime: string) {
@@ -634,16 +647,6 @@ export async function searchTickers(query: string) {
       }))
       .filter((quote) => Boolean(quote.symbol))
   ];
-
-  const exactSymbol = normalizedQuery.toUpperCase();
-  if (exactSymbol && !rows.some((row) => row.symbol.toUpperCase() === exactSymbol)) {
-    rows.unshift({
-      symbol: exactSymbol,
-      shortname: exactSymbol,
-      exchange: "",
-      quoteType: "equity"
-    });
-  }
 
   return dedupeAndRankSearchRows(rows, normalizedQuery);
 }
