@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { getArchivedPortfolioIds, isPortfolioArchived } from "@/lib/portfolio-archive";
 import { buildFallbackHoldings } from "@/lib/holdings";
 import { hydratePortfolioHistory, hydratePortfolioRisk } from "@/lib/portfolio-edge";
 import { HoldingSnapshot, RiskMetrics } from "@/lib/types";
@@ -84,6 +85,10 @@ function buildValueHistory(series: Array<{ date: string; value: number }>) {
 
 export async function buildWorkspacePortfolio(portfolioId: string, userId: string) {
   const supabase = createSupabaseAdminClient();
+  const archived = await isPortfolioArchived(userId, portfolioId);
+  if (archived) {
+    return null;
+  }
   const [{ data: portfolio, error: portfolioError }, { data: positions }, { data: stressTests }, { data: auditLogs }] =
     await Promise.all([
       supabase
@@ -212,24 +217,27 @@ export async function buildWorkspacePortfolio(portfolioId: string, userId: strin
 
 export async function getWorkspaceData(user: { id: string; email: string }): Promise<WorkspaceData> {
   const supabase = createSupabaseAdminClient();
-  const [{ data: portfolios, error: portfolioError }, { data: positions }, { data: riskScores }] =
+  const [archivedIds, portfolioResult, positionResult, riskScoreResult] =
     await Promise.all([
+      getArchivedPortfolioIds(user.id),
       supabase
         .from("Portfolio")
         .select("id,name,updatedAt")
         .eq("userId", user.id)
-        .is("archivedAt", null)
         .order("updatedAt", { ascending: false }),
       supabase.from("Position").select("portfolioId,id"),
-      supabase
-        .from("RiskScore")
-        .select("portfolioId,riskTier,scoredAt")
-        .order("scoredAt", { ascending: false })
+      supabase.from("RiskScore").select("portfolioId,riskTier,scoredAt").order("scoredAt", { ascending: false })
     ]);
+
+  const { data: portfolios, error: portfolioError } = portfolioResult;
+  const { data: positions } = positionResult;
+  const { data: riskScores } = riskScoreResult;
 
   if (portfolioError) {
     throw new Error(portfolioError.message);
   }
+
+  const activePortfolios = (portfolios ?? []).filter((portfolio) => !archivedIds.has(portfolio.id));
 
   const positionCountByPortfolio = new Map<string, number>();
   for (const row of positions ?? []) {
@@ -243,13 +251,13 @@ export async function getWorkspaceData(user: { id: string; email: string }): Pro
     }
   }
 
-  const selectedPortfolio = portfolios?.[0]
-    ? await buildWorkspacePortfolio(portfolios[0].id, user.id)
+  const selectedPortfolio = activePortfolios[0]
+    ? await buildWorkspacePortfolio(activePortfolios[0].id, user.id)
     : null;
 
   return {
     user,
-    portfolios: (portfolios ?? []).map((portfolio) => ({
+    portfolios: activePortfolios.map((portfolio) => ({
       id: portfolio.id,
       name: portfolio.name,
       updatedAt: portfolio.updatedAt,

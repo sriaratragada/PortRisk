@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { badRequest, json } from "@/lib/http";
+import { isPortfolioArchived } from "@/lib/portfolio-archive";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { assetClassSchema } from "@/lib/validation";
 
@@ -26,13 +27,15 @@ export async function PATCH(request: NextRequest, context: Context) {
   const payload = updateSchema.parse(await request.json());
   const now = new Date().toISOString();
   const supabase = createSupabaseAdminClient();
+  if (await isPortfolioArchived(auth.user.id, portfolioId)) {
+    return badRequest("Portfolio not found", 404);
+  }
 
   const { data: portfolio, error: portfolioError } = await supabase
     .from("Portfolio")
     .select("id")
     .eq("id", portfolioId)
     .eq("userId", auth.user.id)
-    .is("archivedAt", null)
     .single();
 
   if (portfolioError || !portfolio) {
@@ -102,13 +105,15 @@ export async function DELETE(_request: NextRequest, context: Context) {
   const ticker = decodeURIComponent(rawTicker).trim().toUpperCase();
   const now = new Date().toISOString();
   const supabase = createSupabaseAdminClient();
+  if (await isPortfolioArchived(auth.user.id, portfolioId)) {
+    return badRequest("Portfolio not found", 404);
+  }
 
   const { data: portfolio, error: portfolioError } = await supabase
     .from("Portfolio")
     .select("id")
     .eq("id", portfolioId)
     .eq("userId", auth.user.id)
-    .is("archivedAt", null)
     .single();
 
   if (portfolioError || !portfolio) {

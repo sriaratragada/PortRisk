@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { badRequest, json } from "@/lib/http";
+import { isPortfolioArchived } from "@/lib/portfolio-archive";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { positionSchema } from "@/lib/validation";
 import { z } from "zod";
@@ -29,6 +30,9 @@ export async function GET(request: NextRequest, context: Context) {
   if ("error" in auth) return auth.error;
   const { portfolioId } = await context.params;
   const supabase = createSupabaseAdminClient();
+  if (await isPortfolioArchived(auth.user.id, portfolioId)) {
+    return badRequest("Portfolio not found", 404);
+  }
 
   const [{ data: portfolio, error }, { data: positions }, { data: riskScores }, { data: stressTests }, { data: auditLogs }] =
     await Promise.all([
@@ -37,7 +41,6 @@ export async function GET(request: NextRequest, context: Context) {
         .select("*")
         .eq("id", portfolioId)
         .eq("userId", auth.user.id)
-        .is("archivedAt", null)
         .single(),
       supabase.from("Position").select("*").eq("portfolioId", portfolioId).order("ticker", { ascending: true }),
       supabase.from("RiskScore").select("*").eq("portfolioId", portfolioId).order("scoredAt", { ascending: false }).limit(10),
@@ -66,6 +69,9 @@ export async function PATCH(request: NextRequest, context: Context) {
   const { portfolioId } = await context.params;
   const payload = patchSchema.parse(await request.json());
   const supabase = createSupabaseAdminClient();
+  if (await isPortfolioArchived(auth.user.id, portfolioId)) {
+    return badRequest("Portfolio not found", 404);
+  }
 
   const [{ data: existingPortfolio, error: existingError }, { data: existingPositions }] = await Promise.all([
     supabase
@@ -73,7 +79,6 @@ export async function PATCH(request: NextRequest, context: Context) {
       .select("*")
       .eq("id", portfolioId)
       .eq("userId", auth.user.id)
-      .is("archivedAt", null)
       .single(),
     supabase.from("Position").select("*").eq("portfolioId", portfolioId)
   ]);
@@ -218,29 +223,20 @@ export async function DELETE(request: NextRequest, context: Context) {
   if ("error" in auth) return auth.error;
   const { portfolioId } = await context.params;
   const supabase = createSupabaseAdminClient();
+  if (await isPortfolioArchived(auth.user.id, portfolioId)) {
+    return badRequest("Portfolio not found", 404);
+  }
   const { data: existing, error } = await supabase
     .from("Portfolio")
-    .select("id,name,archivedAt")
+    .select("id,name")
     .eq("id", portfolioId)
     .eq("userId", auth.user.id)
-    .is("archivedAt", null)
     .single();
   if (error || !existing) {
     return badRequest("Portfolio not found", 404);
   }
 
   const now = new Date().toISOString();
-  const { error: archiveError } = await supabase
-    .from("Portfolio")
-    .update({
-      archivedAt: now,
-      updatedAt: now
-    })
-    .eq("id", portfolioId)
-    .eq("userId", auth.user.id);
-  if (archiveError) {
-    return badRequest(archiveError.message, 500);
-  }
 
   const { error: auditError } = await supabase.from("AuditLog").insert({
     id: crypto.randomUUID(),
@@ -250,7 +246,7 @@ export async function DELETE(request: NextRequest, context: Context) {
     beforeState: existing,
     afterState: {
       ...existing,
-      archivedAt: now
+      status: "ARCHIVED"
     },
     riskTierBefore: null,
     riskTierAfter: null,

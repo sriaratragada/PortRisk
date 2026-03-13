@@ -403,7 +403,8 @@ function buildFallbackCompanyDetail(holding: HoldingSnapshot): CompanyDetail {
     exchange: holding.exchange ?? "N/A",
     currentPrice: holding.currentPrice ?? 0,
     currency: "USD",
-    sector: holding.assetClass?.toUpperCase(),
+    sector: holding.sector ?? holding.assetClass?.toUpperCase(),
+    industry: holding.industry,
     chart: []
   };
 }
@@ -644,6 +645,25 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     return () => window.clearTimeout(handle);
   }, [activeTab, allocationWeights, selectedPortfolio]);
 
+  const holdingsDependencyKey = useMemo(
+    () =>
+      selectedPortfolio?.holdings
+        .map((holding) =>
+          [
+            holding.ticker,
+            holding.shares,
+            holding.avgCost,
+            holding.currentPrice ?? "na",
+            holding.currentValue ?? "na",
+            holding.weight ?? "na",
+            holding.sector ?? "na",
+            holding.industry ?? "na"
+          ].join(":")
+        )
+        .join("|") ?? "",
+    [selectedPortfolio?.holdings]
+  );
+
   useEffect(() => {
     if (!selectedPortfolioId) {
       return;
@@ -718,7 +738,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
     void loadRiskReport();
     return () => controller.abort();
-  }, [activeTab, selectedPortfolio?.id, selectedPortfolio?.holdings.length]);
+  }, [activeTab, selectedPortfolio?.id, holdingsDependencyKey]);
 
   useEffect(() => {
     if (!selectedPortfolioId) {
@@ -877,7 +897,6 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       percent: first > 0 ? absolute / first : 0
     };
   }, [selectedHoldingDetail?.chart]);
-
   async function refreshPortfolioList() {
     const response = await fetch("/api/portfolio", {
       headers: {
@@ -2248,41 +2267,46 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   placeholder="AAPL, KO, XOM..."
                   className="w-full rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
                 />
-                {(searchLoading || searchResults.length > 0) && (
+                {(searchLoading || searchResults.length > 0 || (!!searchTerm.trim() && !positionTicker && !searchLoading)) && (
                   <div className="absolute left-0 right-0 z-20 mt-2 max-h-80 overflow-y-auto rounded-lg border border-white/10 bg-black/95 shadow-2xl">
                     {searchLoading ? (
                       <div className="px-4 py-3 text-sm text-slate-400">Searching listed tickers...</div>
-                    ) : null}
-                    {searchResults.map((result, index) => (
-                      <button
-                        key={`${result.symbol}-${result.exchange}`}
-                        type="button"
-                        onClick={() => applySearchResult(result)}
-                        className={cn(
-                          "flex w-full items-start justify-between gap-4 px-4 py-3 text-left text-sm transition",
-                          index === highlightedSearchIndex ? "bg-white/[0.06]" : "hover:bg-white/[0.03]"
-                        )}
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-white">{result.symbol}</p>
-                            {result.currentPrice != null ? (
-                              <span className="text-xs text-slate-400">{formatCurrency(result.currentPrice)}</span>
+                    ) : searchResults.length === 0 ? (
+                      <div className="px-4 py-3 text-sm text-slate-400">
+                        No exact match yet. Close listed names should surface here when available.
+                      </div>
+                    ) : (
+                      searchResults.map((result, index) => (
+                        <button
+                          key={`${result.symbol}-${result.exchange}`}
+                          type="button"
+                          onClick={() => applySearchResult(result)}
+                          className={cn(
+                            "flex w-full items-start justify-between gap-4 px-4 py-3 text-left text-sm transition",
+                            index === highlightedSearchIndex ? "bg-white/[0.06]" : "hover:bg-white/[0.03]"
+                          )}
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-white">{result.symbol}</p>
+                              {result.currentPrice != null ? (
+                                <span className="text-xs text-slate-400">{formatCurrency(result.currentPrice)}</span>
+                              ) : null}
+                            </div>
+                            <p className="mt-1 text-slate-400">{result.shortname}</p>
+                          </div>
+                          <div className="text-right text-xs uppercase tracking-[0.2em] text-slate-500">
+                            <p>{result.exchange || "US"}</p>
+                            <p className="mt-1">{result.quoteType}</p>
+                            {result.changePercent != null ? (
+                              <p className={cn("mt-1", result.changePercent >= 0 ? "text-success" : "text-danger")}>
+                                {formatPercent(result.changePercent)}
+                              </p>
                             ) : null}
                           </div>
-                          <p className="mt-1 text-slate-400">{result.shortname}</p>
-                        </div>
-                        <div className="text-right text-xs uppercase tracking-[0.2em] text-slate-500">
-                          <p>{result.exchange || "US"}</p>
-                          <p className="mt-1">{result.quoteType}</p>
-                          {result.changePercent != null ? (
-                            <p className={cn("mt-1", result.changePercent >= 0 ? "text-success" : "text-danger")}>
-                              {formatPercent(result.changePercent)}
-                            </p>
-                          ) : null}
-                        </div>
-                      </button>
-                    ))}
+                        </button>
+                      ))
+                    )}
                   </div>
                 )}
               </div>

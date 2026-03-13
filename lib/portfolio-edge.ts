@@ -1,5 +1,11 @@
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { fetchHistoricalCloses, fetchHistoricalSeries, fetchQuotes } from "@/lib/market";
+import { isPortfolioArchived } from "@/lib/portfolio-archive";
+import {
+  fetchCompanyDetails,
+  fetchHistoricalCloses,
+  fetchHistoricalSeries,
+  fetchQuotes
+} from "@/lib/market";
 import {
   buildHoldingSnapshots,
   buildPortfolioSeries,
@@ -24,12 +30,14 @@ export const STRESS_SCENARIOS: Record<
 
 export async function getPortfolioWithPositionsEdge(portfolioId: string, userId: string) {
   const supabase = createSupabaseAdminClient();
+  if (await isPortfolioArchived(userId, portfolioId)) {
+    return null;
+  }
   const { data, error } = await supabase
     .from("Portfolio")
     .select("id, userId, name, positions:Position(*)")
     .eq("id", portfolioId)
     .eq("userId", userId)
-    .is("archivedAt", null)
     .single();
 
   if (error || !data) {
@@ -51,8 +59,12 @@ export async function getPortfolioWithPositionsEdge(portfolioId: string, userId:
 
 export async function hydratePortfolioRisk(positions: PositionInput[], drawdownThreshold = 0.15) {
   const tickers = positions.map((position) => position.ticker.toUpperCase());
-  const quotes = await fetchQuotes(tickers);
+  const [quotes, details] = await Promise.all([
+    fetchQuotes(tickers),
+    fetchCompanyDetails(tickers).catch(() => [])
+  ]);
   const quoteMap = Object.fromEntries(quotes.map((quote) => [quote.ticker.toUpperCase(), quote]));
+  const detailMap = Object.fromEntries(details.map((detail) => [detail.ticker.toUpperCase(), detail]));
   const histories = await Promise.all(tickers.map((ticker) => fetchHistoricalCloses(ticker, 252)));
   const latestPrices = Object.fromEntries(quotes.map((quote) => [quote.ticker.toUpperCase(), quote.price]));
   const historicalByTicker = Object.fromEntries(
@@ -60,7 +72,18 @@ export async function hydratePortfolioRisk(positions: PositionInput[], drawdownT
   );
 
   const { series, metrics } = buildPortfolioSeries(positions, historicalByTicker, latestPrices);
-  const holdings = buildHoldingSnapshots(positions, quoteMap);
+  const holdings = buildHoldingSnapshots(positions, quoteMap).map((holding) => {
+    const detail = detailMap[holding.ticker.toUpperCase()];
+    return detail
+      ? {
+          ...holding,
+          companyName: detail.companyName ?? holding.companyName,
+          exchange: detail.exchange ?? holding.exchange,
+          sector: detail.sector ?? holding.sector,
+          industry: detail.industry ?? holding.industry
+        }
+      : holding;
+  });
   const dailyReturns = computeDailyReturns(series.map((point) => point.value));
   const probabilities = monteCarloDrawdownProbability(dailyReturns, drawdownThreshold);
 

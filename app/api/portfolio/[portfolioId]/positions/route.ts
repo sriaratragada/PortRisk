@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { badRequest, json } from "@/lib/http";
+import { isPortfolioArchived } from "@/lib/portfolio-archive";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { positionSchema } from "@/lib/validation";
 
@@ -24,6 +25,9 @@ export async function POST(request: NextRequest, context: Context) {
   const ticker = payload.ticker.trim().toUpperCase();
   const now = new Date().toISOString();
   const supabase = createSupabaseAdminClient();
+  if (await isPortfolioArchived(auth.user.id, portfolioId)) {
+    return badRequest("Portfolio not found", 404);
+  }
 
   const [{ data: portfolio, error: portfolioError }, { data: existingPosition, error: existingError }] =
     await Promise.all([
@@ -32,7 +36,6 @@ export async function POST(request: NextRequest, context: Context) {
         .select("id")
         .eq("id", portfolioId)
         .eq("userId", auth.user.id)
-        .is("archivedAt", null)
         .single(),
       supabase
         .from("Position")

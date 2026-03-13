@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { badRequest, json, parseJson } from "@/lib/http";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { getArchivedPortfolioIds } from "@/lib/portfolio-archive";
 import { ensureAppUserRecord } from "@/lib/user";
 import { portfolioCreateSchema } from "@/lib/validation";
 
@@ -14,18 +15,24 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createSupabaseAdminClient();
-  const { data: portfolios, error } = await supabase
-    .from("Portfolio")
-    .select("id,name,updatedAt,positions:Position(id),riskScores:RiskScore(riskTier,scoredAt)")
-    .eq("userId", auth.user.id)
-    .is("archivedAt", null)
-    .order("updatedAt", { ascending: false });
+  const [archivedIds, portfolioResult] = await Promise.all([
+    getArchivedPortfolioIds(auth.user.id),
+    supabase
+      .from("Portfolio")
+      .select("id,name,updatedAt,positions:Position(id),riskScores:RiskScore(riskTier,scoredAt)")
+      .eq("userId", auth.user.id)
+      .order("updatedAt", { ascending: false })
+  ]);
+
+  const { data: portfolios, error } = portfolioResult;
 
   if (error) {
     return badRequest(error.message, 500);
   }
 
-  return json({ portfolios: portfolios ?? [] });
+  return json({
+    portfolios: (portfolios ?? []).filter((portfolio) => !archivedIds.has(portfolio.id))
+  });
 }
 
 export async function POST(request: NextRequest) {

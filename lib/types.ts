@@ -38,6 +38,8 @@ export type HoldingSnapshot = PositionInput & {
   totalGainPercent: number | null;
   companyName?: string;
   exchange?: string;
+  sector?: string;
+  industry?: string;
 };
 
 export type RiskMetrics = {
