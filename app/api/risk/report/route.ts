@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { badRequest, json } from "@/lib/http";
 import { getPortfolioWithPositionsEdge, hydratePortfolioRisk } from "@/lib/portfolio-edge";
 import { buildRiskReport } from "@/lib/risk-report";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +32,33 @@ export async function GET(request: NextRequest) {
   }));
   try {
     const hydrated = await hydratePortfolioRisk(positions);
-    const report = await buildRiskReport(portfolioId, hydrated.holdings, hydrated.metrics);
+    const supabase = createSupabaseAdminClient();
+    const [{ data: previousScores }, { data: recentActions }] = await Promise.all([
+      supabase
+        .from("RiskScore")
+        .select("riskTier,sharpe,maxDrawdown,var95,scoredAt")
+        .eq("portfolioId", portfolioId)
+        .order("scoredAt", { ascending: false })
+        .limit(2),
+      supabase
+        .from("AuditLog")
+        .select("actionType,timestamp")
+        .eq("portfolioId", portfolioId)
+        .eq("userId", auth.user.id)
+        .order("timestamp", { ascending: false })
+        .limit(12)
+    ]);
+    const report = await buildRiskReport(portfolioId, hydrated.holdings, hydrated.metrics, hydrated.series, {
+      previousScore: previousScores?.[1]
+        ? {
+            riskTier: previousScores[1].riskTier,
+            sharpe: previousScores[1].sharpe,
+            maxDrawdown: previousScores[1].maxDrawdown,
+            var95: previousScores[1].var95
+          }
+        : null,
+      recentActions: recentActions ?? []
+    });
     return json({ report });
   } catch (error) {
     return json(

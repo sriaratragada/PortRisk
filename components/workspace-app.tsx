@@ -30,6 +30,7 @@ import type {
   CompanyDetail,
   HoldingSnapshot,
   PositionInput,
+  RiskInsight,
   RiskReport,
   RiskTier
 } from "@/lib/types";
@@ -494,8 +495,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const [holdingRange, setHoldingRange] = useState<ChartRange>("1M");
   const [riskReport, setRiskReport] = useState<RiskReport | null>(null);
   const [riskReportLoading, setRiskReportLoading] = useState(false);
+  const [riskInsight, setRiskInsight] = useState<RiskInsight | null>(null);
+  const [riskInsightLoading, setRiskInsightLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [riskError, setRiskError] = useState<string | null>(null);
+  const [riskInsightError, setRiskInsightError] = useState<string | null>(null);
   const [stressError, setStressError] = useState<string | null>(null);
   const [allocationError, setAllocationError] = useState<string | null>(null);
   const [auditError, setAuditError] = useState<string | null>(null);
@@ -549,6 +553,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       setAllocationWeights({});
       setProposedMetrics(null);
       setRiskReport(null);
+      setRiskInsight(null);
       return;
     }
 
@@ -784,6 +789,56 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     }
 
     void loadRiskReport();
+    return () => controller.abort();
+  }, [activeTab, selectedPortfolio?.id, holdingsDependencyKey]);
+
+  useEffect(() => {
+    if (
+      !selectedPortfolio ||
+      selectedPortfolio.holdings.length === 0 ||
+      (activeTab !== "risk" && activeTab !== "overview")
+    ) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const portfolioId = selectedPortfolio.id;
+
+    async function loadRiskInsight() {
+      setRiskInsightLoading(true);
+      setRiskInsightError(null);
+      try {
+        const response = await fetch(`/api/risk/insights?portfolioId=${portfolioId}`, {
+          signal: controller.signal,
+          headers: {
+            ...(await getAuthHeaders())
+          }
+        });
+        if (!response.ok) {
+          if (!controller.signal.aborted) {
+            setRiskInsight(null);
+            setRiskInsightError(await readErrorMessage(response));
+          }
+          return;
+        }
+        const data = (await response.json()) as { insight: RiskInsight | null; error?: string };
+        if (!controller.signal.aborted) {
+          setRiskInsight(data.insight);
+          setRiskInsightError(data.insight ? null : data.error ?? "AI insight unavailable");
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setRiskInsight(null);
+          setRiskInsightError(error instanceof Error ? error.message : "AI insight unavailable");
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setRiskInsightLoading(false);
+        }
+      }
+    }
+
+    void loadRiskInsight();
     return () => controller.abort();
   }, [activeTab, selectedPortfolio?.id, holdingsDependencyKey]);
 
@@ -1072,6 +1127,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       setSelectedPortfolioId(portfolioId);
       setAuditRows(nextPortfolio.auditLog);
       setRiskReport(null);
+      setRiskInsight(null);
       setStressResult(null);
 
       const requests: Promise<void>[] = [
@@ -1530,10 +1586,44 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             setAuditError(error instanceof Error ? error.message : "Audit refresh failed");
           }
           setRiskReport(null);
+          setRiskInsight(null);
           setStatusMessage("Risk score refreshed.");
         }
       } catch (error) {
         setRiskError(error instanceof Error ? error.message : "Risk scoring failed");
+      }
+    });
+  }
+
+  async function refreshRiskInsight() {
+    if (!selectedPortfolio) {
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        setRiskInsightError(null);
+        const response = await fetch("/api/risk/insights", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(await getAuthHeaders())
+          },
+          body: JSON.stringify({
+            portfolioId: selectedPortfolio.id,
+            refresh: true,
+            persist: true
+          })
+        });
+        if (!response.ok) {
+          throw new Error(await readErrorMessage(response));
+        }
+        const data = (await response.json()) as { insight: RiskInsight | null; error?: string };
+        setRiskInsight(data.insight);
+        setRiskInsightError(data.insight ? null : data.error ?? "AI insight unavailable");
+        setStatusMessage("AI risk insight refreshed.");
+      } catch (error) {
+        setRiskInsightError(error instanceof Error ? error.message : "AI insight unavailable");
       }
     });
   }
@@ -1646,6 +1736,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         setAuditRows([]);
         setStressResult(null);
         setRiskReport(null);
+        setRiskInsight(null);
         if (nextPortfolioId) {
           await loadPortfolio(nextPortfolioId);
         }
@@ -2089,6 +2180,164 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     {riskReport?.summary ??
                       "The risk narrative will summarize concentration, market regime, and balance-sheet resilience here."}
                   </p>
+                </div>
+              </div>
+            )}
+          </Panel>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+          <Panel
+            title="Portfolio Health Matrix"
+            action={
+              riskReport ? (
+                <span className="text-xs text-slate-500">
+                  Data confidence {riskReport.dataConfidence.overall}
+                </span>
+              ) : null
+            }
+          >
+            {!riskReport ? (
+              <EmptyState
+                title="Health scores are loading"
+                copy="Quality, downside, and concentration diagnostics appear once the deterministic report is available."
+              />
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <MetricStat label="Concentration" value={`${riskReport.qualityScores.concentration}/100`} />
+                <MetricStat label="Liquidity" value={`${riskReport.qualityScores.liquidity}/100`} />
+                <MetricStat label="Balance Sheet" value={`${riskReport.qualityScores.balanceSheet}/100`} />
+                <MetricStat label="Profitability" value={`${riskReport.qualityScores.profitability}/100`} />
+                <MetricStat label="Growth" value={`${riskReport.qualityScores.growth}/100`} />
+                <MetricStat label="Downside" value={`${riskReport.qualityScores.downsideRisk}/100`} />
+              </div>
+            )}
+          </Panel>
+
+          <Panel
+            title="AI Copilot Summary"
+            action={
+              <div className="flex items-center gap-3">
+                {riskInsightLoading ? <span className="text-xs text-slate-500">Refreshing AI</span> : null}
+                <button
+                  onClick={() => void refreshRiskInsight()}
+                  className="text-sm text-zinc-300 transition hover:text-white"
+                >
+                  Refresh AI
+                </button>
+              </div>
+            }
+          >
+            {riskInsightError ? <div className="mb-4"><InlineNotice message={riskInsightError} tone="warning" /></div> : null}
+            {!riskInsight ? (
+              <EmptyState
+                title="AI copilot unavailable"
+                copy="Deterministic risk is still active. AI interpretation appears here when the insight pipeline succeeds."
+              />
+            ) : (
+              <div className="space-y-5">
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Executive diagnosis</p>
+                    <span className="text-xs text-slate-500">
+                      {riskInsight.source} • {riskInsight.dataConfidence}
+                    </span>
+                  </div>
+                  <p className="text-sm leading-7 text-slate-300">{riskInsight.summary}</p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-xl border border-white/10 bg-black/35 p-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Key Drivers</p>
+                    <div className="mt-3 space-y-2">
+                      {riskInsight.drivers.map((item) => (
+                        <p key={item} className="text-sm text-slate-300">{item}</p>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/35 p-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Recommended Action</p>
+                    <div className="mt-3 space-y-2">
+                      {riskInsight.recommendedActions.map((item) => (
+                        <p key={item} className="text-sm text-slate-300">{item}</p>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </Panel>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+          <Panel title="What Changed">
+            {!riskReport ? (
+              <EmptyState
+                title="Change diagnostics unavailable"
+                copy="The portfolio delta and regime-change logic appears once the deterministic report is computed."
+              />
+            ) : (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Change Summary</p>
+                  <p className="mt-3 text-sm leading-7 text-slate-300">{riskReport.changeDiagnostics.summary}</p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <InfoPill
+                    label="Sharpe Delta"
+                    value={riskReport.changeDiagnostics.sharpeDelta != null ? riskReport.changeDiagnostics.sharpeDelta.toFixed(2) : "Baseline"}
+                    tone={(riskReport.changeDiagnostics.sharpeDelta ?? 0) >= 0 ? "positive" : "negative"}
+                  />
+                  <InfoPill
+                    label="VaR Delta"
+                    value={riskReport.changeDiagnostics.varDelta != null ? formatPercent(riskReport.changeDiagnostics.varDelta) : "Baseline"}
+                    tone={(riskReport.changeDiagnostics.varDelta ?? 0) <= 0 ? "positive" : "negative"}
+                  />
+                  <InfoPill
+                    label="Trigger"
+                    value={riskReport.changeDiagnostics.trigger.replace("_", " ")}
+                  />
+                </div>
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="Exposure Snapshot">
+            {!riskReport ? (
+              <EmptyState
+                title="Exposure snapshot unavailable"
+                copy="Sector, industry, and benchmark-relative exposure load after the report pipeline completes."
+              />
+            ) : (
+              <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-3">
+                  <InfoPill label="Sectors" value={`${riskReport.exposureDiagnostics.sectorCount}`} />
+                  <InfoPill label="Industries" value={`${riskReport.exposureDiagnostics.industryCount}`} />
+                  <InfoPill label="Excess vs SPY" value={formatPercent(riskReport.benchmarkComparison.excessReturn)} tone={riskReport.benchmarkComparison.excessReturn >= 0 ? "positive" : "negative"} />
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-xl border border-white/10 bg-black/35 p-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Top Industries</p>
+                    <div className="mt-3 space-y-2">
+                      {riskReport.industryConcentration.slice(0, 3).map((industry) => (
+                        <div key={industry.industry} className="flex items-center justify-between text-sm">
+                          <span className="text-slate-300">{industry.industry}</span>
+                          <span className="text-white">{formatPercent(industry.weight)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/35 p-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Watchlist Alerts</p>
+                    <div className="mt-3 space-y-2">
+                      {(riskInsight?.alerts ?? []).length > 0 ? (
+                        riskInsight!.alerts.map((alert) => (
+                          <p key={alert.message} className="text-sm text-slate-300">{alert.message}</p>
+                        ))
+                      ) : (
+                        <p className="text-sm text-slate-400">No AI alerts available yet.</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -2767,6 +3016,123 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       No company-level balance-sheet warnings detected from the available data.
                     </p>
                   )}
+                </div>
+              </div>
+            </div>
+          )}
+        </Panel>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <Panel title="Regime and Benchmark Diagnostics">
+          {!riskReport ? (
+            <EmptyState
+              title="No regime diagnostics yet"
+              copy="Benchmark-relative statistics appear once the deterministic report has loaded."
+            />
+          ) : (
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                <InfoPill label="Benchmark" value={riskReport.marketContext.benchmark} />
+                <InfoPill label="Trend" value={riskReport.marketContext.trend} />
+                <InfoPill label="Benchmark Vol" value={formatPercent(riskReport.marketContext.volatility)} />
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <MetricStat label="Correlation to SPY" value={riskReport.returnDiagnostics.correlationToBenchmark.toFixed(2)} />
+                <MetricStat label="Beta to SPY" value={riskReport.returnDiagnostics.betaToBenchmark.toFixed(2)} />
+                <MetricStat label="Hit Rate" value={formatPercent(riskReport.returnDiagnostics.hitRate)} />
+                <MetricStat label="Current Drawdown" value={formatPercent(riskReport.returnDiagnostics.currentDrawdown)} />
+              </div>
+            </div>
+          )}
+        </Panel>
+
+        <Panel title="Portfolio Quality Scorecards">
+          {!riskReport ? (
+            <EmptyState
+              title="Quality scorecards unavailable"
+              copy="Liquidity, profitability, growth, and balance-sheet diagnostics populate with the risk report."
+            />
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <MetricStat label="Liquidity" value={`${riskReport.qualityScores.liquidity}/100`} />
+              <MetricStat label="Balance Sheet" value={`${riskReport.qualityScores.balanceSheet}/100`} />
+              <MetricStat label="Profitability" value={`${riskReport.qualityScores.profitability}/100`} />
+              <MetricStat label="Growth" value={`${riskReport.qualityScores.growth}/100`} />
+              <MetricStat label="Concentration" value={`${riskReport.qualityScores.concentration}/100`} />
+              <MetricStat label="Downside Risk" value={`${riskReport.qualityScores.downsideRisk}/100`} />
+            </div>
+          )}
+        </Panel>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <Panel title="Top Contributors to Risk">
+          {!riskReport ? (
+            <EmptyState
+              title="No contributor model yet"
+              copy="The engine will rank the holdings contributing most to concentration and realized risk."
+            />
+          ) : (
+            <div className="space-y-3">
+              {riskReport.topRiskContributors.map((entry) => (
+                <div key={entry.ticker} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-white">{entry.ticker}</p>
+                      <p className="mt-1 text-sm text-slate-400">{entry.companyName}</p>
+                    </div>
+                    <span className="text-sm text-white">{formatPercent(entry.contribution)}</span>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-300">{entry.reason}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+
+        <Panel
+          title="AI Analyst Notes"
+          action={
+            <button
+              onClick={() => void refreshRiskInsight()}
+              className="text-sm text-zinc-300 transition hover:text-white"
+            >
+              Refresh AI
+            </button>
+          }
+        >
+          {riskInsightError ? <div className="mb-4"><InlineNotice message={riskInsightError} tone="warning" /></div> : null}
+          {!riskInsight ? (
+            <EmptyState
+              title="AI notes unavailable"
+              copy="The deterministic model is still active. AI interpretation appears here when the copilot pipeline succeeds."
+            />
+          ) : (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">AI interpretation</p>
+                  <span className="text-xs text-slate-500">{riskInsight.source} • {riskInsight.model}</span>
+                </div>
+                <p className="text-sm leading-7 text-slate-300">{riskInsight.summary}</p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-xl border border-white/10 bg-black/35 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Resilience Factors</p>
+                  <div className="mt-3 space-y-2">
+                    {riskInsight.resilienceFactors.map((item) => (
+                      <p key={item} className="text-sm text-slate-300">{item}</p>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/35 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Recommended Actions</p>
+                  <div className="mt-3 space-y-2">
+                    {riskInsight.recommendedActions.map((item) => (
+                      <p key={item} className="text-sm text-slate-300">{item}</p>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>

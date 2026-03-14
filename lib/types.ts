@@ -115,6 +115,83 @@ export type RiskReport = {
     signal: string;
     severity: "INFO" | "WATCH" | "HIGH";
   }>;
+  industryConcentration: Array<{
+    industry: string;
+    weight: number;
+  }>;
+  qualityScores: {
+    concentration: number;
+    liquidity: number;
+    balanceSheet: number;
+    profitability: number;
+    growth: number;
+    downsideRisk: number;
+  };
+  returnDiagnostics: {
+    realizedVolatility: number;
+    downsideVolatility: number;
+    hitRate: number;
+    bestDay: number;
+    worstDay: number;
+    currentDrawdown: number;
+    betaToBenchmark: number;
+    correlationToBenchmark: number;
+  };
+  benchmarkComparison: {
+    benchmark: string;
+    portfolioReturn: number;
+    benchmarkReturn: number;
+    excessReturn: number;
+  };
+  exposureDiagnostics: {
+    sectorCount: number;
+    industryCount: number;
+    growthTilt: "LOW" | "MODERATE" | "HIGH";
+    incomeTilt: "LOW" | "MODERATE" | "HIGH";
+    defensiveness: "DEFENSIVE" | "NEUTRAL" | "CYCLICAL";
+  };
+  topRiskContributors: Array<{
+    ticker: string;
+    companyName: string;
+    contribution: number;
+    reason: string;
+  }>;
+  scenarioMatrix: Array<{
+    name: string;
+    impact: number;
+    severity: "LOW" | "MODERATE" | "HIGH";
+  }>;
+  changeDiagnostics: {
+    summary: string;
+    trigger: "MARKET_MOVEMENT" | "POSITION_CHANGE" | "MIXED" | "UNKNOWN";
+    sharpeDelta: number | null;
+    varDelta: number | null;
+    drawdownDelta: number | null;
+    riskTierChanged: boolean;
+  };
+  dataConfidence: {
+    overall: "HIGH" | "MEDIUM" | "LOW";
+    fundamentalsCoverage: number;
+    priceCoverage: number;
+  };
   resilienceFactors: string[];
   vulnerabilities: string[];
+};
+
+export type RiskInsight = {
+  summary: string;
+  drivers: string[];
+  resilienceFactors: string[];
+  alerts: Array<{
+    severity: "INFO" | "WATCH" | "HIGH";
+    message: string;
+  }>;
+  recommendedActions: string[];
+  regimeCommentary: string;
+  changeSummary: string;
+  dataConfidence: "HIGH" | "MEDIUM" | "LOW";
+  generatedAt: string;
+  model: string;
+  provider: string;
+  source: "AI" | "FALLBACK";
 };

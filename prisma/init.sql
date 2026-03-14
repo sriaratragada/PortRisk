@@ -56,6 +56,28 @@ CREATE TABLE "RiskScore" (
 );
 
 -- CreateTable
+CREATE TABLE "RiskInsight" (
+    "id" TEXT NOT NULL,
+    "portfolioId" TEXT NOT NULL,
+    "generatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "sourceRiskScoreId" TEXT,
+    "model" TEXT NOT NULL,
+    "provider" TEXT NOT NULL,
+    "source" TEXT NOT NULL,
+    "summary" TEXT NOT NULL,
+    "drivers" JSONB NOT NULL,
+    "resilienceFactors" JSONB NOT NULL,
+    "alerts" JSONB NOT NULL,
+    "recommendedActions" JSONB NOT NULL,
+    "regimeCommentary" TEXT NOT NULL,
+    "changeSummary" TEXT NOT NULL,
+    "dataConfidence" TEXT NOT NULL,
+    "rawPromptInput" JSONB NOT NULL,
+
+    CONSTRAINT "RiskInsight_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "StressTest" (
     "id" TEXT NOT NULL,
     "portfolioId" TEXT NOT NULL,
@@ -99,6 +121,9 @@ CREATE UNIQUE INDEX "Position_portfolioId_ticker_key" ON "Position"("portfolioId
 CREATE INDEX "RiskScore_portfolioId_scoredAt_idx" ON "RiskScore"("portfolioId", "scoredAt" DESC);
 
 -- CreateIndex
+CREATE INDEX "RiskInsight_portfolioId_generatedAt_idx" ON "RiskInsight"("portfolioId", "generatedAt" DESC);
+
+-- CreateIndex
 CREATE INDEX "StressTest_portfolioId_runAt_idx" ON "StressTest"("portfolioId", "runAt" DESC);
 
 -- CreateIndex
@@ -115,6 +140,9 @@ ALTER TABLE "Position" ADD CONSTRAINT "Position_portfolioId_fkey" FOREIGN KEY ("
 
 -- AddForeignKey
 ALTER TABLE "RiskScore" ADD CONSTRAINT "RiskScore_portfolioId_fkey" FOREIGN KEY ("portfolioId") REFERENCES "Portfolio"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RiskInsight" ADD CONSTRAINT "RiskInsight_portfolioId_fkey" FOREIGN KEY ("portfolioId") REFERENCES "Portfolio"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "StressTest" ADD CONSTRAINT "StressTest_portfolioId_fkey" FOREIGN KEY ("portfolioId") REFERENCES "Portfolio"("id") ON DELETE CASCADE ON UPDATE CASCADE;

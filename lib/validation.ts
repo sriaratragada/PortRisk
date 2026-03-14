@@ -32,3 +32,9 @@ export const stressSchema = z.object({
     })
     .optional()
 });
+
+export const riskInsightSchema = z.object({
+  portfolioId: z.string().uuid(),
+  refresh: z.boolean().optional().default(true),
+  persist: z.boolean().optional().default(true)
+});

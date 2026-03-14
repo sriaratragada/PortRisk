@@ -25,6 +25,7 @@ model Portfolio {
   updatedAt   DateTime     @updatedAt
   positions   Position[]
   riskScores  RiskScore[]
+  riskInsights RiskInsight[]
   stressTests StressTest[]
   auditLogs   AuditLog[]
   user        User         @relation(fields: [userId], references: [id])
@@ -62,6 +63,28 @@ model RiskScore {
   portfolio        Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
 
   @@index([portfolioId, scoredAt(sort: Desc)])
+}
+
+model RiskInsight {
+  id                String    @id @default(uuid())
+  portfolioId       String
+  generatedAt       DateTime  @default(now())
+  sourceRiskScoreId String?
+  model             String
+  provider          String
+  source            String
+  summary           String
+  drivers           Json
+  resilienceFactors Json
+  alerts            Json
+  recommendedActions Json
+  regimeCommentary  String
+  changeSummary     String
+  dataConfidence    String
+  rawPromptInput    Json
+  portfolio         Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@index([portfolioId, generatedAt(sort: Desc)])
 }
 
 model StressTest {
