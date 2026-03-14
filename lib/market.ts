@@ -5,6 +5,7 @@ import {
   TWELVE_DATA_API_KEY,
   TWELVE_DATA_BASE_URL
 } from "@/lib/market-config";
+import { resolveSector } from "@/lib/sectors";
 import type { ChartRange, CompanyDetail, HistoricalPoint, MarketQuote } from "@/lib/types";
 
 const quoteCache = new Map<string, { expiresAt: number; data: MarketQuote }>();
@@ -127,59 +128,50 @@ type SearchRow = {
 
 const COMPANY_DETAIL_OVERRIDES: Record<
   string,
-  Partial<Pick<CompanyDetail, "sector" | "industry" | "companyName" | "exchange">>
+  Partial<Pick<CompanyDetail, "industry" | "companyName" | "exchange">>
 > = {
   AAPL: {
     companyName: "Apple Inc.",
-    sector: "Technology",
     industry: "Consumer Electronics",
     exchange: "NASDAQ"
   },
   MSFT: {
     companyName: "Microsoft Corporation",
-    sector: "Technology",
     industry: "Software - Infrastructure",
     exchange: "NASDAQ"
   },
   NVDA: {
     companyName: "NVIDIA Corporation",
-    sector: "Technology",
     industry: "Semiconductors",
     exchange: "NASDAQ"
   },
   AMZN: {
     companyName: "Amazon.com, Inc.",
-    sector: "Consumer Cyclical",
     industry: "Internet Retail",
     exchange: "NASDAQ"
   },
   GOOGL: {
     companyName: "Alphabet Inc.",
-    sector: "Communication Services",
     industry: "Internet Content & Information",
     exchange: "NASDAQ"
   },
   GOOG: {
     companyName: "Alphabet Inc.",
-    sector: "Communication Services",
     industry: "Internet Content & Information",
     exchange: "NASDAQ"
   },
   META: {
     companyName: "Meta Platforms, Inc.",
-    sector: "Communication Services",
     industry: "Internet Content & Information",
     exchange: "NASDAQ"
   },
   TSLA: {
     companyName: "Tesla, Inc.",
-    sector: "Consumer Cyclical",
     industry: "Auto Manufacturers",
     exchange: "NASDAQ"
   },
   JPM: {
     companyName: "JPMorgan Chase & Co.",
-    sector: "Financial Services",
     industry: "Banks - Diversified",
     exchange: "NYSE"
   }
@@ -609,6 +601,12 @@ export async function fetchCompanyDetail(
   }
 
   const override = resolveCompanyOverride(normalizedSymbol);
+  const resolvedSector = resolveSector({
+    ticker: normalizedSymbol,
+    providerSector: profile?.sector,
+    providerIndustry: profile?.industry ?? override?.industry,
+    assetClass: "equities"
+  });
   const data: CompanyDetail = {
     ticker: normalizedSymbol,
     companyName:
@@ -628,7 +626,7 @@ export async function fetchCompanyDetail(
     currentPrice: quote?.price ?? fmpQuote?.price ?? 0,
     currency: quote?.currency ?? "USD",
     marketCap: metrics?.marketCap ?? fmpQuote?.marketCap ?? profile?.mktCap ?? quote?.marketCap,
-    sector: profile?.sector ?? override?.sector,
+    sector: resolvedSector,
     industry: profile?.industry ?? override?.industry,
     website: profile?.website,
     employeeCount: parseEmployeeCount(profile?.fullTimeEmployees),

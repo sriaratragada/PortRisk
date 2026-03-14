@@ -1,6 +1,7 @@
 import { fetchCompanyDetails, fetchHistoricalCloses } from "@/lib/market";
 import { clamp } from "@/lib/utils";
 import { annualizeVolatility, computeDailyReturns } from "@/lib/risk";
+import { getDefaultSector, resolveSector } from "@/lib/sectors";
 import type { HistoricalPoint, HoldingSnapshot, RiskMetrics, RiskReport } from "@/lib/types";
 
 type PreviousScore = {
@@ -122,8 +123,13 @@ export async function buildRiskFeatureReport(
   const industryWeights = new Map<string, number>();
   for (const holding of holdings) {
     const detail = detailByTicker.get(holding.ticker.toUpperCase());
-    const sector = detail?.sector ?? holding.sector ?? "Unclassified";
-    const industry = detail?.industry ?? holding.industry ?? "Unclassified";
+    const sector = resolveSector({
+      ticker: holding.ticker,
+      providerSector: detail?.sector ?? holding.sector,
+      providerIndustry: detail?.industry ?? holding.industry,
+      assetClass: holding.assetClass
+    });
+    const industry = detail?.industry ?? holding.industry ?? "ETFs / Funds / Other";
     sectorWeights.set(sector, (sectorWeights.get(sector) ?? 0) + (holding.weight ?? 0));
     industryWeights.set(industry, (industryWeights.get(industry) ?? 0) + (holding.weight ?? 0));
   }
@@ -260,7 +266,7 @@ export async function buildRiskFeatureReport(
       drivers: [
         `Top holding weight: ${Math.round((singleNameConcentration[0]?.weight ?? 0) * 100)}%.`,
         `Top sector weight: ${Math.round((sectorConcentration[0]?.weight ?? 0) * 100)}%.`,
-        `Distinct sectors represented: ${sectorConcentration.filter((entry) => entry.sector !== "Unclassified").length}.`
+        `Distinct sectors represented: ${sectorConcentration.filter((entry) => entry.sector !== getDefaultSector()).length}.`
       ]
     },
     liquidity: {

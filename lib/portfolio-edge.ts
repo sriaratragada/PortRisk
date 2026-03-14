@@ -6,6 +6,7 @@ import {
   fetchHistoricalSeries,
   fetchQuotes
 } from "@/lib/market";
+import { resolveSector } from "@/lib/sectors";
 import {
   buildHoldingSnapshots,
   buildPortfolioSeries,
@@ -79,10 +80,23 @@ export async function hydratePortfolioRisk(positions: PositionInput[], drawdownT
           ...holding,
           companyName: detail.companyName ?? holding.companyName,
           exchange: detail.exchange ?? holding.exchange,
-          sector: detail.sector ?? holding.sector,
+          sector: resolveSector({
+            ticker: holding.ticker,
+            providerSector: detail.sector ?? holding.sector,
+            providerIndustry: detail.industry ?? holding.industry,
+            assetClass: holding.assetClass
+          }),
           industry: detail.industry ?? holding.industry
         }
-      : holding;
+      : {
+          ...holding,
+          sector: resolveSector({
+            ticker: holding.ticker,
+            providerSector: holding.sector,
+            providerIndustry: holding.industry,
+            assetClass: holding.assetClass
+          })
+        };
   });
   const dailyReturns = computeDailyReturns(series.map((point) => point.value));
   const probabilities = monteCarloDrawdownProbability(dailyReturns, drawdownThreshold);

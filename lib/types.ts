@@ -1,5 +1,8 @@
 export type RiskTier = "LOW" | "MODERATE" | "ELEVATED" | "HIGH";
 export type ChartRange = "1D" | "1W" | "1M" | "3M" | "1Y" | "5Y" | "MAX";
+export type {
+  ResolvedSector
+} from "@/lib/sectors";
 
 export type PositionInput = {
   ticker: string;
@@ -38,7 +41,7 @@ export type HoldingSnapshot = PositionInput & {
   totalGainPercent: number | null;
   companyName?: string;
   exchange?: string;
-  sector?: string;
+  sector?: import("@/lib/sectors").ResolvedSector;
   industry?: string;
 };
 
@@ -64,7 +67,7 @@ export type CompanyDetail = {
   currentPrice: number;
   currency: string;
   marketCap?: number;
-  sector?: string;
+  sector: import("@/lib/sectors").ResolvedSector;
   industry?: string;
   website?: string;
   employeeCount?: number;

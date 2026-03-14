@@ -23,6 +23,7 @@ import {
   YAxis
 } from "recharts";
 import { STRESS_SCENARIOS } from "@/lib/portfolio-edge";
+import { getDefaultSector } from "@/lib/sectors";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { buildFallbackHoldings } from "@/lib/holdings";
 import type {
@@ -480,7 +481,7 @@ function buildFallbackCompanyDetail(holding: HoldingSnapshot): CompanyDetail {
     exchange: holding.exchange ?? "N/A",
     currentPrice: holding.currentPrice ?? 0,
     currency: "USD",
-    sector: holding.sector ?? holding.assetClass?.toUpperCase(),
+    sector: holding.sector ?? getDefaultSector(),
     industry: holding.industry,
     chart: []
   };
@@ -1947,7 +1948,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                           ? `${riskReport.sectorConcentration[0].sector} ${formatPercent(riskReport.sectorConcentration[0].weight)}`
                           : riskReportLoading
                             ? "Loading"
-                            : "Unclassified"
+                            : getDefaultSector()
                       }
                     />
                   </div>
@@ -2218,7 +2219,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   </p>
                   <p className="mt-3 text-xl font-semibold text-white">
                     {riskReport?.sectorConcentration[0]?.sector ??
-                      (riskReportLoading ? "Loading" : "Unclassified")}
+                      (riskReportLoading ? "Loading" : getDefaultSector())}
                   </p>
                   <p className="mt-2 text-sm text-slate-400">
                     {riskReport?.sectorConcentration[0]
@@ -2715,7 +2716,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-md border border-white/10 bg-black/40 p-3">
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Sector</p>
-                      <p className="mt-2 text-sm text-white">{positionPreview.sector ?? "Unclassified"}</p>
+                      <p className="mt-2 text-sm text-white">{positionPreview.sector ?? getDefaultSector()}</p>
                     </div>
                     <div className="rounded-md border border-white/10 bg-black/40 p-3">
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Market Cap</p>

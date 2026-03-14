@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { CHART_RANGE_CONFIG } from "../lib/market-config.ts";
 import { getRangeFromDays, normalizeTimeSeries, normalizeTwelveQuote } from "../lib/market.ts";
+import { getDefaultSector, resolveSector } from "../lib/sectors.ts";
 
 test("chart range config maps long ranges to slower intervals", () => {
   assert.equal(CHART_RANGE_CONFIG["1D"].interval, "5min");
@@ -64,4 +65,47 @@ test("normalizeTimeSeries drops incomplete rows and normalizes datetimes", () =>
   assert.equal(points[0]?.close, 101.25);
   assert.ok(points[0]?.date.endsWith("Z"));
   assert.equal(points[1]?.close, 102.5);
+});
+
+test("resolveSector maps major operating companies into the fixed taxonomy", () => {
+  assert.equal(
+    resolveSector({ ticker: "AAPL", providerSector: "Technology", providerIndustry: "Consumer Electronics" }),
+    "Technology"
+  );
+  assert.equal(
+    resolveSector({ ticker: "NVDA", providerSector: "Technology", providerIndustry: "Semiconductors" }),
+    "Semiconductors"
+  );
+  assert.equal(
+    resolveSector({ ticker: "MSFT", providerSector: "Technology", providerIndustry: "Software - Infrastructure" }),
+    "Software"
+  );
+  assert.equal(
+    resolveSector({ ticker: "AMZN", providerSector: "Consumer Cyclical", providerIndustry: "Internet Retail" }),
+    "Internet & Digital Platforms"
+  );
+  assert.equal(
+    resolveSector({ ticker: "JPM", providerSector: "Financial Services", providerIndustry: "Banks - Diversified" }),
+    "Banks & Insurance"
+  );
+  assert.equal(
+    resolveSector({ ticker: "XOM", providerSector: "Energy", providerIndustry: "Oil & Gas Integrated" }),
+    "Energy"
+  );
+  assert.equal(
+    resolveSector({ ticker: "PFE", providerSector: "Healthcare", providerIndustry: "Drug Manufacturers - General" }),
+    "Healthcare"
+  );
+});
+
+test("resolveSector uses deterministic fallback instead of unclassified", () => {
+  assert.equal(
+    resolveSector({ ticker: "SPY", quoteType: "ETF", providerSector: "", providerIndustry: "" }),
+    "ETFs / Funds / Other"
+  );
+  assert.equal(
+    resolveSector({ ticker: "ZZZZ", providerSector: "", providerIndustry: "", assetClass: "commodities" }),
+    "ETFs / Funds / Other"
+  );
+  assert.equal(getDefaultSector(), "ETFs / Funds / Other");
 });
