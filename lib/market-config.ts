@@ -1,7 +1,7 @@
 import type { ChartRange } from "@/lib/types";
 
 export const TWELVE_DATA_BASE_URL = "https://api.twelvedata.com";
-export const FMP_BASE_URL = "https://financialmodelingprep.com/api/v3";
+export const FMP_BASE_URL = "https://financialmodelingprep.com/stable";
 
 export const TWELVE_DATA_API_KEY = process.env.TWELVE_DATA_API_KEY;
 export const FMP_API_KEY = process.env.FMP_API_KEY;

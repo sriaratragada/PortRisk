@@ -81,15 +81,27 @@ type FmpProfile = {
 type FmpKeyMetrics = {
   marketCap?: number;
   peRatio?: number;
+  peRatioTTM?: number;
   dividendYield?: number;
+  dividendYieldPercentageTTM?: number;
+  currentRatio?: number;
+  currentRatioTTM?: number;
+  returnOnEquity?: number;
+  returnOnEquityTTM?: number;
 };
 
 type FmpRatio = {
   currentRatio?: number;
+  currentRatioTTM?: number;
   quickRatio?: number;
+  quickRatioTTM?: number;
   debtEquityRatio?: number;
+  debtEquityRatioTTM?: number;
   returnOnEquity?: number;
+  returnOnEquityTTM?: number;
   netProfitMargin?: number;
+  netProfitMarginTTM?: number;
+  priceToEarningsRatioTTM?: number;
 };
 
 type FmpGrowth = {
@@ -123,7 +135,9 @@ type FmpQuote = {
 type FundamentalSnapshot = {
   profile?: FmpProfile;
   metrics?: FmpKeyMetrics;
+  annualMetrics?: FmpKeyMetrics;
   ratios?: FmpRatio;
+  annualRatios?: FmpRatio;
   growth?: FmpGrowth;
   cashFlow?: FmpCashFlow;
   balanceSheet?: FmpBalanceSheet;
@@ -333,7 +347,7 @@ function getTwelveTimeSeriesUrl(symbol: string, range: ChartRange) {
 }
 
 function getFmpSearchUrl(query: string) {
-  return getFmpUrl("/stable/search-symbol", {
+  return getFmpUrl("/search-symbol", {
     query,
     limit: "12"
   });
@@ -394,6 +408,15 @@ function buildSecuritySearchRow(
   };
 }
 
+function firstDefined<T>(...values: Array<T | undefined | null>) {
+  for (const value of values) {
+    if (value != null) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 export function normalizeTwelveQuote(
   symbol: string,
   quote: TwelveDataQuoteResponse,
@@ -443,7 +466,16 @@ async function fetchFmpProfile(symbol: string) {
 
 async function fetchFmpMetrics(symbol: string) {
   const response = await fetchProviderJson<FmpKeyMetrics[]>(
-    getFmpUrl(`/key-metrics-ttm/${encodeURIComponent(symbol)}`),
+    getFmpUrl(`/key-metrics-ttm`, { symbol }),
+    "FMP",
+    900
+  );
+  return response[0];
+}
+
+async function fetchFmpAnnualMetrics(symbol: string) {
+  const response = await fetchProviderJson<FmpKeyMetrics[]>(
+    getFmpUrl(`/key-metrics`, { symbol, limit: "1" }),
     "FMP",
     900
   );
@@ -452,7 +484,16 @@ async function fetchFmpMetrics(symbol: string) {
 
 async function fetchFmpRatios(symbol: string) {
   const response = await fetchProviderJson<FmpRatio[]>(
-    getFmpUrl(`/ratios-ttm/${encodeURIComponent(symbol)}`),
+    getFmpUrl(`/ratios-ttm`, { symbol }),
+    "FMP",
+    900
+  );
+  return response[0];
+}
+
+async function fetchFmpAnnualRatios(symbol: string) {
+  const response = await fetchProviderJson<FmpRatio[]>(
+    getFmpUrl(`/ratios`, { symbol, limit: "1" }),
     "FMP",
     900
   );
@@ -461,7 +502,7 @@ async function fetchFmpRatios(symbol: string) {
 
 async function fetchFmpGrowth(symbol: string) {
   const response = await fetchProviderJson<FmpGrowth[]>(
-    getFmpUrl(`/financial-growth/${encodeURIComponent(symbol)}`, { limit: "1" }),
+    getFmpUrl(`/financial-growth`, { symbol, limit: "1" }),
     "FMP",
     900
   );
@@ -470,7 +511,7 @@ async function fetchFmpGrowth(symbol: string) {
 
 async function fetchFmpCashFlow(symbol: string) {
   const response = await fetchProviderJson<FmpCashFlow[]>(
-    getFmpUrl(`/cash-flow-statement/${encodeURIComponent(symbol)}`, { limit: "1" }),
+    getFmpUrl(`/cash-flow-statement`, { symbol, limit: "1" }),
     "FMP",
     900
   );
@@ -479,7 +520,7 @@ async function fetchFmpCashFlow(symbol: string) {
 
 async function fetchFmpBalanceSheet(symbol: string) {
   const response = await fetchProviderJson<FmpBalanceSheet[]>(
-    getFmpUrl(`/balance-sheet-statement/${encodeURIComponent(symbol)}`, { limit: "1" }),
+    getFmpUrl(`/balance-sheet-statement`, { symbol, limit: "1" }),
     "FMP",
     900
   );
@@ -488,7 +529,7 @@ async function fetchFmpBalanceSheet(symbol: string) {
 
 async function fetchFmpQuote(symbol: string) {
   const response = await fetchProviderJson<FmpQuote[]>(
-    getFmpUrl(`/quote/${encodeURIComponent(symbol)}`),
+    getFmpUrl(`/quote`, { symbol }),
     "FMP",
     300
   );
@@ -499,15 +540,28 @@ async function fetchFundamentalSnapshot(symbol: string) {
   const tasks = [
     fetchFmpProfile(symbol).catch(() => undefined),
     fetchFmpMetrics(symbol).catch(() => undefined),
+    fetchFmpAnnualMetrics(symbol).catch(() => undefined),
     fetchFmpRatios(symbol).catch(() => undefined),
+    fetchFmpAnnualRatios(symbol).catch(() => undefined),
     fetchFmpGrowth(symbol).catch(() => undefined),
     fetchFmpCashFlow(symbol).catch(() => undefined),
     fetchFmpBalanceSheet(symbol).catch(() => undefined),
     fetchFmpQuote(symbol).catch(() => undefined)
   ] as const;
 
-  const [profile, metrics, ratios, growth, cashFlow, balanceSheet, quote] = await Promise.all(tasks);
-  return { profile, metrics, ratios, growth, cashFlow, balanceSheet, quote } satisfies FundamentalSnapshot;
+  const [profile, metrics, annualMetrics, ratios, annualRatios, growth, cashFlow, balanceSheet, quote] =
+    await Promise.all(tasks);
+  return {
+    profile,
+    metrics,
+    annualMetrics,
+    ratios,
+    annualRatios,
+    growth,
+    cashFlow,
+    balanceSheet,
+    quote
+  } satisfies FundamentalSnapshot;
 }
 
 export async function fetchSecurityIdentity(symbol: string) {
@@ -538,10 +592,17 @@ export async function fetchSecurityIdentity(symbol: string) {
     quoteType,
     sector,
     industry: profile?.industry ?? override?.industry,
-    marketCap: fundamentals.metrics?.marketCap ?? quote?.marketCap ?? profile?.mktCap,
+    marketCap: firstDefined(
+      fundamentals.metrics?.marketCap,
+      fundamentals.annualMetrics?.marketCap,
+      quote?.marketCap,
+      profile?.mktCap
+    ),
     profile,
     metrics: fundamentals.metrics,
+    annualMetrics: fundamentals.annualMetrics,
     ratios: fundamentals.ratios,
+    annualRatios: fundamentals.annualRatios,
     growth: fundamentals.growth,
     cashFlow: fundamentals.cashFlow,
     balanceSheet: fundamentals.balanceSheet,
@@ -700,17 +761,53 @@ export async function fetchCompanyDetail(
       quote?.fiftyTwoWeekHigh ??
       identity?.quote?.yearHigh ??
       parseRangeValue(identity?.profile?.range, 1),
-    trailingPE: identity?.metrics?.peRatio ?? identity?.quote?.pe ?? quote?.trailingPE,
+    trailingPE: firstDefined(
+      identity?.metrics?.peRatio,
+      identity?.metrics?.peRatioTTM,
+      identity?.ratios?.priceToEarningsRatioTTM,
+      identity?.quote?.pe,
+      quote?.trailingPE
+    ),
     forwardPE: undefined,
-    dividendYield: identity?.metrics?.dividendYield ?? identity?.profile?.lastDiv,
+    dividendYield: firstDefined(
+      identity?.metrics?.dividendYield,
+      identity?.metrics?.dividendYieldPercentageTTM,
+      identity?.profile?.lastDiv
+    ),
     beta: identity?.profile?.beta,
-    profitMargins: identity?.ratios?.netProfitMargin,
+    profitMargins: firstDefined(
+      identity?.ratios?.netProfitMargin,
+      identity?.ratios?.netProfitMarginTTM,
+      identity?.annualRatios?.netProfitMargin
+    ),
     revenueGrowth: identity?.growth?.revenueGrowth,
     earningsGrowth: identity?.growth?.netIncomeGrowth ?? identity?.growth?.epsgrowth,
-    debtToEquity: identity?.ratios?.debtEquityRatio,
-    currentRatio: identity?.ratios?.currentRatio,
-    quickRatio: identity?.ratios?.quickRatio,
-    returnOnEquity: identity?.ratios?.returnOnEquity,
+    debtToEquity: firstDefined(
+      identity?.ratios?.debtEquityRatio,
+      identity?.ratios?.debtEquityRatioTTM,
+      identity?.annualRatios?.debtEquityRatio
+    ),
+    currentRatio: firstDefined(
+      identity?.ratios?.currentRatio,
+      identity?.ratios?.currentRatioTTM,
+      identity?.metrics?.currentRatio,
+      identity?.metrics?.currentRatioTTM,
+      identity?.annualRatios?.currentRatio,
+      identity?.annualMetrics?.currentRatio
+    ),
+    quickRatio: firstDefined(
+      identity?.ratios?.quickRatio,
+      identity?.ratios?.quickRatioTTM,
+      identity?.annualRatios?.quickRatio
+    ),
+    returnOnEquity: firstDefined(
+      identity?.ratios?.returnOnEquity,
+      identity?.ratios?.returnOnEquityTTM,
+      identity?.metrics?.returnOnEquity,
+      identity?.metrics?.returnOnEquityTTM,
+      identity?.annualRatios?.returnOnEquity,
+      identity?.annualMetrics?.returnOnEquity
+    ),
     totalCash: identity?.balanceSheet?.cashAndCashEquivalents,
     totalDebt: identity?.balanceSheet?.totalDebt,
     freeCashflow: identity?.cashFlow?.freeCashFlow,
