@@ -506,6 +506,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [highlightedSearchIndex, setHighlightedSearchIndex] = useState(-1);
+  const [searchQuery, setSearchQuery] = useState("");
   const [positionTicker, setPositionTicker] = useState("");
   const [positionName, setPositionName] = useState("");
   const [positionShares, setPositionShares] = useState("10");
@@ -616,7 +617,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   }, [selectedPortfolio]);
 
   useEffect(() => {
-    if (!searchTerm.trim()) {
+    if (!searchQuery.trim() || selectedSearchResult) {
       setSearchResults([]);
       setHighlightedSearchIndex(-1);
       setSearchLoading(false);
@@ -628,7 +629,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       setSearchLoading(true);
       setSearchError(null);
       try {
-        const response = await fetch(`/api/securities/search?q=${encodeURIComponent(searchTerm)}`, {
+        const response = await fetch(`/api/securities/search?q=${encodeURIComponent(searchQuery)}`, {
           headers: {
             ...(await getAuthHeaders())
           }
@@ -652,7 +653,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     }, 250);
 
     return () => window.clearTimeout(handle);
-  }, [searchTerm]);
+  }, [searchQuery, selectedSearchResult]);
 
   useEffect(() => {
     const ticker = selectedSearchResult?.symbol?.trim().toUpperCase();
@@ -1324,6 +1325,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     setSelectedSearchResult(result);
     setPositionTicker(result.symbol.toUpperCase());
     setPositionName(result.companyName);
+    setSearchQuery(result.symbol);
     setSearchTerm(`${result.symbol} ${result.companyName}`);
     setSearchResults([]);
     setHighlightedSearchIndex(-1);
@@ -1352,6 +1354,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   function resetPositionForm() {
     setPositionTicker("");
     setPositionName("");
+    setSearchQuery("");
     setSearchTerm("");
     setPositionShares("10");
     setPositionAvgCost("100");
@@ -1494,7 +1497,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       return;
     }
 
-    const normalizedTicker = positionTicker.trim().toUpperCase();
+    const normalizedTicker = (selectedSearchResult?.symbol ?? positionTicker).trim().toUpperCase();
     const shares = Number(positionShares);
     const avgCost = Number(positionAvgCost);
 
@@ -1550,6 +1553,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     setEditingTicker(position.ticker);
     setPositionTicker(position.ticker);
     setPositionName(holding?.companyName ?? position.ticker);
+    setSearchQuery(position.ticker);
     setSelectedSearchResult({
       symbol: position.ticker,
       companyName: holding?.companyName ?? position.ticker,
@@ -2646,7 +2650,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 <input
                   value={searchTerm}
                   onChange={(event) => {
-                    setSearchTerm(event.target.value);
+                    const nextQuery = event.target.value;
+                    setSearchTerm(nextQuery);
+                    setSearchQuery(nextQuery);
                     setSelectedSearchResult(null);
                     setPositionTicker("");
                     setPositionName("");
@@ -2656,7 +2662,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   placeholder="AAPL, KO, XOM..."
                   className="w-full rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
                 />
-                {(searchLoading || searchResults.length > 0 || (!!searchTerm.trim() && !positionTicker && !searchLoading)) && (
+                {!selectedSearchResult && (searchLoading || searchResults.length > 0 || (!!searchQuery.trim() && !searchLoading)) && (
                   <div className="absolute left-0 right-0 z-20 mt-2 max-h-80 overflow-y-auto rounded-lg border border-white/10 bg-black/95 shadow-2xl">
                     {searchLoading ? (
                       <div className="px-4 py-3 text-sm text-slate-400">Searching listed tickers...</div>
@@ -2782,7 +2788,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               ) : null}
 
               <div className="flex gap-3">
-              <button className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
+              <button type="submit" className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
                 {editingTicker ? "Update Position" : "Add Position"}
               </button>
               {editingTicker ? (
