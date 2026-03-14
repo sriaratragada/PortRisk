@@ -204,6 +204,29 @@ function EmptyState({
   );
 }
 
+function InlineNotice({
+  message,
+  tone = "neutral"
+}: {
+  message: string;
+  tone?: "neutral" | "warning" | "danger";
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-xl border px-4 py-3 text-sm",
+        tone === "danger"
+          ? "border-danger/30 bg-danger/10 text-danger"
+          : tone === "warning"
+            ? "border-warning/30 bg-warning/10 text-warning"
+            : "border-white/10 bg-white/[0.03] text-slate-300"
+      )}
+    >
+      {message}
+    </div>
+  );
+}
+
 function mapSummary(
   portfolios: Array<{
     id: string;
@@ -433,6 +456,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [highlightedSearchIndex, setHighlightedSearchIndex] = useState(-1);
   const [positionTicker, setPositionTicker] = useState("");
   const [positionName, setPositionName] = useState("");
@@ -465,10 +489,16 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const [positionPreviewLoading, setPositionPreviewLoading] = useState(false);
   const [selectedHoldingDetail, setSelectedHoldingDetail] = useState<CompanyDetail | null>(null);
   const [holdingDetailLoading, setHoldingDetailLoading] = useState(false);
+  const [holdingDetailError, setHoldingDetailError] = useState<string | null>(null);
   const [portfolioRange, setPortfolioRange] = useState<ChartRange>("1M");
   const [holdingRange, setHoldingRange] = useState<ChartRange>("1M");
   const [riskReport, setRiskReport] = useState<RiskReport | null>(null);
   const [riskReportLoading, setRiskReportLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [riskError, setRiskError] = useState<string | null>(null);
+  const [stressError, setStressError] = useState<string | null>(null);
+  const [allocationError, setAllocationError] = useState<string | null>(null);
+  const [auditError, setAuditError] = useState<string | null>(null);
   const [portfolioCardStats, setPortfolioCardStats] = useState<
     Record<string, PortfolioCardStats>
   >(() =>
@@ -537,11 +567,13 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       setSearchResults([]);
       setHighlightedSearchIndex(-1);
       setSearchLoading(false);
+      setSearchError(null);
       return;
     }
 
     const handle = window.setTimeout(async () => {
       setSearchLoading(true);
+      setSearchError(null);
       try {
         const response = await fetch(`/api/portfolio/search?q=${encodeURIComponent(searchTerm)}`, {
           headers: {
@@ -549,6 +581,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           }
         });
         if (!response.ok) {
+          setSearchError(await readErrorMessage(response));
           setSearchResults([]);
           setHighlightedSearchIndex(-1);
           return;
@@ -556,6 +589,10 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         const data = (await response.json()) as { results: SearchResult[] };
         setSearchResults(data.results);
         setHighlightedSearchIndex(data.results.length > 0 ? 0 : -1);
+      } catch (error) {
+        setSearchError(error instanceof Error ? error.message : "Ticker search failed");
+        setSearchResults([]);
+        setHighlightedSearchIndex(-1);
       } finally {
         setSearchLoading(false);
       }
@@ -586,6 +623,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         }
         const data = (await response.json()) as { detail: CompanyDetail };
         setPositionPreview(data.detail);
+      } catch {
+        setPositionPreview(null);
       } finally {
         setPositionPreviewLoading(false);
       }
@@ -709,6 +748,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
     async function loadRiskReport() {
       setRiskReportLoading(true);
+      setRiskError(null);
       try {
         const response = await fetch(
           `/api/risk/report?portfolioId=${portfolioId}`,
@@ -722,12 +762,19 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         if (!response.ok) {
           if (!controller.signal.aborted) {
             setRiskReport(null);
+            setRiskError(await readErrorMessage(response));
           }
           return;
         }
-        const data = (await response.json()) as { report: RiskReport | null };
+        const data = (await response.json()) as { report: RiskReport | null; error?: string };
         if (!controller.signal.aborted) {
           setRiskReport(data.report);
+          setRiskError(data.report ? null : data.error ?? "Risk report unavailable");
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setRiskReport(null);
+          setRiskError(error instanceof Error ? error.message : "Risk report unavailable");
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -747,6 +794,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
     let cancelled = false;
     setHistoryLoading(true);
+    setHistoryError(null);
     void loadPortfolioHistory(selectedPortfolioId, portfolioRange)
       .then((history) => {
         if (cancelled) return;
@@ -761,7 +809,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       })
       .catch((error) => {
         if (!cancelled) {
-          setErrorMessage(error instanceof Error ? error.message : "Failed to load history");
+          setHistoryError(error instanceof Error ? error.message : "Failed to load history");
         }
       })
       .finally(() => {
@@ -793,10 +841,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
     let cancelled = false;
     setHoldingDetailLoading(true);
+    setHoldingDetailError(null);
     void loadHoldingDetail(selectedHoldingDetail.ticker, holdingRange)
       .catch((error) => {
         if (!cancelled) {
-          setErrorMessage(
+          setHoldingDetailError(
             error instanceof Error ? error.message : "Failed to load company detail"
           );
         }
@@ -967,6 +1016,12 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   async function loadPortfolio(portfolioId: string) {
     setPortfolioLoading(true);
     setErrorMessage(null);
+    setHistoryError(null);
+    setRiskError(null);
+    setStressError(null);
+    setAllocationError(null);
+    setAuditError(null);
+    setHoldingDetailError(null);
 
     try {
       const authHeaders = await getAuthHeaders();
@@ -1031,7 +1086,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 : current
             );
           })
-          .catch(() => {
+          .catch((error) => {
+            setHistoryError(error instanceof Error ? error.message : "Performance history unavailable");
             setSelectedPortfolio((current) =>
               current && current.id === portfolioId
                 ? {
@@ -1058,6 +1114,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           })
             .then(async (riskResponse) => {
               if (!riskResponse.ok) {
+                setRiskError(await readErrorMessage(riskResponse));
                 return;
               }
               const riskData = (await riskResponse.json()) as {
@@ -1069,12 +1126,15 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   ? {
                       ...current,
                       holdings: mergeHydratedHoldings(current.positions, riskData.holdings ?? []),
-                      metrics: riskData.metrics ?? current.metrics
-                    }
+                    metrics: riskData.metrics ?? current.metrics
+                  }
                   : current
               );
+              setRiskError(null);
             })
-            .catch(() => undefined)
+            .catch((error) => {
+              setRiskError(error instanceof Error ? error.message : "Live pricing and risk are unavailable");
+            })
         );
       }
 
@@ -1088,7 +1148,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
   async function refreshAudit() {
     if (!selectedPortfolioId) {
-      return;
+      return false;
     }
 
     const params = new URLSearchParams({
@@ -1110,6 +1170,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     }
     const data = (await response.json()) as { items: AuditEntryView[] };
     setAuditRows(data.items);
+    setAuditError(null);
+    return true;
   }
 
   async function createPortfolio(event: FormEvent<HTMLFormElement>) {
@@ -1160,6 +1222,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     setSearchTerm(`${result.symbol} ${result.shortname}`);
     setSearchResults([]);
     setHighlightedSearchIndex(-1);
+    setSearchError(null);
   }
 
   function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -1399,6 +1462,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   async function openHoldingDetail(ticker: string) {
     setHoldingDetailLoading(true);
     setSelectedHoldingDetail(null);
+    setHoldingDetailError(null);
     try {
       await loadHoldingDetail(ticker, holdingRange);
     } catch (error) {
@@ -1406,7 +1470,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       if (fallbackHolding) {
         setSelectedHoldingDetail(buildFallbackCompanyDetail(fallbackHolding));
       }
-      setErrorMessage(
+      setHoldingDetailError(
         error instanceof Error ? error.message : "Failed to load company detail"
       );
     } finally {
@@ -1421,6 +1485,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
     startTransition(async () => {
       try {
+        setRiskError(null);
         const response = await fetch("/api/risk/score", {
           method: "POST",
           headers: {
@@ -1459,12 +1524,16 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         });
         if (persist) {
           await refreshPortfolioList();
-          await refreshAudit();
+          try {
+            await refreshAudit();
+          } catch (error) {
+            setAuditError(error instanceof Error ? error.message : "Audit refresh failed");
+          }
           setRiskReport(null);
           setStatusMessage("Risk score refreshed.");
         }
       } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : "Risk scoring failed");
+        setRiskError(error instanceof Error ? error.message : "Risk scoring failed");
       }
     });
   }
@@ -1476,6 +1545,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
     startTransition(async () => {
       try {
+        setStressError(null);
         const response = await fetch("/api/stress", {
           method: "POST",
           headers: {
@@ -1498,7 +1568,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         await loadPortfolio(selectedPortfolio.id);
         setStatusMessage("Stress test completed.");
       } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : "Stress test failed");
+        setStressError(error instanceof Error ? error.message : "Stress test failed");
       }
     });
   }
@@ -1510,9 +1580,10 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
     const totalWeight = Object.values(allocationWeights).reduce((sum, value) => sum + value, 0);
     if (totalWeight <= 0) {
-      setErrorMessage("Target weights must sum to more than zero.");
+      setAllocationError("Target weights must sum to more than zero.");
       return;
     }
+    setAllocationError(null);
 
     const normalized = Object.fromEntries(
       Object.entries(allocationWeights).map(([ticker, weight]) => [ticker, weight / totalWeight])
@@ -1528,7 +1599,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       };
     });
 
-    await commitAllocationPositions(nextPositions, "Allocation committed.");
+    const committed = await commitAllocationPositions(nextPositions, "Allocation committed.");
+    if (!committed) {
+      setAllocationError("Allocation commit failed.");
+      return;
+    }
     await rerunRiskScore(true);
   }
 
@@ -2054,6 +2129,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         title="Portfolio Performance"
         action={<RangeSelector value={portfolioRange} onChange={setPortfolioRange} />}
       >
+        {historyError ? <div className="mb-4"><InlineNotice message={historyError} tone="warning" /></div> : null}
         {!selectedPortfolio || selectedPortfolio.valueHistory.length === 0 ? (
           <EmptyState
             title="No performance history yet"
@@ -2149,6 +2225,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
       <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
         <Panel title="Current Holdings" action={<span className="text-xs text-slate-500">Portfolio-scoped</span>}>
+          {riskError ? <div className="mb-4"><InlineNotice message={riskError} tone="warning" /></div> : null}
           {!selectedPortfolio ? (
             <EmptyState
               title="Select or create a portfolio"
@@ -2256,6 +2333,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               </label>
               <div className="relative">
                 <label className="mb-2 block text-sm text-slate-300">Search listed ticker</label>
+                {searchError ? <div className="mb-2"><InlineNotice message={searchError} tone="warning" /></div> : null}
                 <input
                   value={searchTerm}
                   onChange={(event) => {
@@ -2427,6 +2505,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             )
           }
         >
+          {riskError ? <div className="mb-4"><InlineNotice message={riskError} tone="warning" /></div> : null}
           {!selectedMetrics ? (
             <EmptyState
               title="No risk metrics yet"
@@ -2529,6 +2608,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             ) : null
           }
         >
+          {riskError && !riskReport ? (
+            <div className="mb-4"><InlineNotice message={riskError} tone="warning" /></div>
+          ) : null}
           {!selectedPortfolio || selectedPortfolio.holdings.length === 0 ? (
             <EmptyState
               title="No holdings to analyze"
@@ -2698,6 +2780,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
       <Panel title="Scenario Runner">
         <div className="space-y-4">
+          {stressError ? <InlineNotice message={stressError} tone="warning" /> : null}
           <select
             className="w-full rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
             value={stressScenario}
@@ -2795,6 +2878,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const renderAllocation = () => (
     <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
       <Panel title="Target Weights">
+        {allocationError ? <div className="mb-4"><InlineNotice message={allocationError} tone="warning" /></div> : null}
         {!selectedPortfolio || selectedPortfolio.holdings.length === 0 || !selectedMetrics ? (
           <EmptyState
             title="No holdings to rebalance"
@@ -2871,6 +2955,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const renderAudit = () => (
     <div className="space-y-6">
       <Panel title="Filters">
+        {auditError ? <div className="mb-4"><InlineNotice message={auditError} tone="warning" /></div> : null}
         <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr_auto]">
           <select
             value={auditActionType}
@@ -2898,7 +2983,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             className="rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
           />
           <button
-            onClick={() => void refreshAudit()}
+            onClick={() =>
+              void refreshAudit().catch((error) =>
+                setAuditError(error instanceof Error ? error.message : "Audit refresh failed")
+              )
+            }
             className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
           >
             Apply
@@ -3099,6 +3188,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               </div>
             ) : (
               <div className="space-y-6">
+                {holdingDetailError ? <InlineNotice message={holdingDetailError} tone="warning" /> : null}
                 <div className="rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.04] to-transparent p-5">
                   <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr] lg:items-end">
                     <div>
