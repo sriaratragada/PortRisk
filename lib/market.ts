@@ -6,7 +6,14 @@ import {
   TWELVE_DATA_BASE_URL
 } from "@/lib/market-config";
 import { resolveSector } from "@/lib/sectors";
-import type { ChartRange, CompanyDetail, HistoricalPoint, MarketQuote } from "@/lib/types";
+import type {
+  ChartRange,
+  CompanyDetail,
+  HistoricalPoint,
+  MarketQuote,
+  SecurityPreview,
+  SecuritySearchResult
+} from "@/lib/types";
 
 const quoteCache = new Map<string, { expiresAt: number; data: MarketQuote }>();
 const historyCache = new Map<string, { expiresAt: number; data: HistoricalPoint[] }>();
@@ -65,6 +72,10 @@ type FmpProfile = {
   beta?: number;
   lastDiv?: number;
   range?: string;
+  isEtf?: boolean;
+  isFund?: boolean;
+  isAdr?: boolean;
+  isActivelyTrading?: boolean;
 };
 
 type FmpKeyMetrics = {
@@ -119,11 +130,13 @@ type FundamentalSnapshot = {
   quote?: FmpQuote;
 };
 
-type SearchRow = {
-  symbol: string;
-  shortname: string;
-  exchange: string;
-  quoteType: string;
+type FmpSearchSymbol = {
+  symbol?: string;
+  name?: string;
+  exchange?: string;
+  exchangeFullName?: string;
+  type?: string;
+  currency?: string;
 };
 
 const COMPANY_DETAIL_OVERRIDES: Record<
@@ -212,10 +225,10 @@ function resolveCompanyOverride(symbol: string) {
   return COMPANY_DETAIL_OVERRIDES[symbol.toUpperCase()];
 }
 
-function scoreSearchRow(row: SearchRow, query: string) {
+function scoreSearchRow(row: SecuritySearchResult, query: string) {
   const normalizedQuery = normalizeText(query);
   const symbol = normalizeText(row.symbol);
-  const shortname = normalizeText(row.shortname);
+  const shortname = normalizeText(row.companyName);
   const exchange = normalizeText(row.exchange);
 
   let score = 0;
@@ -230,9 +243,9 @@ function scoreSearchRow(row: SearchRow, query: string) {
   return score;
 }
 
-function dedupeAndRankSearchRows(rows: SearchRow[], query: string) {
+function dedupeAndRankSearchRows(rows: SecuritySearchResult[], query: string) {
   const normalizedQuery = normalizeText(query);
-  const deduped = new Map<string, SearchRow>();
+  const deduped = new Map<string, SecuritySearchResult>();
   for (const row of rows) {
     const symbol = normalizeText(row.symbol);
     if (!symbol) continue;
@@ -257,7 +270,9 @@ function dedupeAndRankSearchRows(rows: SearchRow[], query: string) {
     return symbolPrefixMatches.slice(0, 10);
   }
 
-  const namePrefixMatches = ranked.filter((row) => normalizeText(row.shortname).startsWith(normalizedQuery));
+  const namePrefixMatches = ranked.filter((row) =>
+    normalizeText(row.companyName).startsWith(normalizedQuery)
+  );
   if (namePrefixMatches.length > 0) {
     return namePrefixMatches.slice(0, 10);
   }
@@ -317,19 +332,10 @@ function getTwelveTimeSeriesUrl(symbol: string, range: ChartRange) {
   return { url: url.toString(), revalidateSeconds: config.revalidateSeconds };
 }
 
-function getTwelveSearchUrl(query: string) {
-  const url = new URL(`${TWELVE_DATA_BASE_URL}/symbol_search`);
-  url.searchParams.set("apikey", TWELVE_DATA_API_KEY ?? "");
-  url.searchParams.set("symbol", query.toUpperCase());
-  url.searchParams.set("outputsize", "12");
-  return url.toString();
-}
-
 function getFmpSearchUrl(query: string) {
-  return getFmpUrl("/search", {
+  return getFmpUrl("/stable/search-symbol", {
     query,
-    limit: "8",
-    exchange: "NASDAQ,NYSE,AMEX"
+    limit: "12"
   });
 }
 
@@ -340,6 +346,52 @@ function getFmpUrl(path: string, query: Record<string, string> = {}) {
     url.searchParams.set(key, value);
   }
   return url.toString();
+}
+
+function buildQuoteType(input: {
+  isEtf?: boolean;
+  isFund?: boolean;
+  sector?: string;
+  type?: string;
+}) {
+  if (input.isEtf) return "ETF";
+  if (input.isFund) return "Fund";
+  if (input.type) return input.type;
+  if (input.sector) return "Equity";
+  return "Security";
+}
+
+function buildResolvedSector(input: {
+  ticker: string;
+  providerSector?: string;
+  providerIndustry?: string;
+  quoteType?: string;
+  assetClass?: string;
+}) {
+  return resolveSector({
+    ticker: input.ticker,
+    providerSector: input.providerSector,
+    providerIndustry: input.providerIndustry,
+    quoteType: input.quoteType,
+    assetClass: input.assetClass
+  });
+}
+
+function buildSecuritySearchRow(
+  symbol: string,
+  companyName: string,
+  exchange: string,
+  quoteType: string,
+  sector?: SecuritySearchResult["sector"]
+): SecuritySearchResult {
+  return {
+    symbol: symbol.toUpperCase(),
+    companyName,
+    exchange,
+    quoteType,
+    sector,
+    hasPreviewData: true
+  };
 }
 
 export function normalizeTwelveQuote(
@@ -456,6 +508,45 @@ async function fetchFundamentalSnapshot(symbol: string) {
 
   const [profile, metrics, ratios, growth, cashFlow, balanceSheet, quote] = await Promise.all(tasks);
   return { profile, metrics, ratios, growth, cashFlow, balanceSheet, quote } satisfies FundamentalSnapshot;
+}
+
+export async function fetchSecurityIdentity(symbol: string) {
+  const normalizedSymbol = symbol.toUpperCase();
+  const fundamentals: FundamentalSnapshot = FMP_API_KEY
+    ? await fetchFundamentalSnapshot(normalizedSymbol)
+    : {};
+  const profile = fundamentals.profile;
+  const quote = fundamentals.quote;
+  const override = resolveCompanyOverride(normalizedSymbol);
+  const quoteType = buildQuoteType({
+    isEtf: profile?.isEtf,
+    isFund: profile?.isFund,
+    sector: profile?.sector
+  });
+  const sector = buildResolvedSector({
+    ticker: normalizedSymbol,
+    providerSector: profile?.sector,
+    providerIndustry: profile?.industry ?? override?.industry,
+    quoteType
+  });
+
+  return {
+    symbol: normalizedSymbol,
+    companyName: profile?.companyName ?? quote?.name ?? override?.companyName ?? normalizedSymbol,
+    exchange:
+      profile?.exchangeShortName ?? profile?.exchange ?? quote?.exchange ?? override?.exchange ?? "Unknown",
+    quoteType,
+    sector,
+    industry: profile?.industry ?? override?.industry,
+    marketCap: fundamentals.metrics?.marketCap ?? quote?.marketCap ?? profile?.mktCap,
+    profile,
+    metrics: fundamentals.metrics,
+    ratios: fundamentals.ratios,
+    growth: fundamentals.growth,
+    cashFlow: fundamentals.cashFlow,
+    balanceSheet: fundamentals.balanceSheet,
+    quote
+  };
 }
 
 export async function fetchQuote(symbol: string): Promise<MarketQuote> {
@@ -575,79 +666,55 @@ export async function fetchCompanyDetail(
     return cached.data;
   }
 
-  const [quoteResult, chartResult, fundamentalsResult] = await Promise.allSettled([
+  const [quoteResult, chartResult, identityResult] = await Promise.allSettled([
     fetchQuote(normalizedSymbol),
     fetchHistoricalSeries(normalizedSymbol, range),
-    FMP_API_KEY ? fetchFundamentalSnapshot(normalizedSymbol) : Promise.resolve({})
+    fetchSecurityIdentity(normalizedSymbol)
   ]);
 
   const quote = quoteResult.status === "fulfilled" ? quoteResult.value : undefined;
   const chart = chartResult.status === "fulfilled" ? chartResult.value : [];
-  const fundamentals: FundamentalSnapshot =
-    fundamentalsResult.status === "fulfilled"
-      ? (fundamentalsResult.value as FundamentalSnapshot)
-      : {};
+  const identity = identityResult.status === "fulfilled" ? identityResult.value : null;
 
-  const profile = fundamentals.profile;
-  const metrics = fundamentals.metrics;
-  const ratios = fundamentals.ratios;
-  const growth = fundamentals.growth;
-  const cashFlow = fundamentals.cashFlow;
-  const balanceSheet = fundamentals.balanceSheet;
-  const fmpQuote = fundamentals.quote;
-
-  if (!quote && !profile && !fmpQuote && chart.length === 0) {
+  if (!quote && !identity && chart.length === 0) {
     throw new Error(`Failed to load company detail for ${normalizedSymbol}`);
   }
 
-  const override = resolveCompanyOverride(normalizedSymbol);
-  const resolvedSector = resolveSector({
-    ticker: normalizedSymbol,
-    providerSector: profile?.sector,
-    providerIndustry: profile?.industry ?? override?.industry,
-    assetClass: "equities"
-  });
   const data: CompanyDetail = {
     ticker: normalizedSymbol,
-    companyName:
-      profile?.companyName ??
-      quote?.longName ??
-      quote?.shortName ??
-      fmpQuote?.name ??
-      override?.companyName ??
-      normalizedSymbol,
-    exchange:
-      profile?.exchangeShortName ??
-      profile?.exchange ??
-      fmpQuote?.exchange ??
-      quote?.exchange ??
-      override?.exchange ??
-      "Unknown",
-    currentPrice: quote?.price ?? fmpQuote?.price ?? 0,
+    companyName: identity?.companyName ?? quote?.longName ?? quote?.shortName ?? normalizedSymbol,
+    exchange: identity?.exchange ?? quote?.exchange ?? "Unknown",
+    currentPrice: quote?.price ?? identity?.quote?.price ?? 0,
     currency: quote?.currency ?? "USD",
-    marketCap: metrics?.marketCap ?? fmpQuote?.marketCap ?? profile?.mktCap ?? quote?.marketCap,
-    sector: resolvedSector,
-    industry: profile?.industry ?? override?.industry,
-    website: profile?.website,
-    employeeCount: parseEmployeeCount(profile?.fullTimeEmployees),
-    summary: profile?.description,
-    fiftyTwoWeekLow: quote?.fiftyTwoWeekLow ?? fmpQuote?.yearLow ?? parseRangeValue(profile?.range, 0),
-    fiftyTwoWeekHigh: quote?.fiftyTwoWeekHigh ?? fmpQuote?.yearHigh ?? parseRangeValue(profile?.range, 1),
-    trailingPE: metrics?.peRatio ?? fmpQuote?.pe ?? quote?.trailingPE,
+    marketCap: identity?.marketCap ?? quote?.marketCap,
+    sector: identity?.sector ?? buildResolvedSector({ ticker: normalizedSymbol, quoteType: identity?.quoteType }),
+    industry: identity?.industry,
+    website: identity?.profile?.website,
+    employeeCount: parseEmployeeCount(identity?.profile?.fullTimeEmployees),
+    summary: identity?.profile?.description,
+    fiftyTwoWeekLow:
+      quote?.fiftyTwoWeekLow ??
+      identity?.quote?.yearLow ??
+      parseRangeValue(identity?.profile?.range, 0),
+    fiftyTwoWeekHigh:
+      quote?.fiftyTwoWeekHigh ??
+      identity?.quote?.yearHigh ??
+      parseRangeValue(identity?.profile?.range, 1),
+    trailingPE: identity?.metrics?.peRatio ?? identity?.quote?.pe ?? quote?.trailingPE,
     forwardPE: undefined,
-    dividendYield: metrics?.dividendYield ?? profile?.lastDiv,
-    beta: profile?.beta,
-    profitMargins: ratios?.netProfitMargin,
-    revenueGrowth: growth?.revenueGrowth,
-    earningsGrowth: growth?.netIncomeGrowth ?? growth?.epsgrowth,
-    debtToEquity: ratios?.debtEquityRatio,
-    currentRatio: ratios?.currentRatio,
-    quickRatio: ratios?.quickRatio,
-    returnOnEquity: ratios?.returnOnEquity,
-    totalCash: balanceSheet?.cashAndCashEquivalents,
-    totalDebt: balanceSheet?.totalDebt,
-    freeCashflow: cashFlow?.freeCashFlow,
-    operatingCashflow: cashFlow?.operatingCashFlow,
+    dividendYield: identity?.metrics?.dividendYield ?? identity?.profile?.lastDiv,
+    beta: identity?.profile?.beta,
+    profitMargins: identity?.ratios?.netProfitMargin,
+    revenueGrowth: identity?.growth?.revenueGrowth,
+    earningsGrowth: identity?.growth?.netIncomeGrowth ?? identity?.growth?.epsgrowth,
+    debtToEquity: identity?.ratios?.debtEquityRatio,
+    currentRatio: identity?.ratios?.currentRatio,
+    quickRatio: identity?.ratios?.quickRatio,
+    returnOnEquity: identity?.ratios?.returnOnEquity,
+    totalCash: identity?.balanceSheet?.cashAndCashEquivalents,
+    totalDebt: identity?.balanceSheet?.totalDebt,
+    freeCashflow: identity?.cashFlow?.freeCashFlow,
+    operatingCashflow: identity?.cashFlow?.operatingCashFlow,
     targetMeanPrice: undefined,
     chart
   };
@@ -669,51 +736,66 @@ export async function fetchCompanyDetails(symbols: string[]) {
     .map((result) => result.value);
 }
 
-export async function searchTickers(query: string) {
+export async function fetchSecurityPreview(symbol: string): Promise<SecurityPreview> {
+  const normalizedSymbol = symbol.toUpperCase();
+  const [identityResult, quoteResult] = await Promise.allSettled([
+    fetchSecurityIdentity(normalizedSymbol),
+    fetchQuote(normalizedSymbol)
+  ]);
+
+  if (identityResult.status !== "fulfilled") {
+    throw new Error(`Failed to load security preview for ${normalizedSymbol}`);
+  }
+
+  const identity = identityResult.value;
+  const quote = quoteResult.status === "fulfilled" ? quoteResult.value : null;
+  const dataStatus: SecurityPreview["dataStatus"] = quote
+    ? "full"
+    : identity.companyName
+      ? "price_unavailable"
+      : "identity_only";
+
+  return {
+    symbol: identity.symbol,
+    companyName: identity.companyName,
+    exchange: identity.exchange,
+    quoteType: identity.quoteType,
+    sector: identity.sector,
+    industry: identity.industry,
+    marketCap: identity.marketCap,
+    currentPrice: quote?.price ?? null,
+    changePercent: quote?.changePercent ?? null,
+    dataStatus
+  };
+}
+
+export async function searchTickers(query: string): Promise<SecuritySearchResult[]> {
   const normalizedQuery = query.trim();
   if (!normalizedQuery) {
     return [];
   }
 
-  const [twelveResults, fmpResults] = await Promise.all([
-    TWELVE_DATA_API_KEY
-      ? fetchProviderJson<TwelveDataSymbolSearchResponse>(
-          getTwelveSearchUrl(normalizedQuery),
-          "Twelve Data",
-          60
-        ).catch(() => ({ data: [] }) as TwelveDataSymbolSearchResponse)
-      : Promise.resolve({ data: [] } as TwelveDataSymbolSearchResponse),
-    FMP_API_KEY
-      ? fetchProviderJson<Array<{ symbol?: string; name?: string; exchangeShortName?: string }>>(
-          getFmpSearchUrl(normalizedQuery),
-          "FMP",
-          60
-        ).catch(() => [])
-      : Promise.resolve([])
-  ]);
+  const fmpResults = FMP_API_KEY
+    ? await fetchProviderJson<FmpSearchSymbol[]>(
+        getFmpSearchUrl(normalizedQuery),
+        "FMP",
+        60
+      ).catch(() => [])
+    : [];
 
-  const rows: SearchRow[] = [
-    ...(twelveResults.data ?? [])
-      .map((quote) => ({
-        symbol: quote.symbol ?? "",
-        shortname: quote.instrument_name ?? "",
-        exchange: quote.exchange ?? quote.mic_code ?? "",
-        quoteType: quote.type ?? ""
-      }))
-      .filter((quote) => {
-        if (!quote.symbol) return false;
-        const type = quote.quoteType.toLowerCase();
-        return type.includes("stock") || type.includes("equity") || type.includes("etf");
-      }),
-    ...fmpResults
-      .map((quote) => ({
-        symbol: quote.symbol ?? "",
-        shortname: quote.name ?? "",
-        exchange: quote.exchangeShortName ?? "",
-        quoteType: "equity"
-      }))
-      .filter((quote) => Boolean(quote.symbol))
-  ];
+  const rows = fmpResults
+    .map((quote) => {
+      const symbol = quote.symbol?.trim().toUpperCase();
+      const companyName = quote.name?.trim() ?? "";
+      if (!symbol || !companyName) return null;
+      return buildSecuritySearchRow(
+        symbol,
+        companyName,
+        quote.exchange ?? quote.exchangeFullName ?? "US",
+        buildQuoteType({ type: quote.type, sector: "equity" })
+      );
+    })
+    .filter((row): row is SecuritySearchResult => row !== null);
 
   return dedupeAndRankSearchRows(rows, normalizedQuery);
 }

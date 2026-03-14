@@ -33,7 +33,9 @@ import type {
   PositionInput,
   RiskInsight,
   RiskReport,
-  RiskTier
+  RiskTier,
+  SecurityPreview,
+  SecuritySearchResult
 } from "@/lib/types";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 import type {
@@ -51,15 +53,6 @@ type TabId =
   | "allocation"
   | "audit"
   | "settings";
-
-type SearchResult = {
-  symbol: string;
-  shortname: string;
-  exchange: string;
-  quoteType: string;
-  currentPrice?: number | null;
-  changePercent?: number | null;
-};
 
 type PortfolioCardStats = {
   portfolioValue: number | null;
@@ -509,7 +502,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchResults, setSearchResults] = useState<SecuritySearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [highlightedSearchIndex, setHighlightedSearchIndex] = useState(-1);
@@ -540,7 +533,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     useState<WorkspacePortfolio["metrics"]>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [positionPreview, setPositionPreview] = useState<CompanyDetail | null>(null);
+  const [selectedSearchResult, setSelectedSearchResult] = useState<SecuritySearchResult | null>(null);
+  const [positionPreview, setPositionPreview] = useState<SecurityPreview | null>(null);
   const [positionPreviewLoading, setPositionPreviewLoading] = useState(false);
   const [selectedHoldingDetail, setSelectedHoldingDetail] = useState<CompanyDetail | null>(null);
   const [holdingDetailLoading, setHoldingDetailLoading] = useState(false);
@@ -634,7 +628,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       setSearchLoading(true);
       setSearchError(null);
       try {
-        const response = await fetch(`/api/portfolio/search?q=${encodeURIComponent(searchTerm)}`, {
+        const response = await fetch(`/api/securities/search?q=${encodeURIComponent(searchTerm)}`, {
           headers: {
             ...(await getAuthHeaders())
           }
@@ -645,7 +639,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           setHighlightedSearchIndex(-1);
           return;
         }
-        const data = (await response.json()) as { results: SearchResult[] };
+        const data = (await response.json()) as { results: SecuritySearchResult[] };
         setSearchResults(data.results);
         setHighlightedSearchIndex(data.results.length > 0 ? 0 : -1);
       } catch (error) {
@@ -661,7 +655,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   }, [searchTerm]);
 
   useEffect(() => {
-    const ticker = positionTicker.trim().toUpperCase();
+    const ticker = selectedSearchResult?.symbol?.trim().toUpperCase();
     if (!ticker) {
       setPositionPreview(null);
       setPositionPreviewLoading(false);
@@ -671,7 +665,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     const handle = window.setTimeout(async () => {
       setPositionPreviewLoading(true);
       try {
-        const response = await fetch(`/api/company/${encodeURIComponent(ticker)}`, {
+        const response = await fetch(`/api/securities/${encodeURIComponent(ticker)}/preview`, {
           headers: {
             ...(await getAuthHeaders())
           }
@@ -680,8 +674,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           setPositionPreview(null);
           return;
         }
-        const data = (await response.json()) as { detail: CompanyDetail };
-        setPositionPreview(data.detail);
+        const data = (await response.json()) as { preview: SecurityPreview };
+        setPositionPreview(data.preview);
       } catch {
         setPositionPreview(null);
       } finally {
@@ -690,7 +684,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     }, 180);
 
     return () => window.clearTimeout(handle);
-  }, [positionTicker]);
+  }, [selectedSearchResult?.symbol]);
 
   useEffect(() => {
     if (!selectedPortfolio || activeTab !== "allocation" || selectedPortfolio.holdings.length === 0) {
@@ -1326,10 +1320,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     });
   }
 
-  function applySearchResult(result: SearchResult) {
+  function applySearchResult(result: SecuritySearchResult) {
+    setSelectedSearchResult(result);
     setPositionTicker(result.symbol.toUpperCase());
-    setPositionName(result.shortname);
-    setSearchTerm(`${result.symbol} ${result.shortname}`);
+    setPositionName(result.companyName);
+    setSearchTerm(`${result.symbol} ${result.companyName}`);
     setSearchResults([]);
     setHighlightedSearchIndex(-1);
     setSearchError(null);
@@ -1362,6 +1357,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     setPositionAvgCost("100");
     setPositionAssetClass("equities");
     setEditingTicker(null);
+    setSelectedSearchResult(null);
     setPositionPreview(null);
   }
 
@@ -1498,14 +1494,16 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       return;
     }
 
-    const normalizedTicker = (positionTicker || searchTerm.split(/\s+/)[0] || "")
-      .trim()
-      .toUpperCase();
+    const normalizedTicker = positionTicker.trim().toUpperCase();
     const shares = Number(positionShares);
     const avgCost = Number(positionAvgCost);
 
     if (!normalizedTicker) {
       setErrorMessage("Choose a ticker before adding a position.");
+      return;
+    }
+    if (!editingTicker && (!selectedSearchResult || selectedSearchResult.symbol !== normalizedTicker)) {
+      setErrorMessage("Select a listed security from search results before adding a position.");
       return;
     }
     if (!Number.isFinite(shares) || shares <= 0) {
@@ -1552,6 +1550,14 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     setEditingTicker(position.ticker);
     setPositionTicker(position.ticker);
     setPositionName(holding?.companyName ?? position.ticker);
+    setSelectedSearchResult({
+      symbol: position.ticker,
+      companyName: holding?.companyName ?? position.ticker,
+      exchange: holding?.exchange ?? "Unknown",
+      quoteType: "Equity",
+      sector: holding?.sector,
+      hasPreviewData: true
+    });
     setSearchTerm(
       holding?.companyName ? `${position.ticker} ${holding.companyName}` : position.ticker
     );
@@ -2641,8 +2647,10 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   value={searchTerm}
                   onChange={(event) => {
                     setSearchTerm(event.target.value);
+                    setSelectedSearchResult(null);
                     setPositionTicker("");
                     setPositionName("");
+                    setPositionPreview(null);
                   }}
                   onKeyDown={handleSearchKeyDown}
                   placeholder="AAPL, KO, XOM..."
@@ -2670,20 +2678,15 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                           <div>
                             <div className="flex items-center gap-2">
                               <p className="font-medium text-white">{result.symbol}</p>
-                              {result.currentPrice != null ? (
-                                <span className="text-xs text-slate-400">{formatCurrency(result.currentPrice)}</span>
+                              {result.sector ? (
+                                <span className="text-xs text-slate-400">{result.sector}</span>
                               ) : null}
                             </div>
-                            <p className="mt-1 text-slate-400">{result.shortname}</p>
+                            <p className="mt-1 text-slate-400">{result.companyName}</p>
                           </div>
                           <div className="text-right text-xs uppercase tracking-[0.2em] text-slate-500">
                             <p>{result.exchange || "US"}</p>
                             <p className="mt-1">{result.quoteType}</p>
-                            {result.changePercent != null ? (
-                              <p className={cn("mt-1", result.changePercent >= 0 ? "text-success" : "text-danger")}>
-                                {formatPercent(result.changePercent)}
-                              </p>
-                            ) : null}
                           </div>
                         </button>
                       ))
@@ -2702,21 +2705,25 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     {positionName ? <p className="mt-1 text-sm text-slate-500">{positionName}</p> : null}
                   </div>
                   {positionPreviewLoading ? (
-                    <span className="text-sm text-slate-500">Loading quote...</span>
+                    <span className="text-sm text-slate-500">Loading preview...</span>
                   ) : positionPreview ? (
                     <div className="text-right">
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Current Price</p>
                       <p className="mt-1 text-lg font-semibold text-white">
-                        {formatCurrency(positionPreview.currentPrice)}
+                        {formatCurrency(positionPreview.currentPrice ?? null)}
                       </p>
                     </div>
                   ) : null}
                 </div>
                 {positionPreview ? (
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
                     <div className="rounded-md border border-white/10 bg-black/40 p-3">
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Sector</p>
                       <p className="mt-2 text-sm text-white">{positionPreview.sector ?? getDefaultSector()}</p>
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-black/40 p-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Exchange</p>
+                      <p className="mt-2 text-sm text-white">{positionPreview.exchange}</p>
                     </div>
                     <div className="rounded-md border border-white/10 bg-black/40 p-3">
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Market Cap</p>

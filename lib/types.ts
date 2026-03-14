@@ -31,6 +31,28 @@ export type HistoricalPoint = {
   close: number;
 };
 
+export type SecuritySearchResult = {
+  symbol: string;
+  companyName: string;
+  exchange: string;
+  quoteType: string;
+  sector?: import("@/lib/sectors").ResolvedSector;
+  hasPreviewData: boolean;
+};
+
+export type SecurityPreview = {
+  symbol: string;
+  companyName: string;
+  exchange: string;
+  quoteType: string;
+  sector: import("@/lib/sectors").ResolvedSector;
+  industry?: string;
+  marketCap?: number;
+  currentPrice?: number | null;
+  changePercent?: number | null;
+  dataStatus: "full" | "identity_only" | "price_unavailable";
+};
+
 export type HoldingSnapshot = PositionInput & {
   currentPrice: number | null;
   currentValue: number | null;
