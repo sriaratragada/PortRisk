@@ -23,7 +23,7 @@ export async function GET(_request: NextRequest, context: Context) {
 
   try {
     const preview = await fetchSecurityPreview(ticker);
-    return json({ preview });
+    return json({ preview, valid: true });
   } catch (error) {
     return json(
       {
@@ -35,6 +35,7 @@ export async function GET(_request: NextRequest, context: Context) {
           sector: getDefaultSector(),
           dataStatus: "identity_only"
         },
+        valid: false,
         error: error instanceof Error ? error.message : "Failed to load security preview"
       },
       { status: 200 }

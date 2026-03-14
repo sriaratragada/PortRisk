@@ -3,14 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  FormEvent,
-  KeyboardEvent,
-  useEffect,
-  useMemo,
-  useState,
-  useTransition
-} from "react";
+import { FormEvent, useEffect, useMemo, useState, useTransition } from "react";
 import {
   Area,
   AreaChart,
@@ -34,8 +27,7 @@ import type {
   RiskInsight,
   RiskReport,
   RiskTier,
-  SecurityPreview,
-  SecuritySearchResult
+  SecurityPreview
 } from "@/lib/types";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 import type {
@@ -502,11 +494,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [searchResults, setSearchResults] = useState<SecuritySearchResult[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [highlightedSearchIndex, setHighlightedSearchIndex] = useState(-1);
-  const [searchQuery, setSearchQuery] = useState("");
   const [positionTicker, setPositionTicker] = useState("");
   const [positionName, setPositionName] = useState("");
   const [positionShares, setPositionShares] = useState("10");
@@ -534,7 +522,6 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     useState<WorkspacePortfolio["metrics"]>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [selectedSearchResult, setSelectedSearchResult] = useState<SecuritySearchResult | null>(null);
   const [positionPreview, setPositionPreview] = useState<SecurityPreview | null>(null);
   const [positionPreviewLoading, setPositionPreviewLoading] = useState(false);
   const [selectedHoldingDetail, setSelectedHoldingDetail] = useState<CompanyDetail | null>(null);
@@ -617,54 +604,19 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   }, [selectedPortfolio]);
 
   useEffect(() => {
-    if (!searchQuery.trim() || selectedSearchResult) {
-      setSearchResults([]);
-      setHighlightedSearchIndex(-1);
-      setSearchLoading(false);
-      setSearchError(null);
-      return;
-    }
-
-    const handle = window.setTimeout(async () => {
-      setSearchLoading(true);
-      setSearchError(null);
-      try {
-        const response = await fetch(`/api/securities/search?q=${encodeURIComponent(searchQuery)}`, {
-          headers: {
-            ...(await getAuthHeaders())
-          }
-        });
-        if (!response.ok) {
-          setSearchError(await readErrorMessage(response));
-          setSearchResults([]);
-          setHighlightedSearchIndex(-1);
-          return;
-        }
-        const data = (await response.json()) as { results: SecuritySearchResult[] };
-        setSearchResults(data.results);
-        setHighlightedSearchIndex(data.results.length > 0 ? 0 : -1);
-      } catch (error) {
-        setSearchError(error instanceof Error ? error.message : "Ticker search failed");
-        setSearchResults([]);
-        setHighlightedSearchIndex(-1);
-      } finally {
-        setSearchLoading(false);
-      }
-    }, 250);
-
-    return () => window.clearTimeout(handle);
-  }, [searchQuery, selectedSearchResult]);
-
-  useEffect(() => {
-    const ticker = selectedSearchResult?.symbol?.trim().toUpperCase();
+    const ticker = searchTerm.trim().toUpperCase();
     if (!ticker) {
+      setPositionTicker("");
+      setPositionName("");
       setPositionPreview(null);
       setPositionPreviewLoading(false);
+      setSearchError(null);
       return;
     }
 
     const handle = window.setTimeout(async () => {
       setPositionPreviewLoading(true);
+      setSearchError(null);
       try {
         const response = await fetch(`/api/securities/${encodeURIComponent(ticker)}/preview`, {
           headers: {
@@ -672,20 +624,39 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           }
         });
         if (!response.ok) {
+          setPositionTicker("");
+          setPositionName("");
           setPositionPreview(null);
+          setSearchError(await readErrorMessage(response));
           return;
         }
-        const data = (await response.json()) as { preview: SecurityPreview };
+        const data = (await response.json()) as {
+          preview: SecurityPreview;
+          valid?: boolean;
+          error?: string;
+        };
+        if (!data.valid) {
+          setPositionTicker("");
+          setPositionName("");
+          setPositionPreview(null);
+          setSearchError(data.error ?? "No listed ticker found.");
+          return;
+        }
+        setPositionTicker(data.preview.symbol);
+        setPositionName(data.preview.companyName);
         setPositionPreview(data.preview);
-      } catch {
+      } catch (error) {
+        setPositionTicker("");
+        setPositionName("");
         setPositionPreview(null);
+        setSearchError(error instanceof Error ? error.message : "Ticker validation failed");
       } finally {
         setPositionPreviewLoading(false);
       }
-    }, 180);
+    }, 220);
 
     return () => window.clearTimeout(handle);
-  }, [selectedSearchResult?.symbol]);
+  }, [searchTerm]);
 
   useEffect(() => {
     if (!selectedPortfolio || activeTab !== "allocation" || selectedPortfolio.holdings.length === 0) {
@@ -1321,47 +1292,16 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     });
   }
 
-  function applySearchResult(result: SecuritySearchResult) {
-    setSelectedSearchResult(result);
-    setPositionTicker(result.symbol.toUpperCase());
-    setPositionName(result.companyName);
-    setSearchQuery(result.symbol);
-    setSearchTerm(`${result.symbol} ${result.companyName}`);
-    setSearchResults([]);
-    setHighlightedSearchIndex(-1);
-    setSearchError(null);
-  }
-
-  function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (searchResults.length === 0) {
-      return;
-    }
-
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setHighlightedSearchIndex((current) =>
-        Math.min(current + 1, searchResults.length - 1)
-      );
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setHighlightedSearchIndex((current) => Math.max(current - 1, 0));
-    } else if (event.key === "Enter" && highlightedSearchIndex >= 0) {
-      event.preventDefault();
-      applySearchResult(searchResults[highlightedSearchIndex]);
-    }
-  }
-
   function resetPositionForm() {
     setPositionTicker("");
     setPositionName("");
-    setSearchQuery("");
     setSearchTerm("");
     setPositionShares("10");
     setPositionAvgCost("100");
     setPositionAssetClass("equities");
     setEditingTicker(null);
-    setSelectedSearchResult(null);
     setPositionPreview(null);
+    setSearchError(null);
   }
 
   async function saveSinglePosition(
@@ -1497,7 +1437,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       return;
     }
 
-    const normalizedTicker = (selectedSearchResult?.symbol ?? positionTicker).trim().toUpperCase();
+    const normalizedTicker = positionTicker.trim().toUpperCase();
     const shares = Number(positionShares);
     const avgCost = Number(positionAvgCost);
 
@@ -1505,8 +1445,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       setErrorMessage("Choose a ticker before adding a position.");
       return;
     }
-    if (!editingTicker && (!selectedSearchResult || selectedSearchResult.symbol !== normalizedTicker)) {
-      setErrorMessage("Select a listed security from search results before adding a position.");
+    if (!editingTicker && (!positionPreview || positionPreview.symbol !== normalizedTicker)) {
+      setErrorMessage("Enter a valid listed ticker before adding a position.");
       return;
     }
     if (!Number.isFinite(shares) || shares <= 0) {
@@ -1553,17 +1493,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     setEditingTicker(position.ticker);
     setPositionTicker(position.ticker);
     setPositionName(holding?.companyName ?? position.ticker);
-    setSearchQuery(position.ticker);
-    setSelectedSearchResult({
-      symbol: position.ticker,
-      companyName: holding?.companyName ?? position.ticker,
-      exchange: holding?.exchange ?? "Unknown",
-      quoteType: "Equity",
-      sector: holding?.sector,
-      hasPreviewData: true
-    });
     setSearchTerm(
-      holding?.companyName ? `${position.ticker} ${holding.companyName}` : position.ticker
+      position.ticker
     );
     setPositionShares(String(position.shares));
     setPositionAvgCost(String(position.avgCost));
@@ -2652,53 +2583,13 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   onChange={(event) => {
                     const nextQuery = event.target.value;
                     setSearchTerm(nextQuery);
-                    setSearchQuery(nextQuery);
-                    setSelectedSearchResult(null);
                     setPositionTicker("");
                     setPositionName("");
                     setPositionPreview(null);
                   }}
-                  onKeyDown={handleSearchKeyDown}
                   placeholder="AAPL, KO, XOM..."
                   className="w-full rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
                 />
-                {!selectedSearchResult && (searchLoading || searchResults.length > 0 || (!!searchQuery.trim() && !searchLoading)) && (
-                  <div className="absolute left-0 right-0 z-20 mt-2 max-h-80 overflow-y-auto rounded-lg border border-white/10 bg-black/95 shadow-2xl">
-                    {searchLoading ? (
-                      <div className="px-4 py-3 text-sm text-slate-400">Searching listed tickers...</div>
-                    ) : searchResults.length === 0 ? (
-                      <div className="px-4 py-3 text-sm text-slate-400">
-                        No exact match yet. Close listed names should surface here when available.
-                      </div>
-                    ) : (
-                      searchResults.map((result, index) => (
-                        <button
-                          key={`${result.symbol}-${result.exchange}`}
-                          type="button"
-                          onClick={() => applySearchResult(result)}
-                          className={cn(
-                            "flex w-full items-start justify-between gap-4 px-4 py-3 text-left text-sm transition",
-                            index === highlightedSearchIndex ? "bg-white/[0.06]" : "hover:bg-white/[0.03]"
-                          )}
-                        >
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="font-medium text-white">{result.symbol}</p>
-                              {result.sector ? (
-                                <span className="text-xs text-slate-400">{result.sector}</span>
-                              ) : null}
-                            </div>
-                            <p className="mt-1 text-slate-400">{result.companyName}</p>
-                          </div>
-                          <div className="text-right text-xs uppercase tracking-[0.2em] text-slate-500">
-                            <p>{result.exchange || "US"}</p>
-                            <p className="mt-1">{result.quoteType}</p>
-                          </div>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
               </div>
 
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
