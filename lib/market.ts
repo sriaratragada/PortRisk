@@ -125,6 +125,66 @@ type SearchRow = {
   quoteType: string;
 };
 
+const COMPANY_DETAIL_OVERRIDES: Record<
+  string,
+  Partial<Pick<CompanyDetail, "sector" | "industry" | "companyName" | "exchange">>
+> = {
+  AAPL: {
+    companyName: "Apple Inc.",
+    sector: "Technology",
+    industry: "Consumer Electronics",
+    exchange: "NASDAQ"
+  },
+  MSFT: {
+    companyName: "Microsoft Corporation",
+    sector: "Technology",
+    industry: "Software - Infrastructure",
+    exchange: "NASDAQ"
+  },
+  NVDA: {
+    companyName: "NVIDIA Corporation",
+    sector: "Technology",
+    industry: "Semiconductors",
+    exchange: "NASDAQ"
+  },
+  AMZN: {
+    companyName: "Amazon.com, Inc.",
+    sector: "Consumer Cyclical",
+    industry: "Internet Retail",
+    exchange: "NASDAQ"
+  },
+  GOOGL: {
+    companyName: "Alphabet Inc.",
+    sector: "Communication Services",
+    industry: "Internet Content & Information",
+    exchange: "NASDAQ"
+  },
+  GOOG: {
+    companyName: "Alphabet Inc.",
+    sector: "Communication Services",
+    industry: "Internet Content & Information",
+    exchange: "NASDAQ"
+  },
+  META: {
+    companyName: "Meta Platforms, Inc.",
+    sector: "Communication Services",
+    industry: "Internet Content & Information",
+    exchange: "NASDAQ"
+  },
+  TSLA: {
+    companyName: "Tesla, Inc.",
+    sector: "Consumer Cyclical",
+    industry: "Auto Manufacturers",
+    exchange: "NASDAQ"
+  },
+  JPM: {
+    companyName: "JPMorgan Chase & Co.",
+    sector: "Financial Services",
+    industry: "Banks - Diversified",
+    exchange: "NYSE"
+  }
+};
+
 function parseNumber(value: number | string | undefined | null) {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : undefined;
@@ -154,6 +214,10 @@ function parseRangeValue(range: string | undefined, index: 0 | 1) {
 
 function normalizeText(value: string | undefined) {
   return (value ?? "").trim().toUpperCase();
+}
+
+function resolveCompanyOverride(symbol: string) {
+  return COMPANY_DETAIL_OVERRIDES[symbol.toUpperCase()];
 }
 
 function scoreSearchRow(row: SearchRow, query: string) {
@@ -544,16 +608,28 @@ export async function fetchCompanyDetail(
     throw new Error(`Failed to load company detail for ${normalizedSymbol}`);
   }
 
+  const override = resolveCompanyOverride(normalizedSymbol);
   const data: CompanyDetail = {
     ticker: normalizedSymbol,
-    companyName: profile?.companyName ?? quote?.longName ?? quote?.shortName ?? fmpQuote?.name ?? normalizedSymbol,
+    companyName:
+      profile?.companyName ??
+      quote?.longName ??
+      quote?.shortName ??
+      fmpQuote?.name ??
+      override?.companyName ??
+      normalizedSymbol,
     exchange:
-      profile?.exchangeShortName ?? profile?.exchange ?? fmpQuote?.exchange ?? quote?.exchange ?? "Unknown",
+      profile?.exchangeShortName ??
+      profile?.exchange ??
+      fmpQuote?.exchange ??
+      quote?.exchange ??
+      override?.exchange ??
+      "Unknown",
     currentPrice: quote?.price ?? fmpQuote?.price ?? 0,
     currency: quote?.currency ?? "USD",
     marketCap: metrics?.marketCap ?? fmpQuote?.marketCap ?? profile?.mktCap ?? quote?.marketCap,
-    sector: profile?.sector,
-    industry: profile?.industry,
+    sector: profile?.sector ?? override?.sector,
+    industry: profile?.industry ?? override?.industry,
     website: profile?.website,
     employeeCount: parseEmployeeCount(profile?.fullTimeEmployees),
     summary: profile?.description,
@@ -577,13 +653,6 @@ export async function fetchCompanyDetail(
     targetMeanPrice: undefined,
     chart
   };
-
-  if (!data.sector && normalizedSymbol === "AAPL") {
-    data.sector = "Technology";
-  }
-  if (!data.industry && normalizedSymbol === "AAPL") {
-    data.industry = "Consumer Electronics";
-  }
 
   detailCache.set(key, {
     expiresAt: Date.now() + 15 * 60_000,

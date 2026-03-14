@@ -163,6 +163,59 @@ function MetricStat({
   );
 }
 
+function HealthBandBadge({ band }: { band: "Strong" | "Moderate" | "Weak" }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex rounded-md border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em]",
+        band === "Strong"
+          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+          : band === "Moderate"
+            ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+            : "border-rose-500/30 bg-rose-500/10 text-rose-300"
+      )}
+    >
+      {band}
+    </span>
+  );
+}
+
+function HealthScoreCard({
+  label,
+  detail
+}: {
+  label: string;
+  detail: {
+    score: number;
+    band: "Strong" | "Moderate" | "Weak";
+    summary: string;
+    drivers: string[];
+  };
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.025] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{label}</p>
+        <HealthBandBadge band={detail.band} />
+      </div>
+      <p className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-white">{detail.score}/100</p>
+      <p className="mt-2 text-sm leading-6 text-slate-400">{detail.summary}</p>
+      <details className="mt-4 group">
+        <summary className="cursor-pointer list-none text-xs uppercase tracking-[0.18em] text-slate-500 transition group-open:text-slate-300">
+          Score basis
+        </summary>
+        <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
+          {detail.drivers.map((driver) => (
+            <p key={driver} className="text-sm text-slate-300">
+              {driver}
+            </p>
+          ))}
+        </div>
+      </details>
+    </div>
+  );
+}
+
 function InfoPill({
   label,
   value,
@@ -2204,12 +2257,12 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               />
             ) : (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <MetricStat label="Concentration" value={`${riskReport.qualityScores.concentration}/100`} />
-                <MetricStat label="Liquidity" value={`${riskReport.qualityScores.liquidity}/100`} />
-                <MetricStat label="Balance Sheet" value={`${riskReport.qualityScores.balanceSheet}/100`} />
-                <MetricStat label="Profitability" value={`${riskReport.qualityScores.profitability}/100`} />
-                <MetricStat label="Growth" value={`${riskReport.qualityScores.growth}/100`} />
-                <MetricStat label="Downside" value={`${riskReport.qualityScores.downsideRisk}/100`} />
+                <HealthScoreCard label="Concentration" detail={riskReport.qualityScoreDetails.concentration} />
+                <HealthScoreCard label="Liquidity" detail={riskReport.qualityScoreDetails.liquidity} />
+                <HealthScoreCard label="Balance Sheet" detail={riskReport.qualityScoreDetails.balanceSheet} />
+                <HealthScoreCard label="Profitability" detail={riskReport.qualityScoreDetails.profitability} />
+                <HealthScoreCard label="Growth" detail={riskReport.qualityScoreDetails.growth} />
+                <HealthScoreCard label="Downside" detail={riskReport.qualityScoreDetails.downsideRisk} />
               </div>
             )}
           </Panel>
@@ -3055,12 +3108,12 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             />
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <MetricStat label="Liquidity" value={`${riskReport.qualityScores.liquidity}/100`} />
-              <MetricStat label="Balance Sheet" value={`${riskReport.qualityScores.balanceSheet}/100`} />
-              <MetricStat label="Profitability" value={`${riskReport.qualityScores.profitability}/100`} />
-              <MetricStat label="Growth" value={`${riskReport.qualityScores.growth}/100`} />
-              <MetricStat label="Concentration" value={`${riskReport.qualityScores.concentration}/100`} />
-              <MetricStat label="Downside Risk" value={`${riskReport.qualityScores.downsideRisk}/100`} />
+              <HealthScoreCard label="Liquidity" detail={riskReport.qualityScoreDetails.liquidity} />
+              <HealthScoreCard label="Balance Sheet" detail={riskReport.qualityScoreDetails.balanceSheet} />
+              <HealthScoreCard label="Profitability" detail={riskReport.qualityScoreDetails.profitability} />
+              <HealthScoreCard label="Growth" detail={riskReport.qualityScoreDetails.growth} />
+              <HealthScoreCard label="Concentration" detail={riskReport.qualityScoreDetails.concentration} />
+              <HealthScoreCard label="Downside Risk" detail={riskReport.qualityScoreDetails.downsideRisk} />
             </div>
           )}
         </Panel>

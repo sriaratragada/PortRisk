@@ -38,6 +38,12 @@ function scoreFromValue(value: number | null, min: number, max: number, invert =
   return Math.round(score * 100);
 }
 
+function scoreBand(score: number): "Strong" | "Moderate" | "Weak" {
+  if (score >= 67) return "Strong";
+  if (score >= 34) return "Moderate";
+  return "Weak";
+}
+
 function correlation(left: number[], right: number[]) {
   const length = Math.min(left.length, right.length);
   if (length < 2) return 0;
@@ -214,15 +220,6 @@ export async function buildRiskFeatureReport(
     portfolioSeries.map((point) => ({ date: point.date, close: point.value }))
   );
 
-  const qualityScores = {
-    concentration: scoreFromValue((singleNameConcentration[0]?.weight ?? 0) + (sectorConcentration[0]?.weight ?? 0), 0.15, 0.8, true),
-    liquidity: scoreFromValue(weightedLiquidity, 0.8, 2.5, false),
-    balanceSheet: scoreFromValue(weightedDebt, 40, 220, true),
-    profitability: scoreFromValue(weightedProfitability, 0.02, 0.3, false),
-    growth: scoreFromValue(weightedGrowth, -0.1, 0.25, false),
-    downsideRisk: scoreFromValue(metrics.var95 + metrics.maxDrawdown + currentDrawdownValue, 0.05, 0.6, true)
-  };
-
   const balanceSheetSignals: RiskReport["balanceSheetSignals"] = [];
   for (const holding of holdings) {
     const detail = detailByTicker.get(holding.ticker.toUpperCase());
@@ -241,6 +238,111 @@ export async function buildRiskFeatureReport(
       balanceSheetSignals.push({ ticker: holding.ticker, companyName, signal: "Profit margins are thin versus market leaders.", severity: "INFO" });
     }
   }
+
+  const qualityScores = {
+    concentration: scoreFromValue((singleNameConcentration[0]?.weight ?? 0) + (sectorConcentration[0]?.weight ?? 0), 0.15, 0.8, true),
+    liquidity: scoreFromValue(weightedLiquidity, 0.8, 2.5, false),
+    balanceSheet: scoreFromValue(weightedDebt, 40, 220, true),
+    profitability: scoreFromValue(weightedProfitability, 0.02, 0.3, false),
+    growth: scoreFromValue(weightedGrowth, -0.1, 0.25, false),
+    downsideRisk: scoreFromValue(metrics.var95 + metrics.maxDrawdown + currentDrawdownValue, 0.05, 0.6, true)
+  };
+  const qualityScoreDetails: RiskReport["qualityScoreDetails"] = {
+    concentration: {
+      score: qualityScores.concentration,
+      band: scoreBand(qualityScores.concentration),
+      summary:
+        qualityScores.concentration >= 67
+          ? "Diversification is broad enough that no single sleeve currently dominates overall exposure."
+          : qualityScores.concentration >= 34
+            ? "Exposure is somewhat concentrated in the top holdings or sectors, but not yet extreme."
+            : "A small set of names or sectors is driving portfolio exposure, increasing concentration risk.",
+      drivers: [
+        `Top holding weight: ${Math.round((singleNameConcentration[0]?.weight ?? 0) * 100)}%.`,
+        `Top sector weight: ${Math.round((sectorConcentration[0]?.weight ?? 0) * 100)}%.`,
+        `Distinct sectors represented: ${sectorConcentration.filter((entry) => entry.sector !== "Unclassified").length}.`
+      ]
+    },
+    liquidity: {
+      score: qualityScores.liquidity,
+      band: scoreBand(qualityScores.liquidity),
+      summary:
+        qualityScores.liquidity >= 67
+          ? "Underlying companies show comparatively strong near-term balance-sheet liquidity."
+          : qualityScores.liquidity >= 34
+            ? "Liquidity indicators are mixed, with enough coverage to avoid a stress warning but not enough for a strong rating."
+            : "Working-capital flexibility looks weak across the weighted holdings mix.",
+      drivers: [
+        `Weighted current ratio: ${weightedLiquidity != null ? weightedLiquidity.toFixed(2) : "N/A"}.`,
+        `Fundamental coverage: ${Math.round(
+          (holdings.filter((holding) => detailByTicker.get(holding.ticker.toUpperCase())?.currentRatio != null).length /
+            Math.max(holdings.length, 1)) *
+            100
+        )}%.`,
+        `Signals used: current ratio and quick ratio from company fundamentals.`
+      ]
+    },
+    balanceSheet: {
+      score: qualityScores.balanceSheet,
+      band: scoreBand(qualityScores.balanceSheet),
+      summary:
+        qualityScores.balanceSheet >= 67
+          ? "Leverage appears contained relative to the weighted holdings mix."
+          : qualityScores.balanceSheet >= 34
+            ? "Balance-sheet leverage is manageable but not uniformly conservative across holdings."
+            : "Debt and leverage are elevated enough to weaken balance-sheet quality.",
+      drivers: [
+        `Weighted debt-to-equity: ${weightedDebt != null ? weightedDebt.toFixed(1) : "N/A"}.`,
+        `High-leverage flags: ${balanceSheetSignals.filter((signal) => signal.signal.includes("Debt-to-equity")).length}.`,
+        `Signals used: debt-to-equity, cash, debt, and liquidity ratios where available.`
+      ]
+    },
+    profitability: {
+      score: qualityScores.profitability,
+      band: scoreBand(qualityScores.profitability),
+      summary:
+        qualityScores.profitability >= 67
+          ? "Weighted margins and operating quality are supportive of resilience."
+          : qualityScores.profitability >= 34
+            ? "Profitability is mixed across the portfolio rather than consistently strong or weak."
+            : "Thin margins or weak operating quality leave less room for error under pressure.",
+      drivers: [
+        `Weighted profit margin: ${weightedProfitability != null ? `${(weightedProfitability * 100).toFixed(1)}%` : "N/A"}.`,
+        `Low-margin flags: ${balanceSheetSignals.filter((signal) => signal.signal.includes("Profit margins")).length}.`,
+        `Signals used: net margins and return-on-equity where reported.`
+      ]
+    },
+    growth: {
+      score: qualityScores.growth,
+      band: scoreBand(qualityScores.growth),
+      summary:
+        qualityScores.growth >= 67
+          ? "Revenue and earnings trends are broadly supportive across the weighted holdings mix."
+          : qualityScores.growth >= 34
+            ? "Growth trends are mixed, with some positive trends offset by weaker names."
+            : "Growth quality is weak enough to increase earnings and multiple-compression risk.",
+      drivers: [
+        `Weighted growth signal: ${weightedGrowth != null ? `${(weightedGrowth * 100).toFixed(1)}%` : "N/A"}.`,
+        `Negative-growth flags: ${balanceSheetSignals.filter((signal) => signal.signal.includes("Revenue or earnings growth is negative")).length}.`,
+        `Signals used: revenue growth and earnings growth from the latest reported data.`
+      ]
+    },
+    downsideRisk: {
+      score: qualityScores.downsideRisk,
+      band: scoreBand(qualityScores.downsideRisk),
+      summary:
+        qualityScores.downsideRisk >= 67
+          ? "Observed drawdown and downside behavior are relatively contained."
+          : qualityScores.downsideRisk >= 34
+            ? "Downside behavior is manageable but still exposed to volatility spikes."
+            : "Drawdown and tail-risk behavior are severe enough to warrant close monitoring.",
+      drivers: [
+        `VaR (95%): ${Math.round(metrics.var95 * 100)}%.`,
+        `Maximum drawdown: ${Math.round(metrics.maxDrawdown * 100)}%.`,
+        `Current drawdown: ${Math.round(currentDrawdownValue * 100)}%.`
+      ]
+    }
+  };
 
   const tickerHistories = await Promise.all(
     holdings.map(async (holding) => ({
@@ -364,6 +466,7 @@ export async function buildRiskFeatureReport(
     balanceSheetSignals: balanceSheetSignals.slice(0, 8),
     industryConcentration: industryConcentration.slice(0, 5),
     qualityScores,
+    qualityScoreDetails,
     returnDiagnostics: {
       realizedVolatility: metrics.annualizedVolatility,
       downsideVolatility,

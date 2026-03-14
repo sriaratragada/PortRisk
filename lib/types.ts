@@ -127,6 +127,44 @@ export type RiskReport = {
     growth: number;
     downsideRisk: number;
   };
+  qualityScoreDetails: {
+    concentration: {
+      score: number;
+      band: "Strong" | "Moderate" | "Weak";
+      summary: string;
+      drivers: string[];
+    };
+    liquidity: {
+      score: number;
+      band: "Strong" | "Moderate" | "Weak";
+      summary: string;
+      drivers: string[];
+    };
+    balanceSheet: {
+      score: number;
+      band: "Strong" | "Moderate" | "Weak";
+      summary: string;
+      drivers: string[];
+    };
+    profitability: {
+      score: number;
+      band: "Strong" | "Moderate" | "Weak";
+      summary: string;
+      drivers: string[];
+    };
+    growth: {
+      score: number;
+      band: "Strong" | "Moderate" | "Weak";
+      summary: string;
+      drivers: string[];
+    };
+    downsideRisk: {
+      score: number;
+      band: "Strong" | "Moderate" | "Weak";
+      summary: string;
+      drivers: string[];
+    };
+  };
   returnDiagnostics: {
     realizedVolatility: number;
     downsideVolatility: number;
