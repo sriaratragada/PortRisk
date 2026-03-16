@@ -445,6 +445,37 @@ export function normalizeTwelveQuote(
   };
 }
 
+export function normalizeFmpQuote(
+  symbol: string,
+  quote?: FmpQuote,
+  profile?: FmpProfile,
+  metrics?: FmpKeyMetrics
+): MarketQuote {
+  const price = quote?.price ?? profile?.price ?? 0;
+  const trailingPE = firstDefined(
+    quote?.pe,
+    metrics?.peRatio,
+    metrics?.peRatioTTM
+  );
+
+  return {
+    ticker: symbol.toUpperCase(),
+    price,
+    previousClose: price,
+    changePercent: parseNumber(quote?.changesPercentage) != null
+      ? (parseNumber(quote?.changesPercentage) as number) / 100
+      : 0,
+    currency: "USD",
+    shortName: quote?.name ?? profile?.companyName,
+    longName: profile?.companyName ?? quote?.name,
+    exchange: quote?.exchange ?? profile?.exchangeShortName ?? profile?.exchange,
+    marketCap: firstDefined(quote?.marketCap, metrics?.marketCap, profile?.mktCap),
+    trailingPE,
+    fiftyTwoWeekLow: quote?.yearLow ?? parseRangeValue(profile?.range, 0),
+    fiftyTwoWeekHigh: quote?.yearHigh ?? parseRangeValue(profile?.range, 1)
+  };
+}
+
 export function getRangeFromDays(days = 252): ChartRange {
   if (days <= 1) return "1D";
   if (days <= 5) return "1W";
@@ -617,16 +648,30 @@ export async function fetchQuote(symbol: string): Promise<MarketQuote> {
     return cached.data;
   }
 
-  if (!TWELVE_DATA_API_KEY) {
-    throw new Error("TWELVE_DATA_API_KEY is not configured");
+  const fundamentals: FundamentalSnapshot = FMP_API_KEY ? await fetchFundamentalSnapshot(key) : {};
+
+  let data: MarketQuote | null = null;
+
+  if (TWELVE_DATA_API_KEY) {
+    try {
+      const quotePayload = await fetchProviderJson<TwelveDataQuoteResponse>(
+        getTwelveQuoteUrl(key),
+        "Twelve Data",
+        60
+      );
+      data = normalizeTwelveQuote(key, quotePayload, fundamentals.profile, fundamentals.metrics);
+    } catch {
+      data = null;
+    }
   }
 
-  const [quotePayload, fundamentals]: [TwelveDataQuoteResponse, FundamentalSnapshot] = await Promise.all([
-    fetchProviderJson<TwelveDataQuoteResponse>(getTwelveQuoteUrl(key), "Twelve Data", 60),
-    FMP_API_KEY ? fetchFundamentalSnapshot(key) : Promise.resolve({})
-  ]);
+  if (!data && (fundamentals.quote || fundamentals.profile?.price != null)) {
+    data = normalizeFmpQuote(key, fundamentals.quote, fundamentals.profile, fundamentals.metrics);
+  }
 
-  const data = normalizeTwelveQuote(key, quotePayload, fundamentals.profile, fundamentals.metrics);
+  if (!data) {
+    throw new Error(`Failed to load quote for ${key}`);
+  }
 
   quoteCache.set(key, {
     expiresAt: Date.now() + 60_000,
@@ -644,7 +689,7 @@ export async function fetchQuotes(symbols: string[]) {
   });
 
   if (missing.length > 0) {
-    await Promise.all(
+    const results = await Promise.allSettled(
       missing.map(async (symbol) => {
         const quote = await fetchQuote(symbol);
         quoteCache.set(symbol, {
@@ -653,15 +698,17 @@ export async function fetchQuotes(symbols: string[]) {
         });
       })
     );
+    for (const [index, result] of results.entries()) {
+      if (result.status === "rejected") {
+        const symbol = missing[index];
+        quoteCache.delete(symbol);
+      }
+    }
   }
 
-  return uniqueSymbols.map((symbol) => {
-    const cached = quoteCache.get(symbol)?.data;
-    if (!cached) {
-      throw new Error(`Quote not found for ${symbol}`);
-    }
-    return cached;
-  });
+  return uniqueSymbols
+    .map((symbol) => quoteCache.get(symbol)?.data)
+    .filter((quote): quote is MarketQuote => Boolean(quote));
 }
 
 export function normalizeTimeSeries(payload: TwelveDataTimeSeriesResponse): HistoricalPoint[] {
@@ -690,18 +737,37 @@ export async function fetchHistoricalSeries(
     return cached.data;
   }
 
-  if (!TWELVE_DATA_API_KEY) {
-    throw new Error("TWELVE_DATA_API_KEY is not configured");
-  }
-
   const { url, revalidateSeconds } = getTwelveTimeSeriesUrl(symbol.toUpperCase(), range);
-  const payload = await fetchProviderJson<TwelveDataTimeSeriesResponse>(url, "Twelve Data", revalidateSeconds);
+  let data: HistoricalPoint[] | null = null;
 
-  if (payload.status === "error") {
-    throw new Error(payload.message ?? `Twelve Data error for ${symbol.toUpperCase()}`);
+  if (TWELVE_DATA_API_KEY) {
+    try {
+      const payload = await fetchProviderJson<TwelveDataTimeSeriesResponse>(
+        url,
+        "Twelve Data",
+        revalidateSeconds
+      );
+
+      if (payload.status !== "error") {
+        data = normalizeTimeSeries(payload);
+      }
+    } catch {
+      data = null;
+    }
   }
 
-  const data = normalizeTimeSeries(payload);
+  if (!data || data.length === 0) {
+    const fallbackQuote = await fetchQuote(symbol.toUpperCase()).catch(() => null);
+    if (!fallbackQuote) {
+      throw new Error(`Failed to load price history for ${symbol.toUpperCase()}`);
+    }
+    data = [
+      {
+        date: new Date().toISOString(),
+        close: fallbackQuote.price
+      }
+    ];
+  }
 
   historyCache.set(key, {
     expiresAt: Date.now() + revalidateSeconds * 1000,

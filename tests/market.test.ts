@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { CHART_RANGE_CONFIG } from "../lib/market-config.ts";
-import { getRangeFromDays, normalizeTimeSeries, normalizeTwelveQuote } from "../lib/market.ts";
+import { getRangeFromDays, normalizeFmpQuote, normalizeTimeSeries, normalizeTwelveQuote } from "../lib/market.ts";
 import { getDefaultSector, resolveSector } from "../lib/sectors.ts";
 
 test("chart range config maps long ranges to slower intervals", () => {
@@ -50,6 +50,39 @@ test("normalizeTwelveQuote derives previous close and change percent", () => {
   assert.equal(quote.trailingPE, 31);
   assert.equal(quote.fiftyTwoWeekLow, 150);
   assert.equal(quote.fiftyTwoWeekHigh, 220);
+});
+
+test("normalizeFmpQuote preserves quote fallback fields when Twelve Data is unavailable", () => {
+  const quote = normalizeFmpQuote(
+    "NBIS",
+    {
+      name: "Nebius Group N.V.",
+      exchange: "NASDAQ",
+      price: 42.5,
+      changesPercentage: 2.5,
+      marketCap: 123456789,
+      pe: 18,
+      yearLow: 10,
+      yearHigh: 55
+    },
+    {
+      companyName: "Nebius Group N.V.",
+      exchangeShortName: "NASDAQ",
+      range: "10-55"
+    },
+    {
+      peRatio: 20
+    }
+  );
+
+  assert.equal(quote.ticker, "NBIS");
+  assert.equal(quote.price, 42.5);
+  assert.equal(quote.previousClose, 42.5);
+  assert.equal(quote.changePercent, 0.025);
+  assert.equal(quote.marketCap, 123456789);
+  assert.equal(quote.trailingPE, 18);
+  assert.equal(quote.fiftyTwoWeekLow, 10);
+  assert.equal(quote.fiftyTwoWeekHigh, 55);
 });
 
 test("normalizeTimeSeries drops incomplete rows and normalizes datetimes", () => {
