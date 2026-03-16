@@ -1,971 +1,453 @@
-import {
-  CHART_RANGE_CONFIG,
-  FMP_API_KEY,
-  FMP_BASE_URL,
-  TWELVE_DATA_API_KEY,
-  TWELVE_DATA_BASE_URL
-} from "@/lib/market-config";
+import YahooFinance from "yahoo-finance2";
+import { CHART_RANGE_CONFIG } from "@/lib/market-config";
 import { resolveSector } from "@/lib/sectors";
 import type {
   ChartRange,
   CompanyDetail,
   HistoricalPoint,
+  HistoricalSeriesResult,
   MarketQuote,
   SecurityPreview,
   SecuritySearchResult
 } from "@/lib/types";
 
+const yahooFinance = new YahooFinance({
+  suppressNotices: ["yahooSurvey"]
+});
+
+const SEARCH_TTL_MS = 30_000;
+const QUOTE_TTL_MS = 30_000;
+const SNAPSHOT_TTL_MS = 5 * 60_000;
+const DETAIL_TTL_MS = 5 * 60_000;
+
+const searchCache = new Map<string, { expiresAt: number; data: SecuritySearchResult[] }>();
 const quoteCache = new Map<string, { expiresAt: number; data: MarketQuote }>();
-const historyCache = new Map<string, { expiresAt: number; data: HistoricalPoint[] }>();
+const historyCache = new Map<string, { expiresAt: number; data: HistoricalSeriesResult }>();
+const snapshotCache = new Map<string, { expiresAt: number; data: SecuritySnapshot }>();
 const detailCache = new Map<string, { expiresAt: number; data: CompanyDetail }>();
 
-type TwelveDataQuoteResponse = {
-  symbol?: string;
-  name?: string;
-  exchange?: string;
-  currency?: string;
-  close?: string;
-  previous_close?: string;
-};
-
-type TwelveDataTimeSeriesResponse = {
-  values?: Array<{
-    datetime?: string;
-    close?: string;
-  }>;
-  meta?: {
-    symbol?: string;
-    interval?: string;
-    exchange?: string;
-    currency?: string;
-    type?: string;
-  };
-  status?: string;
-  code?: number;
-  message?: string;
-};
-
-type TwelveDataSymbolSearchResponse = {
-  data?: Array<{
-    symbol?: string;
-    instrument_name?: string;
-    exchange?: string;
-    mic_code?: string;
-    country?: string;
-    type?: string;
-  }>;
-  status?: string;
-};
-
-type FmpProfile = {
-  symbol?: string;
-  companyName?: string;
-  exchangeShortName?: string;
-  exchange?: string;
-  sector?: string;
+type SecuritySnapshot = {
+  symbol: string;
+  companyName: string;
+  exchange: string;
+  quoteType: string;
+  currency: string;
+  sector: import("@/lib/sectors").ResolvedSector;
   industry?: string;
   website?: string;
-  description?: string;
-  fullTimeEmployees?: string;
-  mktCap?: number;
-  price?: number;
-  beta?: number;
-  lastDiv?: number;
-  range?: string;
-  isEtf?: boolean;
-  isFund?: boolean;
-  isAdr?: boolean;
-  isActivelyTrading?: boolean;
-};
-
-type FmpKeyMetrics = {
+  employeeCount?: number;
+  summary?: string;
   marketCap?: number;
-  peRatio?: number;
-  peRatioTTM?: number;
+  trailingPE?: number;
+  forwardPE?: number;
   dividendYield?: number;
-  dividendYieldPercentageTTM?: number;
-  currentRatio?: number;
-  currentRatioTTM?: number;
-  returnOnEquity?: number;
-  returnOnEquityTTM?: number;
-};
-
-type FmpRatio = {
-  currentRatio?: number;
-  currentRatioTTM?: number;
-  quickRatio?: number;
-  quickRatioTTM?: number;
-  debtEquityRatio?: number;
-  debtEquityRatioTTM?: number;
-  returnOnEquity?: number;
-  returnOnEquityTTM?: number;
-  netProfitMargin?: number;
-  netProfitMarginTTM?: number;
-  priceToEarningsRatioTTM?: number;
-};
-
-type FmpGrowth = {
+  beta?: number;
+  profitMargins?: number;
   revenueGrowth?: number;
-  netIncomeGrowth?: number;
-  epsgrowth?: number;
-};
-
-type FmpCashFlow = {
-  freeCashFlow?: number;
-  operatingCashFlow?: number;
-};
-
-type FmpBalanceSheet = {
+  earningsGrowth?: number;
+  debtToEquity?: number;
+  currentRatio?: number;
+  quickRatio?: number;
+  returnOnEquity?: number;
+  totalCash?: number;
   totalDebt?: number;
-  cashAndCashEquivalents?: number;
+  freeCashflow?: number;
+  operatingCashflow?: number;
+  targetMeanPrice?: number;
 };
 
-type FmpQuote = {
+type SearchCandidate = {
+  symbol: string;
+  companyName: string;
+  exchange: string;
+  quoteType: string;
+  providerSector?: string;
+  providerIndustry?: string;
+};
+
+type YahooQuoteLike = {
   symbol?: string;
-  name?: string;
-  exchange?: string;
-  price?: number;
-  changesPercentage?: number;
-  marketCap?: number;
-  pe?: number;
-  yearLow?: number;
-  yearHigh?: number;
-};
-
-type FundamentalSnapshot = {
-  profile?: FmpProfile;
-  metrics?: FmpKeyMetrics;
-  annualMetrics?: FmpKeyMetrics;
-  ratios?: FmpRatio;
-  annualRatios?: FmpRatio;
-  growth?: FmpGrowth;
-  cashFlow?: FmpCashFlow;
-  balanceSheet?: FmpBalanceSheet;
-  quote?: FmpQuote;
-};
-
-type FmpSearchSymbol = {
-  symbol?: string;
-  name?: string;
-  exchange?: string;
-  exchangeFullName?: string;
-  type?: string;
   currency?: string;
+  regularMarketPrice?: number;
+  regularMarketPreviousClose?: number;
+  regularMarketChangePercent?: number;
+  shortName?: string;
+  longName?: string;
+  fullExchangeName?: string;
+  exchange?: string;
+  marketCap?: number;
+  trailingPE?: number;
+  forwardPE?: number;
+  fiftyTwoWeekLow?: number;
+  fiftyTwoWeekHigh?: number;
+  quoteType?: string;
+  regularMarketTime?: Date;
 };
 
-const COMPANY_DETAIL_OVERRIDES: Record<
-  string,
-  Partial<Pick<CompanyDetail, "industry" | "companyName" | "exchange">>
-> = {
-  AAPL: {
-    companyName: "Apple Inc.",
-    industry: "Consumer Electronics",
-    exchange: "NASDAQ"
-  },
-  MSFT: {
-    companyName: "Microsoft Corporation",
-    industry: "Software - Infrastructure",
-    exchange: "NASDAQ"
-  },
-  NVDA: {
-    companyName: "NVIDIA Corporation",
-    industry: "Semiconductors",
-    exchange: "NASDAQ"
-  },
-  AMZN: {
-    companyName: "Amazon.com, Inc.",
-    industry: "Internet Retail",
-    exchange: "NASDAQ"
-  },
-  GOOGL: {
-    companyName: "Alphabet Inc.",
-    industry: "Internet Content & Information",
-    exchange: "NASDAQ"
-  },
-  GOOG: {
-    companyName: "Alphabet Inc.",
-    industry: "Internet Content & Information",
-    exchange: "NASDAQ"
-  },
-  META: {
-    companyName: "Meta Platforms, Inc.",
-    industry: "Internet Content & Information",
-    exchange: "NASDAQ"
-  },
-  TSLA: {
-    companyName: "Tesla, Inc.",
-    industry: "Auto Manufacturers",
-    exchange: "NASDAQ"
-  },
-  JPM: {
-    companyName: "JPMorgan Chase & Co.",
-    industry: "Banks - Diversified",
-    exchange: "NYSE"
-  }
+type YahooChartQuoteLike = {
+  date?: Date;
+  close?: number | null;
 };
 
-function parseNumber(value: number | string | undefined | null) {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : undefined;
-  }
-
-  if (typeof value === "string") {
-    const normalized = value.replace(/,/g, "").trim();
-    if (!normalized) return undefined;
-    const parsed = Number(normalized);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-
-  return undefined;
-}
-
-function parseEmployeeCount(value: string | undefined) {
-  if (!value) return undefined;
-  const parsed = Number(value.replace(/[^\d.-]/g, ""));
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function parseRangeValue(range: string | undefined, index: 0 | 1) {
-  if (!range) return undefined;
-  const parts = range.split("-").map((part) => parseNumber(part));
-  return parts[index];
-}
-
-function normalizeText(value: string | undefined) {
+function normalizeText(value: string | undefined | null) {
   return (value ?? "").trim().toUpperCase();
 }
 
-function resolveCompanyOverride(symbol: string) {
-  return COMPANY_DETAIL_OVERRIDES[symbol.toUpperCase()];
+function toNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function toIsoString(value: unknown) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString();
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+  return null;
+}
+
+function readCache<T>(cache: Map<string, { expiresAt: number; data: T }>, key: string) {
+  const cached = cache.get(key);
+  if (!cached || cached.expiresAt <= Date.now()) {
+    if (cached) cache.delete(key);
+    return null;
+  }
+  return cached.data;
+}
+
+function writeCache<T>(cache: Map<string, { expiresAt: number; data: T }>, key: string, ttlMs: number, data: T) {
+  cache.set(key, {
+    expiresAt: Date.now() + ttlMs,
+    data
+  });
+  return data;
+}
+
+function isSupportedQuoteType(quoteType: string | undefined) {
+  return ["EQUITY", "ETF", "MUTUALFUND"].includes(normalizeText(quoteType));
+}
+
+function getDisplayExchange(value: unknown, fallback = "N/A") {
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function getSearchCompanyName(candidate: Record<string, unknown>) {
+  const shortName =
+    typeof candidate.shortname === "string" && candidate.shortname.trim()
+      ? candidate.shortname.trim()
+      : undefined;
+  const longName =
+    typeof candidate.longname === "string" && candidate.longname.trim()
+      ? candidate.longname.trim()
+      : undefined;
+  return shortName ?? longName ?? (typeof candidate.symbol === "string" ? candidate.symbol : "Unknown");
+}
+
+function buildSearchCandidate(candidate: Record<string, unknown>): SearchCandidate | null {
+  if (candidate.isYahooFinance !== true) {
+    return null;
+  }
+
+  const quoteType = typeof candidate.quoteType === "string" ? candidate.quoteType : "";
+  const symbol = typeof candidate.symbol === "string" ? candidate.symbol.trim().toUpperCase() : "";
+  if (!symbol || !isSupportedQuoteType(quoteType)) {
+    return null;
+  }
+
+  return {
+    symbol,
+    companyName: getSearchCompanyName(candidate),
+    exchange: getDisplayExchange(candidate.exchDisp ?? candidate.exchange),
+    quoteType,
+    providerSector: typeof candidate.sector === "string" ? candidate.sector : undefined,
+    providerIndustry: typeof candidate.industry === "string" ? candidate.industry : undefined
+  };
 }
 
 function scoreSearchRow(row: SecuritySearchResult, query: string) {
   const normalizedQuery = normalizeText(query);
   const symbol = normalizeText(row.symbol);
-  const shortname = normalizeText(row.companyName);
-  const exchange = normalizeText(row.exchange);
+  const companyName = normalizeText(row.companyName);
 
   let score = 0;
   if (symbol === normalizedQuery) score += 1000;
-  if (symbol.startsWith(normalizedQuery)) score += 350;
-  if (symbol.includes(normalizedQuery)) score += 200;
-  if (shortname.startsWith(normalizedQuery)) score += 140;
-  if (shortname.includes(normalizedQuery)) score += 90;
-  if (exchange.includes("NYSE") || exchange.includes("XNYS") || exchange.includes("NYQ")) score += 40;
-  if (row.quoteType.toLowerCase().includes("stock") || row.quoteType.toLowerCase().includes("equity")) score += 20;
-  if (!shortname) score -= 10;
+  if (symbol.startsWith(normalizedQuery)) score += 400;
+  if (companyName.startsWith(normalizedQuery)) score += 180;
+  if (symbol.includes(normalizedQuery)) score += 120;
+  if (companyName.includes(normalizedQuery)) score += 80;
+  if (row.quoteType === "EQUITY") score += 30;
+  if (row.exchange.includes("NASDAQ") || row.exchange.includes("NYSE")) score += 20;
   return score;
 }
 
 function dedupeAndRankSearchRows(rows: SecuritySearchResult[], query: string) {
-  const normalizedQuery = normalizeText(query);
   const deduped = new Map<string, SecuritySearchResult>();
   for (const row of rows) {
-    const symbol = normalizeText(row.symbol);
-    if (!symbol) continue;
-    if (!deduped.has(symbol)) {
-      deduped.set(symbol, {
-        ...row,
-        symbol
-      });
+    if (!deduped.has(row.symbol)) {
+      deduped.set(row.symbol, row);
     }
   }
 
-  const ranked = [...deduped.values()]
-    .sort((left, right) => {
-      const scoreDiff = scoreSearchRow(right, query) - scoreSearchRow(left, query);
-      if (scoreDiff !== 0) return scoreDiff;
-      return left.symbol.localeCompare(right.symbol);
-    })
-    .filter((row) => Boolean(row.symbol));
-
-  const symbolPrefixMatches = ranked.filter((row) => normalizeText(row.symbol).startsWith(normalizedQuery));
-  if (symbolPrefixMatches.length > 0) {
-    return symbolPrefixMatches.slice(0, 10);
-  }
-
-  const namePrefixMatches = ranked.filter((row) =>
-    normalizeText(row.companyName).startsWith(normalizedQuery)
-  );
-  if (namePrefixMatches.length > 0) {
-    return namePrefixMatches.slice(0, 10);
-  }
-
-  return ranked.slice(0, 10);
+  return [...deduped.values()]
+    .sort((left, right) => scoreSearchRow(right, query) - scoreSearchRow(left, query))
+    .slice(0, 12);
 }
 
-function toIsoString(datetime: string) {
-  if (datetime.includes("T")) {
-    return new Date(datetime).toISOString();
-  }
-  if (datetime.includes(" ")) {
-    return new Date(datetime.replace(" ", "T") + "Z").toISOString();
-  }
-  return new Date(`${datetime}T00:00:00Z`).toISOString();
-}
-
-function subtractInterval(date: Date, interval: string, steps: number) {
-  const next = new Date(date);
-  if (interval.endsWith("min")) {
-    next.setUTCMinutes(next.getUTCMinutes() - steps * parseInt(interval, 10));
-    return next;
-  }
-  if (interval.endsWith("h")) {
-    next.setUTCHours(next.getUTCHours() - steps * parseInt(interval, 10));
-    return next;
-  }
-  if (interval.endsWith("day")) {
-    next.setUTCDate(next.getUTCDate() - steps * parseInt(interval, 10));
-    return next;
-  }
-  if (interval.endsWith("week")) {
-    next.setUTCDate(next.getUTCDate() - steps * 7 * parseInt(interval, 10));
-    return next;
-  }
-  if (interval.endsWith("month")) {
-    next.setUTCMonth(next.getUTCMonth() - steps * parseInt(interval, 10));
-    return next;
-  }
-  return next;
-}
-
-export function buildSyntheticHistorySeries(
-  price: number,
-  range: ChartRange,
-  now = new Date()
-): HistoricalPoint[] {
-  const config = CHART_RANGE_CONFIG[range];
-  const points = Math.max(config.outputsize, 2);
-  return Array.from({ length: points }, (_, index) => {
-    const remaining = points - index - 1;
-    return {
-      date: subtractInterval(now, config.interval, remaining).toISOString(),
-      close: price
-    };
-  });
-}
-
-function createAuthError(provider: string, status: number) {
-  return new Error(`${provider} request failed with ${status}`);
-}
-
-async function fetchProviderJson<T>(
-  url: string,
-  provider: "Twelve Data" | "FMP",
-  revalidateSeconds: number
-): Promise<T> {
-  const response = await fetch(url, {
-    headers: {
-      accept: "application/json"
-    },
-    next: { revalidate: revalidateSeconds }
-  });
-
-  if (!response.ok) {
-    throw createAuthError(provider, response.status);
-  }
-
-  return (await response.json()) as T;
-}
-
-function getTwelveQuoteUrl(symbol: string) {
-  const url = new URL(`${TWELVE_DATA_BASE_URL}/quote`);
-  url.searchParams.set("apikey", TWELVE_DATA_API_KEY ?? "");
-  url.searchParams.set("symbol", symbol);
-  return url.toString();
-}
-
-function getTwelveTimeSeriesUrl(symbol: string, range: ChartRange) {
-  const config = CHART_RANGE_CONFIG[range];
-  const url = new URL(`${TWELVE_DATA_BASE_URL}/time_series`);
-  url.searchParams.set("apikey", TWELVE_DATA_API_KEY ?? "");
-  url.searchParams.set("symbol", symbol);
-  url.searchParams.set("interval", config.interval);
-  url.searchParams.set("outputsize", String(config.outputsize));
-  url.searchParams.set("order", "ASC");
-  url.searchParams.set("timezone", "UTC");
-  return { url: url.toString(), revalidateSeconds: config.revalidateSeconds };
-}
-
-function getFmpSearchUrl(query: string) {
-  return getFmpUrl("/search-symbol", {
-    query,
-    limit: "12"
-  });
-}
-
-function getFmpUrl(path: string, query: Record<string, string> = {}) {
-  const url = new URL(`${FMP_BASE_URL}${path}`);
-  url.searchParams.set("apikey", FMP_API_KEY ?? "");
-  for (const [key, value] of Object.entries(query)) {
-    url.searchParams.set(key, value);
-  }
-  return url.toString();
-}
-
-function buildQuoteType(input: {
-  isEtf?: boolean;
-  isFund?: boolean;
-  sector?: string;
-  type?: string;
-}) {
-  if (input.isEtf) return "ETF";
-  if (input.isFund) return "Fund";
-  if (input.type) return input.type;
-  if (input.sector) return "Equity";
-  return "Security";
-}
-
-function buildResolvedSector(input: {
-  ticker: string;
-  providerSector?: string;
-  providerIndustry?: string;
-  quoteType?: string;
-  assetClass?: string;
-}) {
-  return resolveSector({
-    ticker: input.ticker,
-    providerSector: input.providerSector,
-    providerIndustry: input.providerIndustry,
-    quoteType: input.quoteType,
-    assetClass: input.assetClass
-  });
-}
-
-function buildSecuritySearchRow(
-  symbol: string,
-  companyName: string,
-  exchange: string,
-  quoteType: string,
-  sector?: SecuritySearchResult["sector"]
-): SecuritySearchResult {
+function buildSearchResult(row: SearchCandidate): SecuritySearchResult {
   return {
-    symbol: symbol.toUpperCase(),
-    companyName,
-    exchange,
-    quoteType,
-    sector,
+    symbol: row.symbol,
+    companyName: row.companyName,
+    exchange: row.exchange,
+    quoteType: row.quoteType,
+    sector: resolveSector({
+      ticker: row.symbol,
+      providerSector: row.providerSector,
+      providerIndustry: row.providerIndustry,
+      quoteType: row.quoteType
+    }),
     hasPreviewData: true
   };
 }
 
-function firstDefined<T>(...values: Array<T | undefined | null>) {
-  for (const value of values) {
-    if (value != null) {
-      return value;
-    }
+export function normalizeYahooQuote(symbol: string, quote: YahooQuoteLike): MarketQuote {
+  const ticker = symbol.trim().toUpperCase();
+  const price = toNumber(quote.regularMarketPrice);
+  if (price == null) {
+    throw new Error(`Yahoo quote missing price for ${ticker}`);
   }
-  return undefined;
-}
 
-export function normalizeTwelveQuote(
-  symbol: string,
-  quote: TwelveDataQuoteResponse,
-  profile?: FmpProfile,
-  metrics?: FmpKeyMetrics
-): MarketQuote {
-  const price = parseNumber(quote.close) ?? profile?.price ?? 0;
-  const previousClose =
-    parseNumber(quote.previous_close) ??
-    (price && profile?.price && profile.price !== price ? profile.price : undefined) ??
-    price;
+  const previousClose = toNumber(quote.regularMarketPreviousClose) ?? price;
+  const rawChangePercent = toNumber(quote.regularMarketChangePercent);
+  const changePercent =
+    rawChangePercent != null
+      ? Math.abs(rawChangePercent) > 1
+        ? rawChangePercent / 100
+        : rawChangePercent
+      : previousClose === 0
+        ? 0
+        : price / previousClose - 1;
 
   return {
-    ticker: symbol.toUpperCase(),
+    ticker,
     price,
     previousClose,
-    changePercent: previousClose === 0 ? 0 : (price - previousClose) / previousClose,
-    currency: quote.currency ?? "USD",
-    shortName: quote.name ?? profile?.companyName,
-    longName: profile?.companyName ?? quote.name,
-    exchange: quote.exchange ?? profile?.exchangeShortName ?? profile?.exchange,
-    marketCap: metrics?.marketCap ?? profile?.mktCap,
-    trailingPE: metrics?.peRatio,
-    fiftyTwoWeekLow: parseRangeValue(profile?.range, 0),
-    fiftyTwoWeekHigh: parseRangeValue(profile?.range, 1)
+    changePercent,
+    currency: typeof quote.currency === "string" ? quote.currency : "USD",
+    shortName: typeof quote.shortName === "string" ? quote.shortName : undefined,
+    longName: typeof quote.longName === "string" ? quote.longName : undefined,
+    exchange: getDisplayExchange(quote.fullExchangeName ?? quote.exchange, undefined),
+    marketCap: toNumber(quote.marketCap),
+    trailingPE: toNumber(quote.trailingPE),
+    forwardPE: toNumber(quote.forwardPE),
+    fiftyTwoWeekLow: toNumber(quote.fiftyTwoWeekLow),
+    fiftyTwoWeekHigh: toNumber(quote.fiftyTwoWeekHigh),
+    dataState: "live",
+    asOf: toIsoString(quote.regularMarketTime ?? new Date()),
+    provider: "Yahoo Finance"
   };
 }
 
-export function normalizeFmpQuote(
-  symbol: string,
-  quote?: FmpQuote,
-  profile?: FmpProfile,
-  metrics?: FmpKeyMetrics
-): MarketQuote {
-  const price = quote?.price ?? profile?.price ?? 0;
-  const trailingPE = firstDefined(
-    quote?.pe,
-    metrics?.peRatio,
-    metrics?.peRatioTTM
-  );
+export function normalizeYahooChartPoints(quotes: YahooChartQuoteLike[], range: ChartRange): HistoricalPoint[] {
+  const points = quotes
+    .map((point) => {
+      const close = toNumber(point.close);
+      const date = toIsoString(point.date);
+      if (close == null || !date) {
+        return null;
+      }
+      return { date, close };
+    })
+    .filter((point): point is HistoricalPoint => point !== null)
+    .sort((left, right) => Date.parse(left.date) - Date.parse(right.date));
 
+  if (range !== "1D" || points.length === 0) {
+    return points;
+  }
+
+  const latestSession = points[points.length - 1]!.date.slice(0, 10);
+  return points.filter((point) => point.date.slice(0, 10) === latestSession);
+}
+
+function unavailableHistory(symbol: string, range: ChartRange): HistoricalSeriesResult {
+  return {
+    symbol: symbol.toUpperCase(),
+    range,
+    points: [],
+    dataState: "unavailable",
+    asOf: null,
+    provider: null
+  };
+}
+
+function emptyCompanyDetail(symbol: string): CompanyDetail {
   return {
     ticker: symbol.toUpperCase(),
-    price,
-    previousClose: price,
-    changePercent: parseNumber(quote?.changesPercentage) != null
-      ? (parseNumber(quote?.changesPercentage) as number) / 100
-      : 0,
+    companyName: symbol.toUpperCase(),
+    exchange: "N/A",
+    currentPrice: null,
     currency: "USD",
-    shortName: quote?.name ?? profile?.companyName,
-    longName: profile?.companyName ?? quote?.name,
-    exchange: quote?.exchange ?? profile?.exchangeShortName ?? profile?.exchange,
-    marketCap: firstDefined(quote?.marketCap, metrics?.marketCap, profile?.mktCap),
-    trailingPE,
-    fiftyTwoWeekLow: quote?.yearLow ?? parseRangeValue(profile?.range, 0),
-    fiftyTwoWeekHigh: quote?.yearHigh ?? parseRangeValue(profile?.range, 1)
+    sector: resolveSector({ ticker: symbol.toUpperCase() }),
+    chart: [],
+    dataState: "unavailable",
+    asOf: null,
+    provider: null,
+    historyDataState: "unavailable",
+    historyAsOf: null,
+    historyProvider: null
   };
+}
+
+function getRangeLookbackDays(range: ChartRange) {
+  switch (range) {
+    case "1D":
+      return 7;
+    case "1W":
+      return 14;
+    case "1M":
+      return 40;
+    case "3M":
+      return 100;
+    case "1Y":
+      return 400;
+    case "5Y":
+      return 2000;
+    case "MAX":
+      return 365 * 40;
+  }
+}
+
+function getYahooInterval(range: ChartRange) {
+  switch (range) {
+    case "1D":
+      return "5m" as const;
+    case "1W":
+      return "1h" as const;
+    case "1M":
+    case "3M":
+    case "1Y":
+      return "1d" as const;
+    case "5Y":
+      return "1wk" as const;
+    case "MAX":
+      return "1mo" as const;
+  }
+}
+
+async function searchCandidates(query: string): Promise<SearchCandidate[]> {
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  const response = await yahooFinance.search(normalizedQuery, {
+    quotesCount: 12,
+    newsCount: 0
+  });
+  return (response.quotes ?? [])
+    .map((quote) => buildSearchCandidate(quote as Record<string, unknown>))
+    .filter((quote): quote is SearchCandidate => quote !== null);
+}
+
+async function findSearchCandidateBySymbol(symbol: string) {
+  const candidates = await searchCandidates(symbol);
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  return (
+    candidates.find((candidate) => normalizeText(candidate.symbol) === normalizedSymbol) ?? null
+  );
+}
+
+async function fetchSecuritySnapshot(symbol: string): Promise<SecuritySnapshot> {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  const cached = readCache(snapshotCache, normalizedSymbol);
+  if (cached) {
+    return cached;
+  }
+
+  const [searchResult, summaryResult] = await Promise.allSettled([
+    findSearchCandidateBySymbol(normalizedSymbol),
+    yahooFinance.quoteSummary(normalizedSymbol, {
+      modules: ["price", "summaryProfile", "financialData", "defaultKeyStatistics", "summaryDetail"]
+    })
+  ]);
+
+  const candidate = searchResult.status === "fulfilled" ? searchResult.value : null;
+  const summary = summaryResult.status === "fulfilled" ? summaryResult.value as Record<string, any> : null;
+  const price = summary?.price ?? null;
+  const summaryProfile = summary?.summaryProfile ?? null;
+  const financialData = summary?.financialData ?? null;
+  const defaultKeyStatistics = summary?.defaultKeyStatistics ?? null;
+  const summaryDetail = summary?.summaryDetail ?? null;
+
+  const companyName =
+    candidate?.companyName ??
+    (typeof price?.longName === "string" && price.longName.trim() ? price.longName.trim() : undefined) ??
+    (typeof price?.shortName === "string" && price.shortName.trim() ? price.shortName.trim() : undefined) ??
+    normalizedSymbol;
+  const exchange =
+    candidate?.exchange ??
+    getDisplayExchange(price?.exchangeName ?? price?.fullExchangeName ?? price?.exchange);
+  const quoteType =
+    candidate?.quoteType ??
+    (typeof price?.quoteType === "string" ? price.quoteType : "EQUITY");
+
+  if (!candidate && !summary) {
+    throw new Error(`Yahoo could not resolve ${normalizedSymbol}`);
+  }
+
+  const snapshot: SecuritySnapshot = {
+    symbol: normalizedSymbol,
+    companyName,
+    exchange,
+    quoteType,
+    currency: typeof price?.currency === "string" ? price.currency : "USD",
+    sector: resolveSector({
+      ticker: normalizedSymbol,
+      providerSector: summaryProfile?.sector ?? candidate?.providerSector,
+      providerIndustry: summaryProfile?.industry ?? candidate?.providerIndustry,
+      quoteType
+    }),
+    industry:
+      typeof summaryProfile?.industry === "string"
+        ? summaryProfile.industry
+        : candidate?.providerIndustry,
+    website: typeof summaryProfile?.website === "string" ? summaryProfile.website : undefined,
+    employeeCount: toNumber(summaryProfile?.fullTimeEmployees),
+    summary:
+      typeof summaryProfile?.longBusinessSummary === "string"
+        ? summaryProfile.longBusinessSummary
+        : undefined,
+    marketCap: toNumber(price?.marketCap ?? financialData?.marketCap),
+    trailingPE: toNumber(summaryDetail?.trailingPE ?? defaultKeyStatistics?.trailingPE),
+    forwardPE: toNumber(financialData?.forwardPE),
+    dividendYield: toNumber(summaryDetail?.dividendYield),
+    beta: toNumber(defaultKeyStatistics?.beta ?? summaryDetail?.beta),
+    profitMargins: toNumber(financialData?.profitMargins ?? defaultKeyStatistics?.profitMargins),
+    revenueGrowth: toNumber(financialData?.revenueGrowth),
+    earningsGrowth: toNumber(financialData?.earningsGrowth),
+    debtToEquity: toNumber(financialData?.debtToEquity),
+    currentRatio: toNumber(financialData?.currentRatio),
+    quickRatio: toNumber(financialData?.quickRatio),
+    returnOnEquity: toNumber(financialData?.returnOnEquity),
+    totalCash: toNumber(financialData?.totalCash),
+    totalDebt: toNumber(financialData?.totalDebt),
+    freeCashflow: toNumber(financialData?.freeCashflow),
+    operatingCashflow: toNumber(financialData?.operatingCashflow),
+    targetMeanPrice: toNumber(financialData?.targetMeanPrice)
+  };
+
+  return writeCache(snapshotCache, normalizedSymbol, SNAPSHOT_TTL_MS, snapshot);
 }
 
 export function getRangeFromDays(days = 252): ChartRange {
   if (days <= 1) return "1D";
-  if (days <= 5) return "1W";
+  if (days <= 7) return "1W";
   if (days <= 31) return "1M";
-  if (days <= 92) return "3M";
-  if (days <= 252) return "1Y";
-  if (days <= 1260) return "5Y";
+  if (days <= 90) return "3M";
+  if (days <= 365) return "1Y";
+  if (days <= 1825) return "5Y";
   return "MAX";
-}
-
-async function fetchFmpProfile(symbol: string) {
-  const response = await fetchProviderJson<FmpProfile[]>(
-    getFmpUrl(`/profile/${encodeURIComponent(symbol)}`),
-    "FMP",
-    900
-  );
-  return response[0];
-}
-
-async function fetchFmpMetrics(symbol: string) {
-  const response = await fetchProviderJson<FmpKeyMetrics[]>(
-    getFmpUrl(`/key-metrics-ttm`, { symbol }),
-    "FMP",
-    900
-  );
-  return response[0];
-}
-
-async function fetchFmpAnnualMetrics(symbol: string) {
-  const response = await fetchProviderJson<FmpKeyMetrics[]>(
-    getFmpUrl(`/key-metrics`, { symbol, limit: "1" }),
-    "FMP",
-    900
-  );
-  return response[0];
-}
-
-async function fetchFmpRatios(symbol: string) {
-  const response = await fetchProviderJson<FmpRatio[]>(
-    getFmpUrl(`/ratios-ttm`, { symbol }),
-    "FMP",
-    900
-  );
-  return response[0];
-}
-
-async function fetchFmpAnnualRatios(symbol: string) {
-  const response = await fetchProviderJson<FmpRatio[]>(
-    getFmpUrl(`/ratios`, { symbol, limit: "1" }),
-    "FMP",
-    900
-  );
-  return response[0];
-}
-
-async function fetchFmpGrowth(symbol: string) {
-  const response = await fetchProviderJson<FmpGrowth[]>(
-    getFmpUrl(`/financial-growth`, { symbol, limit: "1" }),
-    "FMP",
-    900
-  );
-  return response[0];
-}
-
-async function fetchFmpCashFlow(symbol: string) {
-  const response = await fetchProviderJson<FmpCashFlow[]>(
-    getFmpUrl(`/cash-flow-statement`, { symbol, limit: "1" }),
-    "FMP",
-    900
-  );
-  return response[0];
-}
-
-async function fetchFmpBalanceSheet(symbol: string) {
-  const response = await fetchProviderJson<FmpBalanceSheet[]>(
-    getFmpUrl(`/balance-sheet-statement`, { symbol, limit: "1" }),
-    "FMP",
-    900
-  );
-  return response[0];
-}
-
-async function fetchFmpQuote(symbol: string) {
-  const response = await fetchProviderJson<FmpQuote[]>(
-    getFmpUrl(`/quote`, { symbol }),
-    "FMP",
-    300
-  );
-  return response[0];
-}
-
-async function fetchFundamentalSnapshot(symbol: string) {
-  const tasks = [
-    fetchFmpProfile(symbol).catch(() => undefined),
-    fetchFmpMetrics(symbol).catch(() => undefined),
-    fetchFmpAnnualMetrics(symbol).catch(() => undefined),
-    fetchFmpRatios(symbol).catch(() => undefined),
-    fetchFmpAnnualRatios(symbol).catch(() => undefined),
-    fetchFmpGrowth(symbol).catch(() => undefined),
-    fetchFmpCashFlow(symbol).catch(() => undefined),
-    fetchFmpBalanceSheet(symbol).catch(() => undefined),
-    fetchFmpQuote(symbol).catch(() => undefined)
-  ] as const;
-
-  const [profile, metrics, annualMetrics, ratios, annualRatios, growth, cashFlow, balanceSheet, quote] =
-    await Promise.all(tasks);
-  return {
-    profile,
-    metrics,
-    annualMetrics,
-    ratios,
-    annualRatios,
-    growth,
-    cashFlow,
-    balanceSheet,
-    quote
-  } satisfies FundamentalSnapshot;
-}
-
-export async function fetchSecurityIdentity(symbol: string) {
-  const normalizedSymbol = symbol.toUpperCase();
-  const fundamentals: FundamentalSnapshot = FMP_API_KEY
-    ? await fetchFundamentalSnapshot(normalizedSymbol)
-    : {};
-  const profile = fundamentals.profile;
-  const quote = fundamentals.quote;
-  const override = resolveCompanyOverride(normalizedSymbol);
-  const quoteType = buildQuoteType({
-    isEtf: profile?.isEtf,
-    isFund: profile?.isFund,
-    sector: profile?.sector
-  });
-  const sector = buildResolvedSector({
-    ticker: normalizedSymbol,
-    providerSector: profile?.sector,
-    providerIndustry: profile?.industry ?? override?.industry,
-    quoteType
-  });
-
-  return {
-    symbol: normalizedSymbol,
-    companyName: profile?.companyName ?? quote?.name ?? override?.companyName ?? normalizedSymbol,
-    exchange:
-      profile?.exchangeShortName ?? profile?.exchange ?? quote?.exchange ?? override?.exchange ?? "Unknown",
-    quoteType,
-    sector,
-    industry: profile?.industry ?? override?.industry,
-    marketCap: firstDefined(
-      fundamentals.metrics?.marketCap,
-      fundamentals.annualMetrics?.marketCap,
-      quote?.marketCap,
-      profile?.mktCap
-    ),
-    profile,
-    metrics: fundamentals.metrics,
-    annualMetrics: fundamentals.annualMetrics,
-    ratios: fundamentals.ratios,
-    annualRatios: fundamentals.annualRatios,
-    growth: fundamentals.growth,
-    cashFlow: fundamentals.cashFlow,
-    balanceSheet: fundamentals.balanceSheet,
-    quote
-  };
-}
-
-export async function fetchQuote(symbol: string): Promise<MarketQuote> {
-  const key = symbol.toUpperCase();
-  const cached = quoteCache.get(key);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.data;
-  }
-
-  const fundamentals: FundamentalSnapshot = FMP_API_KEY ? await fetchFundamentalSnapshot(key) : {};
-
-  let data: MarketQuote | null = null;
-
-  if (TWELVE_DATA_API_KEY) {
-    try {
-      const quotePayload = await fetchProviderJson<TwelveDataQuoteResponse>(
-        getTwelveQuoteUrl(key),
-        "Twelve Data",
-        60
-      );
-      data = normalizeTwelveQuote(key, quotePayload, fundamentals.profile, fundamentals.metrics);
-    } catch {
-      data = null;
-    }
-  }
-
-  if (!data && (fundamentals.quote || fundamentals.profile?.price != null)) {
-    data = normalizeFmpQuote(key, fundamentals.quote, fundamentals.profile, fundamentals.metrics);
-  }
-
-  if (!data) {
-    throw new Error(`Failed to load quote for ${key}`);
-  }
-
-  quoteCache.set(key, {
-    expiresAt: Date.now() + 60_000,
-    data
-  });
-
-  return data;
-}
-
-export async function fetchQuotes(symbols: string[]) {
-  const uniqueSymbols = [...new Set(symbols.map((symbol) => symbol.toUpperCase()))];
-  const missing = uniqueSymbols.filter((symbol) => {
-    const cached = quoteCache.get(symbol);
-    return !(cached && cached.expiresAt > Date.now());
-  });
-
-  if (missing.length > 0) {
-    const results = await Promise.allSettled(
-      missing.map(async (symbol) => {
-        const quote = await fetchQuote(symbol);
-        quoteCache.set(symbol, {
-          expiresAt: Date.now() + 60_000,
-          data: quote
-        });
-      })
-    );
-    for (const [index, result] of results.entries()) {
-      if (result.status === "rejected") {
-        const symbol = missing[index];
-        quoteCache.delete(symbol);
-      }
-    }
-  }
-
-  return uniqueSymbols
-    .map((symbol) => quoteCache.get(symbol)?.data)
-    .filter((quote): quote is MarketQuote => Boolean(quote));
-}
-
-export function normalizeTimeSeries(payload: TwelveDataTimeSeriesResponse): HistoricalPoint[] {
-  return (payload.values ?? [])
-    .map((point) => {
-      const close = parseNumber(point.close);
-      const datetime = point.datetime;
-      if (!datetime || close === undefined) {
-        return null;
-      }
-      return {
-        date: toIsoString(datetime),
-        close
-      };
-    })
-    .filter((point): point is HistoricalPoint => point !== null);
-}
-
-export async function fetchHistoricalSeries(
-  symbol: string,
-  range: ChartRange = "1Y"
-): Promise<HistoricalPoint[]> {
-  const key = `${symbol.toUpperCase()}:${range}`;
-  const cached = historyCache.get(key);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.data;
-  }
-
-  const { url, revalidateSeconds } = getTwelveTimeSeriesUrl(symbol.toUpperCase(), range);
-  let data: HistoricalPoint[] | null = null;
-
-  if (TWELVE_DATA_API_KEY) {
-    try {
-      const payload = await fetchProviderJson<TwelveDataTimeSeriesResponse>(
-        url,
-        "Twelve Data",
-        revalidateSeconds
-      );
-
-      if (payload.status !== "error") {
-        data = normalizeTimeSeries(payload);
-      }
-    } catch {
-      data = null;
-    }
-  }
-
-  if (!data || data.length === 0) {
-    const fallbackQuote = await fetchQuote(symbol.toUpperCase()).catch(() => null);
-    if (!fallbackQuote) {
-      throw new Error(`Failed to load price history for ${symbol.toUpperCase()}`);
-    }
-    data = buildSyntheticHistorySeries(fallbackQuote.price, range);
-  }
-
-  historyCache.set(key, {
-    expiresAt: Date.now() + revalidateSeconds * 1000,
-    data
-  });
-
-  return data;
-}
-
-export async function fetchHistoricalCloses(symbol: string, days = 252): Promise<HistoricalPoint[]> {
-  const series = await fetchHistoricalSeries(symbol, getRangeFromDays(days));
-  return series.slice(-days);
-}
-
-export async function fetchCompanyDetail(
-  symbol: string,
-  range: ChartRange = "1M"
-): Promise<CompanyDetail> {
-  const normalizedSymbol = symbol.toUpperCase();
-  const key = `${normalizedSymbol}:${range}`;
-  const cached = detailCache.get(key);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.data;
-  }
-
-  const [quoteResult, chartResult, identityResult] = await Promise.allSettled([
-    fetchQuote(normalizedSymbol),
-    fetchHistoricalSeries(normalizedSymbol, range),
-    fetchSecurityIdentity(normalizedSymbol)
-  ]);
-
-  const quote = quoteResult.status === "fulfilled" ? quoteResult.value : undefined;
-  const chart = chartResult.status === "fulfilled" ? chartResult.value : [];
-  const identity = identityResult.status === "fulfilled" ? identityResult.value : null;
-
-  if (!quote && !identity && chart.length === 0) {
-    throw new Error(`Failed to load company detail for ${normalizedSymbol}`);
-  }
-
-  const data: CompanyDetail = {
-    ticker: normalizedSymbol,
-    companyName: identity?.companyName ?? quote?.longName ?? quote?.shortName ?? normalizedSymbol,
-    exchange: identity?.exchange ?? quote?.exchange ?? "Unknown",
-    currentPrice: quote?.price ?? identity?.quote?.price ?? 0,
-    currency: quote?.currency ?? "USD",
-    marketCap: identity?.marketCap ?? quote?.marketCap,
-    sector: identity?.sector ?? buildResolvedSector({ ticker: normalizedSymbol, quoteType: identity?.quoteType }),
-    industry: identity?.industry,
-    website: identity?.profile?.website,
-    employeeCount: parseEmployeeCount(identity?.profile?.fullTimeEmployees),
-    summary: identity?.profile?.description,
-    fiftyTwoWeekLow:
-      quote?.fiftyTwoWeekLow ??
-      identity?.quote?.yearLow ??
-      parseRangeValue(identity?.profile?.range, 0),
-    fiftyTwoWeekHigh:
-      quote?.fiftyTwoWeekHigh ??
-      identity?.quote?.yearHigh ??
-      parseRangeValue(identity?.profile?.range, 1),
-    trailingPE: firstDefined(
-      identity?.metrics?.peRatio,
-      identity?.metrics?.peRatioTTM,
-      identity?.ratios?.priceToEarningsRatioTTM,
-      identity?.quote?.pe,
-      quote?.trailingPE
-    ),
-    forwardPE: undefined,
-    dividendYield: firstDefined(
-      identity?.metrics?.dividendYield,
-      identity?.metrics?.dividendYieldPercentageTTM,
-      identity?.profile?.lastDiv
-    ),
-    beta: identity?.profile?.beta,
-    profitMargins: firstDefined(
-      identity?.ratios?.netProfitMargin,
-      identity?.ratios?.netProfitMarginTTM,
-      identity?.annualRatios?.netProfitMargin
-    ),
-    revenueGrowth: identity?.growth?.revenueGrowth,
-    earningsGrowth: identity?.growth?.netIncomeGrowth ?? identity?.growth?.epsgrowth,
-    debtToEquity: firstDefined(
-      identity?.ratios?.debtEquityRatio,
-      identity?.ratios?.debtEquityRatioTTM,
-      identity?.annualRatios?.debtEquityRatio
-    ),
-    currentRatio: firstDefined(
-      identity?.ratios?.currentRatio,
-      identity?.ratios?.currentRatioTTM,
-      identity?.metrics?.currentRatio,
-      identity?.metrics?.currentRatioTTM,
-      identity?.annualRatios?.currentRatio,
-      identity?.annualMetrics?.currentRatio
-    ),
-    quickRatio: firstDefined(
-      identity?.ratios?.quickRatio,
-      identity?.ratios?.quickRatioTTM,
-      identity?.annualRatios?.quickRatio
-    ),
-    returnOnEquity: firstDefined(
-      identity?.ratios?.returnOnEquity,
-      identity?.ratios?.returnOnEquityTTM,
-      identity?.metrics?.returnOnEquity,
-      identity?.metrics?.returnOnEquityTTM,
-      identity?.annualRatios?.returnOnEquity,
-      identity?.annualMetrics?.returnOnEquity
-    ),
-    totalCash: identity?.balanceSheet?.cashAndCashEquivalents,
-    totalDebt: identity?.balanceSheet?.totalDebt,
-    freeCashflow: identity?.cashFlow?.freeCashFlow,
-    operatingCashflow: identity?.cashFlow?.operatingCashFlow,
-    targetMeanPrice: undefined,
-    chart
-  };
-
-  detailCache.set(key, {
-    expiresAt: Date.now() + 15 * 60_000,
-    data
-  });
-
-  return data;
-}
-
-export async function fetchCompanyDetails(symbols: string[]) {
-  const results = await Promise.allSettled(symbols.map((symbol) => fetchCompanyDetail(symbol)));
-  return results
-    .filter(
-      (result): result is PromiseFulfilledResult<CompanyDetail> => result.status === "fulfilled"
-    )
-    .map((result) => result.value);
-}
-
-export async function fetchSecurityPreview(symbol: string): Promise<SecurityPreview> {
-  const normalizedSymbol = symbol.toUpperCase();
-  const [identityResult, quoteResult] = await Promise.allSettled([
-    fetchSecurityIdentity(normalizedSymbol),
-    fetchQuote(normalizedSymbol)
-  ]);
-
-  if (identityResult.status !== "fulfilled") {
-    throw new Error(`Failed to load security preview for ${normalizedSymbol}`);
-  }
-
-  const identity = identityResult.value;
-  const quote = quoteResult.status === "fulfilled" ? quoteResult.value : null;
-  const dataStatus: SecurityPreview["dataStatus"] = quote
-    ? "full"
-    : identity.companyName
-      ? "price_unavailable"
-      : "identity_only";
-
-  return {
-    symbol: identity.symbol,
-    companyName: identity.companyName,
-    exchange: identity.exchange,
-    quoteType: identity.quoteType,
-    sector: identity.sector,
-    industry: identity.industry,
-    marketCap: identity.marketCap,
-    currentPrice: quote?.price ?? null,
-    changePercent: quote?.changePercent ?? null,
-    dataStatus
-  };
 }
 
 export async function searchTickers(query: string): Promise<SecuritySearchResult[]> {
@@ -974,27 +456,254 @@ export async function searchTickers(query: string): Promise<SecuritySearchResult
     return [];
   }
 
-  const fmpResults = FMP_API_KEY
-    ? await fetchProviderJson<FmpSearchSymbol[]>(
-        getFmpSearchUrl(normalizedQuery),
-        "FMP",
-        60
-      ).catch(() => [])
-    : [];
+  const cacheKey = normalizeText(normalizedQuery);
+  const cached = readCache(searchCache, cacheKey);
+  if (cached) {
+    return cached;
+  }
 
-  const rows = fmpResults
-    .map((quote) => {
-      const symbol = quote.symbol?.trim().toUpperCase();
-      const companyName = quote.name?.trim() ?? "";
-      if (!symbol || !companyName) return null;
-      return buildSecuritySearchRow(
-        symbol,
-        companyName,
-        quote.exchange ?? quote.exchangeFullName ?? "US",
-        buildQuoteType({ type: quote.type, sector: "equity" })
-      );
+  const rows = (await searchCandidates(normalizedQuery)).map(buildSearchResult);
+  return writeCache(searchCache, cacheKey, SEARCH_TTL_MS, dedupeAndRankSearchRows(rows, normalizedQuery));
+}
+
+export async function fetchSecurityIdentity(symbol: string) {
+  return fetchSecuritySnapshot(symbol);
+}
+
+export async function fetchQuote(symbol: string): Promise<MarketQuote> {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  const cached = readCache(quoteCache, normalizedSymbol);
+  if (cached) {
+    return cached;
+  }
+
+  const quote = await yahooFinance.quote(normalizedSymbol);
+  const normalized = normalizeYahooQuote(normalizedSymbol, quote);
+  return writeCache(quoteCache, normalizedSymbol, QUOTE_TTL_MS, normalized);
+}
+
+export async function fetchQuotes(symbols: string[]) {
+  const results = await Promise.allSettled(
+    symbols.map((symbol) => fetchQuote(symbol))
+  );
+
+  return results
+    .flatMap((result) => (result.status === "fulfilled" ? [result.value] : []))
+    .filter((quote, index, all) => all.findIndex((entry) => entry.ticker === quote.ticker) === index);
+}
+
+export async function fetchHistoricalSeriesResult(
+  symbol: string,
+  range: ChartRange
+): Promise<HistoricalSeriesResult> {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  const cacheKey = `${normalizedSymbol}:${range}`;
+  const cached = readCache(historyCache, cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  try {
+    const chart = await yahooFinance.chart(normalizedSymbol, {
+      period1: new Date(Date.now() - getRangeLookbackDays(range) * 24 * 60 * 60 * 1000),
+      period2: new Date(),
+      interval: getYahooInterval(range)
+    });
+    const points = normalizeYahooChartPoints(
+      Array.isArray(chart.quotes) ? (chart.quotes as YahooChartQuoteLike[]) : [],
+      range
+    );
+    if (points.length === 0) {
+      return unavailableHistory(normalizedSymbol, range);
+    }
+
+    return writeCache(historyCache, cacheKey, CHART_RANGE_CONFIG[range].revalidateSeconds * 1000, {
+      symbol: normalizedSymbol,
+      range,
+      points,
+      dataState: "live",
+      asOf: points[points.length - 1]!.date,
+      provider: "Yahoo Finance"
+    });
+  } catch {
+    return unavailableHistory(normalizedSymbol, range);
+  }
+}
+
+export async function fetchHistoricalSeries(symbol: string, range: ChartRange): Promise<HistoricalPoint[]> {
+  const result = await fetchHistoricalSeriesResult(symbol, range);
+  return result.points;
+}
+
+export async function fetchHistoricalCloses(symbol: string, days = 252): Promise<HistoricalPoint[]> {
+  const result = await fetchHistoricalSeriesResult(symbol, getRangeFromDays(days));
+  return result.points.slice(-days);
+}
+
+export async function fetchCompanyDetail(
+  symbol: string,
+  range: ChartRange = "1M"
+): Promise<CompanyDetail> {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  const cacheKey = `${normalizedSymbol}:${range}`;
+  const cached = readCache(detailCache, cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const [snapshotResult, quoteResult, historyResult] = await Promise.allSettled([
+    fetchSecuritySnapshot(normalizedSymbol),
+    fetchQuote(normalizedSymbol),
+    fetchHistoricalSeriesResult(normalizedSymbol, range)
+  ]);
+
+  const snapshot = snapshotResult.status === "fulfilled" ? snapshotResult.value : null;
+  const quote = quoteResult.status === "fulfilled" ? quoteResult.value : null;
+  const history = historyResult.status === "fulfilled" ? historyResult.value : unavailableHistory(normalizedSymbol, range);
+
+  if (!snapshot && !quote && history.points.length === 0) {
+    throw new Error(`Failed to load company detail for ${normalizedSymbol}`);
+  }
+
+  const detail: CompanyDetail = {
+    ...emptyCompanyDetail(normalizedSymbol),
+    ticker: normalizedSymbol,
+    companyName:
+      snapshot?.companyName ??
+      quote?.longName ??
+      quote?.shortName ??
+      normalizedSymbol,
+    exchange:
+      snapshot?.exchange ??
+      quote?.exchange ??
+      "N/A",
+    currentPrice: quote?.price ?? null,
+    currency: quote?.currency ?? snapshot?.currency ?? "USD",
+    marketCap: quote?.marketCap ?? snapshot?.marketCap,
+    sector: snapshot?.sector ?? resolveSector({ ticker: normalizedSymbol }),
+    industry: snapshot?.industry,
+    website: snapshot?.website,
+    employeeCount: snapshot?.employeeCount,
+    summary: snapshot?.summary,
+    fiftyTwoWeekLow: quote?.fiftyTwoWeekLow,
+    fiftyTwoWeekHigh: quote?.fiftyTwoWeekHigh,
+    trailingPE: quote?.trailingPE ?? snapshot?.trailingPE,
+    forwardPE: quote?.forwardPE ?? snapshot?.forwardPE,
+    dividendYield: snapshot?.dividendYield,
+    beta: snapshot?.beta,
+    profitMargins: snapshot?.profitMargins,
+    revenueGrowth: snapshot?.revenueGrowth,
+    earningsGrowth: snapshot?.earningsGrowth,
+    debtToEquity: snapshot?.debtToEquity,
+    currentRatio: snapshot?.currentRatio,
+    quickRatio: snapshot?.quickRatio,
+    returnOnEquity: snapshot?.returnOnEquity,
+    totalCash: snapshot?.totalCash,
+    totalDebt: snapshot?.totalDebt,
+    freeCashflow: snapshot?.freeCashflow,
+    operatingCashflow: snapshot?.operatingCashflow,
+    targetMeanPrice: snapshot?.targetMeanPrice,
+    chart: history.points,
+    dataState: quote ? "live" : "unavailable",
+    asOf: quote?.asOf ?? null,
+    provider: quote || snapshot ? "Yahoo Finance" : null,
+    historyDataState: history.dataState,
+    historyAsOf: history.asOf,
+    historyProvider: history.provider
+  };
+
+  return writeCache(detailCache, cacheKey, DETAIL_TTL_MS, detail);
+}
+
+export async function fetchCompanyDetails(symbols: string[]) {
+  const results = await Promise.allSettled(
+    symbols.map(async (symbol) => {
+      const normalizedSymbol = symbol.trim().toUpperCase();
+      const [snapshotResult, quoteResult] = await Promise.allSettled([
+        fetchSecuritySnapshot(normalizedSymbol),
+        fetchQuote(normalizedSymbol)
+      ]);
+      const snapshot = snapshotResult.status === "fulfilled" ? snapshotResult.value : null;
+      const quote = quoteResult.status === "fulfilled" ? quoteResult.value : null;
+      if (!snapshot && !quote) {
+        throw new Error(`Failed to load company snapshot for ${normalizedSymbol}`);
+      }
+
+      return {
+        ...emptyCompanyDetail(normalizedSymbol),
+        ticker: normalizedSymbol,
+        companyName:
+          snapshot?.companyName ??
+          quote?.longName ??
+          quote?.shortName ??
+          normalizedSymbol,
+        exchange: snapshot?.exchange ?? quote?.exchange ?? "N/A",
+        currentPrice: quote?.price ?? null,
+        currency: quote?.currency ?? snapshot?.currency ?? "USD",
+        marketCap: quote?.marketCap ?? snapshot?.marketCap,
+        sector: snapshot?.sector ?? resolveSector({ ticker: normalizedSymbol }),
+        industry: snapshot?.industry,
+        website: snapshot?.website,
+        employeeCount: snapshot?.employeeCount,
+        summary: snapshot?.summary,
+        fiftyTwoWeekLow: quote?.fiftyTwoWeekLow,
+        fiftyTwoWeekHigh: quote?.fiftyTwoWeekHigh,
+        trailingPE: quote?.trailingPE ?? snapshot?.trailingPE,
+        forwardPE: quote?.forwardPE ?? snapshot?.forwardPE,
+        dividendYield: snapshot?.dividendYield,
+        beta: snapshot?.beta,
+        profitMargins: snapshot?.profitMargins,
+        revenueGrowth: snapshot?.revenueGrowth,
+        earningsGrowth: snapshot?.earningsGrowth,
+        debtToEquity: snapshot?.debtToEquity,
+        currentRatio: snapshot?.currentRatio,
+        quickRatio: snapshot?.quickRatio,
+        returnOnEquity: snapshot?.returnOnEquity,
+        totalCash: snapshot?.totalCash,
+        totalDebt: snapshot?.totalDebt,
+        freeCashflow: snapshot?.freeCashflow,
+        operatingCashflow: snapshot?.operatingCashflow,
+        targetMeanPrice: snapshot?.targetMeanPrice,
+        chart: [],
+        dataState: quote ? "live" : "unavailable",
+        asOf: quote?.asOf ?? null,
+        provider: quote || snapshot ? "Yahoo Finance" : null,
+        historyDataState: "unavailable",
+        historyAsOf: null,
+        historyProvider: null
+      } satisfies CompanyDetail;
     })
-    .filter((row): row is SecuritySearchResult => row !== null);
+  );
 
-  return dedupeAndRankSearchRows(rows, normalizedQuery);
+  return results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
+}
+
+export async function fetchSecurityPreview(symbol: string): Promise<SecurityPreview> {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  const [snapshotResult, quoteResult] = await Promise.allSettled([
+    fetchSecuritySnapshot(normalizedSymbol),
+    fetchQuote(normalizedSymbol)
+  ]);
+
+  const snapshot = snapshotResult.status === "fulfilled" ? snapshotResult.value : null;
+  const quote = quoteResult.status === "fulfilled" ? quoteResult.value : null;
+  if (!snapshot) {
+    throw new Error(`Yahoo could not validate ${normalizedSymbol}`);
+  }
+
+  return {
+    symbol: normalizedSymbol,
+    companyName: snapshot.companyName,
+    exchange: snapshot.exchange,
+    quoteType: snapshot.quoteType,
+    sector: snapshot.sector,
+    industry: snapshot.industry,
+    marketCap: quote?.marketCap ?? snapshot.marketCap,
+    currentPrice: quote?.price ?? null,
+    changePercent: quote?.changePercent ?? null,
+    dataStatus: quote ? "full" : "price_unavailable",
+    dataState: quote ? "live" : "unavailable",
+    asOf: quote?.asOf ?? null,
+    provider: quote || snapshot ? "Yahoo Finance" : null
+  };
 }

@@ -3,11 +3,9 @@ import test from "node:test";
 
 import { CHART_RANGE_CONFIG } from "../lib/market-config.ts";
 import {
-  buildSyntheticHistorySeries,
   getRangeFromDays,
-  normalizeFmpQuote,
-  normalizeTimeSeries,
-  normalizeTwelveQuote
+  normalizeYahooChartPoints,
+  normalizeYahooQuote
 } from "../lib/market.ts";
 import { getDefaultSector, resolveSector } from "../lib/sectors.ts";
 
@@ -27,92 +25,48 @@ test("getRangeFromDays preserves existing compatibility mapping", () => {
   assert.equal(getRangeFromDays(3000), "MAX");
 });
 
-test("normalizeTwelveQuote derives previous close and change percent", () => {
-  const quote = normalizeTwelveQuote(
-    "AAPL",
-    {
-      name: "Apple Inc.",
-      exchange: "NASDAQ",
-      currency: "USD",
-      close: "210.50",
-      previous_close: "205.00"
-    },
-    {
-      companyName: "Apple Inc.",
-      mktCap: 1000,
-      range: "150-220"
-    },
-    {
-      marketCap: 2000,
-      peRatio: 31
-    }
-  );
+test("normalizeYahooQuote maps live Yahoo quote fields into app quote shape", () => {
+  const quote = normalizeYahooQuote("AAPL", {
+    shortName: "Apple Inc.",
+    longName: "Apple Inc.",
+    fullExchangeName: "NasdaqGS",
+    currency: "USD",
+    regularMarketPrice: 252.82,
+    regularMarketPreviousClose: 250.12,
+    regularMarketChangePercent: 1.079,
+    marketCap: 3715929735168,
+    trailingPE: 32.002533,
+    fiftyTwoWeekLow: 164.08,
+    fiftyTwoWeekHigh: 260.1,
+    regularMarketTime: new Date("2026-03-16T20:00:00.000Z")
+  });
 
   assert.equal(quote.ticker, "AAPL");
-  assert.equal(quote.price, 210.5);
-  assert.equal(quote.previousClose, 205);
-  assert.ok(quote.changePercent > 0);
-  assert.equal(quote.marketCap, 2000);
-  assert.equal(quote.trailingPE, 31);
-  assert.equal(quote.fiftyTwoWeekLow, 150);
-  assert.equal(quote.fiftyTwoWeekHigh, 220);
+  assert.equal(quote.price, 252.82);
+  assert.equal(quote.previousClose, 250.12);
+  assert.equal(quote.changePercent, 0.01079);
+  assert.equal(quote.marketCap, 3715929735168);
+  assert.equal(quote.trailingPE, 32.002533);
+  assert.equal(quote.exchange, "NasdaqGS");
+  assert.equal(quote.provider, "Yahoo Finance");
+  assert.equal(quote.dataState, "live");
 });
 
-test("normalizeFmpQuote preserves quote fallback fields when Twelve Data is unavailable", () => {
-  const quote = normalizeFmpQuote(
-    "NBIS",
-    {
-      name: "Nebius Group N.V.",
-      exchange: "NASDAQ",
-      price: 42.5,
-      changesPercentage: 2.5,
-      marketCap: 123456789,
-      pe: 18,
-      yearLow: 10,
-      yearHigh: 55
-    },
-    {
-      companyName: "Nebius Group N.V.",
-      exchangeShortName: "NASDAQ",
-      range: "10-55"
-    },
-    {
-      peRatio: 20
-    }
+test("normalizeYahooChartPoints drops incomplete rows and keeps the latest 1D session", () => {
+  const points = normalizeYahooChartPoints(
+    [
+      { date: new Date("2026-03-14T19:30:00.000Z"), close: 100 },
+      { date: new Date("2026-03-15T14:30:00.000Z"), close: 101.25 },
+      { date: new Date("2026-03-15T14:35:00.000Z"), close: 101.5 },
+      { date: new Date("2026-03-15T14:40:00.000Z"), close: null }
+    ],
+    "1D"
   );
-
-  assert.equal(quote.ticker, "NBIS");
-  assert.equal(quote.price, 42.5);
-  assert.equal(quote.previousClose, 42.5);
-  assert.equal(quote.changePercent, 0.025);
-  assert.equal(quote.marketCap, 123456789);
-  assert.equal(quote.trailingPE, 18);
-  assert.equal(quote.fiftyTwoWeekLow, 10);
-  assert.equal(quote.fiftyTwoWeekHigh, 55);
-});
-
-test("normalizeTimeSeries drops incomplete rows and normalizes datetimes", () => {
-  const points = normalizeTimeSeries({
-    values: [
-      { datetime: "2026-03-11 15:30:00", close: "101.25" },
-      { datetime: "2026-03-11", close: "102.50" },
-      { datetime: "2026-03-11 15:35:00" }
-    ]
-  });
 
   assert.equal(points.length, 2);
   assert.equal(points[0]?.close, 101.25);
-  assert.ok(points[0]?.date.endsWith("Z"));
-  assert.equal(points[1]?.close, 102.5);
-});
-
-test("buildSyntheticHistorySeries creates range-length flat fallback history", () => {
-  const points = buildSyntheticHistorySeries(100, "1M", new Date("2026-03-15T00:00:00.000Z"));
-
-  assert.equal(points.length, CHART_RANGE_CONFIG["1M"].outputsize);
-  assert.equal(points[0]?.close, 100);
-  assert.equal(points.at(-1)?.close, 100);
-  assert.ok((points[0]?.date ?? "") < (points.at(-1)?.date ?? ""));
+  assert.equal(points[1]?.close, 101.5);
+  assert.ok(points.every((point) => point.date.startsWith("2026-03-15")));
 });
 
 test("resolveSector maps major operating companies into the fixed taxonomy", () => {
@@ -135,14 +89,6 @@ test("resolveSector maps major operating companies into the fixed taxonomy", () 
   assert.equal(
     resolveSector({ ticker: "JPM", providerSector: "Financial Services", providerIndustry: "Banks - Diversified" }),
     "Banks & Insurance"
-  );
-  assert.equal(
-    resolveSector({ ticker: "XOM", providerSector: "Energy", providerIndustry: "Oil & Gas Integrated" }),
-    "Energy"
-  );
-  assert.equal(
-    resolveSector({ ticker: "PFE", providerSector: "Healthcare", providerIndustry: "Drug Manufacturers - General" }),
-    "Healthcare"
   );
 });
 

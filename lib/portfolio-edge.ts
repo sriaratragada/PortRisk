@@ -2,32 +2,81 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { isPortfolioArchived } from "@/lib/portfolio-archive";
 import {
   fetchCompanyDetails,
-  fetchHistoricalCloses,
-  fetchHistoricalSeries,
+  fetchHistoricalSeriesResult,
   fetchQuotes
 } from "@/lib/market";
 import { resolveSector } from "@/lib/sectors";
+import { STRESS_SCENARIOS } from "@/lib/stress-scenarios";
 import {
   buildHoldingSnapshots,
   buildPortfolioSeries,
-  monteCarloDrawdownProbability,
   summarizeRiskDrivers,
   classifyRiskTier,
   calculateMaximumDrawdown,
   calculateSharpeRatio,
   calculateVaR95,
-  computeDailyReturns
+  computeDailyReturns,
+  monteCarloDrawdownProbability
 } from "@/lib/risk";
-import type { ChartRange, PositionInput, RiskMetrics } from "@/lib/types";
+import type {
+  ChartRange,
+  HistoricalSeriesResult,
+  HoldingSnapshot,
+  HydratedPortfolioRisk,
+  MarketDataProvider,
+  MarketDataState,
+  PositionInput,
+  RiskMetrics
+} from "@/lib/types";
 
-export const STRESS_SCENARIOS: Record<
-  string,
-  { equities: number; bonds: number; commodities: number }
-> = {
-  "2008 Financial Crisis": { equities: -0.5, bonds: 0.1, commodities: -0.3 },
-  "2020 COVID Crash": { equities: -0.34, bonds: 0.08, commodities: -0.2 },
-  "Rising Rate Environment": { equities: -0.15, bonds: -0.2, commodities: 0.05 }
-};
+function aggregateDataState(states: MarketDataState[]) {
+  if (states.length === 0 || states.every((state) => state === "unavailable")) {
+    return "unavailable" as const;
+  }
+  return "live" as const;
+}
+
+function aggregateProvider(providers: Array<MarketDataProvider>) {
+  return providers.some((provider) => provider === "Yahoo Finance") ? "Yahoo Finance" : null;
+}
+
+function aggregateAsOf(values: Array<string | null | undefined>) {
+  const parsed = values
+    .filter((value): value is string => Boolean(value))
+    .map((value) => Date.parse(value))
+    .filter((value) => !Number.isNaN(value));
+  if (parsed.length === 0) return null;
+  return new Date(Math.min(...parsed)).toISOString();
+}
+
+function aggregatePortfolioSeriesFromHistory(
+  positions: PositionInput[],
+  historyResults: Record<string, HistoricalSeriesResult>
+) {
+  const tickers = positions.map((position) => position.ticker.toUpperCase());
+  const lengths = tickers.map((ticker) => historyResults[ticker]?.points.length ?? 0);
+  if (lengths.some((length) => length === 0)) {
+    return { series: [], alignedLength: 0 };
+  }
+
+  const alignedLength = Math.min(...lengths);
+  const series = Array.from({ length: alignedLength }, (_, index) => {
+    let value = 0;
+    let date = "";
+    for (const position of positions) {
+      const history = historyResults[position.ticker.toUpperCase()]?.points ?? [];
+      const point = history[history.length - alignedLength + index];
+      if (!point) {
+        return null;
+      }
+      date = point.date;
+      value += point.close * position.shares;
+    }
+    return { date, value };
+  }).filter((point): point is { date: string; value: number } => point !== null);
+
+  return { series, alignedLength };
+}
 
 export async function getPortfolioWithPositionsEdge(portfolioId: string, userId: string) {
   const supabase = createSupabaseAdminClient();
@@ -58,7 +107,10 @@ export async function getPortfolioWithPositionsEdge(portfolioId: string, userId:
   };
 }
 
-export async function hydratePortfolioRisk(positions: PositionInput[], drawdownThreshold = 0.15) {
+export async function hydratePortfolioRisk(
+  positions: PositionInput[],
+  drawdownThreshold = 0.15
+): Promise<HydratedPortfolioRisk> {
   const tickers = positions.map((position) => position.ticker.toUpperCase());
   const [quotes, details] = await Promise.all([
     fetchQuotes(tickers),
@@ -66,14 +118,22 @@ export async function hydratePortfolioRisk(positions: PositionInput[], drawdownT
   ]);
   const quoteMap = Object.fromEntries(quotes.map((quote) => [quote.ticker.toUpperCase(), quote]));
   const detailMap = Object.fromEntries(details.map((detail) => [detail.ticker.toUpperCase(), detail]));
-  const histories = await Promise.all(tickers.map((ticker) => fetchHistoricalCloses(ticker, 252)));
-  const latestPrices = Object.fromEntries(quotes.map((quote) => [quote.ticker.toUpperCase(), quote.price]));
-  const historicalByTicker = Object.fromEntries(
-    tickers.map((ticker, index) => [ticker, histories[index]])
+  const histories = await Promise.all(
+    tickers.map(async (ticker) => ({
+      ticker,
+      history: await fetchHistoricalSeriesResult(ticker, "1Y").catch(() => ({
+        symbol: ticker,
+        range: "1Y" as const,
+        points: [],
+        dataState: "unavailable" as const,
+        asOf: null,
+        provider: null
+      }))
+    }))
   );
+  const historyResultMap = Object.fromEntries(histories.map(({ ticker, history }) => [ticker, history]));
 
-  const { series, metrics } = buildPortfolioSeries(positions, historicalByTicker, latestPrices);
-  const holdings = buildHoldingSnapshots(positions, quoteMap).map((holding) => {
+  const holdings: HoldingSnapshot[] = buildHoldingSnapshots(positions, quoteMap).map((holding) => {
     const detail = detailMap[holding.ticker.toUpperCase()];
     return detail
       ? {
@@ -98,19 +158,45 @@ export async function hydratePortfolioRisk(positions: PositionInput[], drawdownT
           })
         };
   });
-  const dailyReturns = computeDailyReturns(series.map((point) => point.value));
-  const probabilities = monteCarloDrawdownProbability(dailyReturns, drawdownThreshold);
+
+  const latestPrices = Object.fromEntries(
+    positions.map((position) => {
+      const ticker = position.ticker.toUpperCase();
+      const quotePrice = quoteMap[ticker]?.price;
+      const history = historyResultMap[ticker]?.points ?? [];
+      const fallbackClose = history[history.length - 1]?.close;
+      return [ticker, quotePrice ?? fallbackClose ?? 0];
+    })
+  );
+  const historicalByTicker = Object.fromEntries(
+    tickers.map((ticker) => [ticker, historyResultMap[ticker]?.points ?? []])
+  );
+  const { series, alignedLength } = aggregatePortfolioSeriesFromHistory(positions, historyResultMap);
+  const historySufficient = alignedLength >= 60;
+
+  let metrics: RiskMetrics | null = null;
+  if (historySufficient && series.length >= 60) {
+    const built = buildPortfolioSeries(positions, historicalByTicker, latestPrices);
+    const dailyReturns = computeDailyReturns(built.series.map((point) => point.value));
+    const probabilities = monteCarloDrawdownProbability(dailyReturns, drawdownThreshold);
+    metrics = {
+      ...built.metrics,
+      drawdownProb3m: probabilities[63],
+      drawdownProb6m: probabilities[126],
+      drawdownProb12m: probabilities[252]
+    } satisfies RiskMetrics;
+  }
 
   return {
     holdings,
     series,
     quotes,
-    metrics: {
-      ...metrics,
-      drawdownProb3m: probabilities[63],
-      drawdownProb6m: probabilities[126],
-      drawdownProb12m: probabilities[252]
-    } satisfies RiskMetrics
+    metrics,
+    marketDataState: aggregateDataState(histories.map(({ history }) => history.dataState)),
+    historySufficient,
+    historyCoverageDays: alignedLength,
+    asOf: aggregateAsOf(histories.map(({ history }) => history.asOf)),
+    provider: aggregateProvider(histories.map(({ history }) => history.provider))
   };
 }
 
@@ -119,18 +205,28 @@ export async function hydratePortfolioHistory(
   range: ChartRange
 ) {
   const tickers = positions.map((position) => position.ticker.toUpperCase());
-  const quotes = await fetchQuotes(tickers);
-  const latestPrices = Object.fromEntries(
-    quotes.map((quote) => [quote.ticker.toUpperCase(), quote.price])
-  );
   const histories = await Promise.all(
-    tickers.map((ticker) => fetchHistoricalSeries(ticker, range))
+    tickers.map(async (ticker) => ({
+      ticker,
+      history: await fetchHistoricalSeriesResult(ticker, range).catch(() => ({
+        symbol: ticker,
+        range,
+        points: [],
+        dataState: "unavailable" as const,
+        asOf: null,
+        provider: null
+      }))
+    }))
   );
-  const historicalByTicker = Object.fromEntries(
-    tickers.map((ticker, index) => [ticker, histories[index]])
-  );
+  const historyResultMap = Object.fromEntries(histories.map(({ ticker, history }) => [ticker, history]));
+  const { series } = aggregatePortfolioSeriesFromHistory(positions, historyResultMap);
 
-  return buildPortfolioSeries(positions, historicalByTicker, latestPrices).series;
+  return {
+    series,
+    dataState: aggregateDataState(histories.map(({ history }) => history.dataState)),
+    asOf: aggregateAsOf(histories.map(({ history }) => history.asOf)),
+    provider: aggregateProvider(histories.map(({ history }) => history.provider))
+  };
 }
 
 export function scoreStressedPortfolio(
@@ -160,7 +256,7 @@ export function scoreStressedPortfolio(
 
   const aggregatedCloses = pseudoSeries[0]
     ? pseudoSeries[0].map((_, index) =>
-        pseudoSeries.reduce((sum, item, pIndex) => sum + item[index] * positions[pIndex].shares, 0)
+        pseudoSeries.reduce((sum, item, positionIndex) => sum + item[index] * positions[positionIndex]!.shares, 0)
       )
     : [0, 0, 0];
 

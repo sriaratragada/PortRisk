@@ -55,6 +55,6 @@ export async function POST(request: NextRequest) {
   return json({
     broadcast: true,
     holdings: hydrated.holdings.length,
-    riskTier: hydrated.metrics.riskTier
+    riskTier: hydrated.metrics?.riskTier ?? null
   });
 }

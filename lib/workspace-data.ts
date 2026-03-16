@@ -168,7 +168,7 @@ export async function buildWorkspacePortfolio(portfolioId: string, userId: strin
       holdings: hydrated.holdings,
       positions: normalizedPositions,
       metrics: hydrated.metrics,
-      valueHistory: buildValueHistory(historySeries),
+      valueHistory: buildValueHistory(historySeries.series),
       auditLog: (auditLogs ?? []).map((entry) => ({
         id: entry.id,
         timestamp: entry.timestamp,

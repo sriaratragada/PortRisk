@@ -64,7 +64,7 @@ async function persistInsight(input: {
 async function buildInsightForPortfolio(portfolioId: string, userId: string) {
   const portfolio = await getPortfolioWithPositionsEdge(portfolioId, userId);
   if (!portfolio || portfolio.positions.length === 0) {
-    return { error: badRequest("Portfolio not found", 404) } as const;
+    return { routeError: badRequest("Portfolio not found", 404) } as const;
   }
 
   const positions = portfolio.positions.map((position) => ({
@@ -75,6 +75,16 @@ async function buildInsightForPortfolio(portfolioId: string, userId: string) {
   }));
 
   const hydrated = await hydratePortfolioRisk(positions);
+  if (!hydrated.metrics) {
+    return {
+      insight: null,
+      report: null,
+      rawPromptInput: null,
+      sourceRiskScoreId: null,
+      degraded: true,
+      error: "Insufficient Yahoo Finance history to generate AI risk insight."
+    } as const;
+  }
   const supabase = createSupabaseAdminClient();
   const [{ data: previousScores }, { data: recentActions }, { data: latestRiskScore }] = await Promise.all([
     supabase
@@ -163,7 +173,19 @@ export async function GET(request: NextRequest) {
 
   try {
     const built = await buildInsightForPortfolio(portfolioId, auth.user.id);
-    if ("error" in built) return built.error;
+    if ("routeError" in built) return built.routeError;
+    if (!built.insight) {
+      return json(
+        {
+          insight: null,
+          report: built.report,
+          persisted: false,
+          degraded: true,
+          error: built.error
+        },
+        { status: 200 }
+      );
+    }
     const persistence = await persistInsight({
       userId: auth.user.id,
       portfolioId,
@@ -195,7 +217,19 @@ export async function POST(request: NextRequest) {
   const payload = await parseJson(request, riskInsightSchema);
   try {
     const built = await buildInsightForPortfolio(payload.portfolioId, auth.user.id);
-    if ("error" in built) return built.error;
+    if ("routeError" in built) return built.routeError;
+    if (!built.insight) {
+      return json(
+        {
+          insight: null,
+          report: built.report,
+          persisted: false,
+          degraded: true,
+          error: built.error
+        },
+        { status: 200 }
+      );
+    }
 
     const persistence = payload.persist
       ? await persistInsight({

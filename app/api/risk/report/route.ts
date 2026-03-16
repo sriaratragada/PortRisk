@@ -32,6 +32,18 @@ export async function GET(request: NextRequest) {
   }));
   try {
     const hydrated = await hydratePortfolioRisk(positions);
+    if (!hydrated.metrics) {
+      return json(
+        {
+          report: null,
+          degraded: true,
+          error: "Insufficient Yahoo Finance history to build a reliable risk report.",
+          marketDataState: hydrated.marketDataState,
+          historyCoverageDays: hydrated.historyCoverageDays
+        },
+        { status: 200 }
+      );
+    }
     const supabase = createSupabaseAdminClient();
     const [{ data: previousScores }, { data: recentActions }] = await Promise.all([
       supabase
@@ -59,7 +71,14 @@ export async function GET(request: NextRequest) {
         : null,
       recentActions: recentActions ?? []
     });
-    return json({ report });
+    return json({
+      report: {
+        ...report,
+        marketDataState: hydrated.marketDataState,
+        historySufficient: hydrated.historySufficient,
+        historyCoverageDays: hydrated.historyCoverageDays
+      }
+    });
   } catch (error) {
     return json(
       {

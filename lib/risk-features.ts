@@ -466,6 +466,9 @@ export async function buildRiskFeatureReport(
   return {
     portfolioId,
     summary: summaryParts.join(" "),
+    marketDataState: "live",
+    historySufficient: true,
+    historyCoverageDays: portfolioSeries.length,
     sectorConcentration,
     singleNameConcentration,
     marketContext,

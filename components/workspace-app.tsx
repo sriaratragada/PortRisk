@@ -15,7 +15,7 @@ import {
   XAxis,
   YAxis
 } from "recharts";
-import { STRESS_SCENARIOS } from "@/lib/portfolio-edge";
+import { STRESS_SCENARIOS } from "@/lib/stress-scenarios";
 import { getDefaultSector } from "@/lib/sectors";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { buildFallbackHoldings } from "@/lib/holdings";
@@ -27,6 +27,7 @@ import type {
   RiskInsight,
   RiskReport,
   RiskTier,
+  SecuritySearchResult,
   SecurityPreview
 } from "@/lib/types";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
@@ -343,7 +344,7 @@ function formatRangeBounds(low?: number, high?: number) {
   if (low != null && high != null) {
     return `${formatCurrency(low)} - ${formatCurrency(high)}`;
   }
-  return low != null ? `${formatCurrency(low)} - N/A` : `N/A - ${formatCurrency(high ?? 0)}`;
+  return low != null ? `${formatCurrency(low)} - N/A` : `N/A - ${formatCurrency(high ?? null)}`;
 }
 
 function labelForRange(range: ChartRange) {
@@ -464,11 +465,17 @@ function buildFallbackCompanyDetail(holding: HoldingSnapshot): CompanyDetail {
     ticker: holding.ticker,
     companyName: holding.companyName ?? holding.ticker,
     exchange: holding.exchange ?? "N/A",
-    currentPrice: holding.currentPrice ?? 0,
+    currentPrice: holding.currentPrice ?? null,
     currency: "USD",
     sector: holding.sector ?? getDefaultSector(),
     industry: holding.industry,
-    chart: []
+    chart: [],
+    dataState: "unavailable",
+    asOf: null,
+    provider: null,
+    historyDataState: "unavailable",
+    historyAsOf: null,
+    historyProvider: null
   };
 }
 
@@ -494,7 +501,10 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [searchResults, setSearchResults] = useState<SecuritySearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [selectedSecurity, setSelectedSecurity] = useState<SecuritySearchResult | null>(null);
   const [positionTicker, setPositionTicker] = useState("");
   const [positionName, setPositionName] = useState("");
   const [positionShares, setPositionShares] = useState("10");
@@ -604,59 +614,42 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   }, [selectedPortfolio]);
 
   useEffect(() => {
-    const ticker = searchTerm.trim().toUpperCase();
-    if (!ticker) {
-      setPositionTicker("");
-      setPositionName("");
-      setPositionPreview(null);
-      setPositionPreviewLoading(false);
-      setSearchError(null);
+    const query = searchTerm.trim();
+    if (!query || selectedSecurity?.symbol === query.toUpperCase()) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      if (!query) {
+        setSearchError(null);
+      }
       return;
     }
 
     const handle = window.setTimeout(async () => {
-      setPositionPreviewLoading(true);
+      setSearchLoading(true);
       setSearchError(null);
       try {
-        const response = await fetch(`/api/securities/${encodeURIComponent(ticker)}/preview`, {
+        const response = await fetch(`/api/securities/search?q=${encodeURIComponent(query)}`, {
           headers: {
             ...(await getAuthHeaders())
           }
         });
         if (!response.ok) {
-          setPositionTicker("");
-          setPositionName("");
-          setPositionPreview(null);
-          setSearchError(await readErrorMessage(response));
-          return;
+          throw new Error(await readErrorMessage(response));
         }
         const data = (await response.json()) as {
-          preview: SecurityPreview;
-          valid?: boolean;
-          error?: string;
+          results?: SecuritySearchResult[];
         };
-        if (!data.valid) {
-          setPositionTicker("");
-          setPositionName("");
-          setPositionPreview(null);
-          setSearchError(data.error ?? "No listed ticker found.");
-          return;
-        }
-        setPositionTicker(data.preview.symbol);
-        setPositionName(data.preview.companyName);
-        setPositionPreview(data.preview);
+        setSearchResults(data.results ?? []);
       } catch (error) {
-        setPositionTicker("");
-        setPositionName("");
-        setPositionPreview(null);
-        setSearchError(error instanceof Error ? error.message : "Ticker validation failed");
+        setSearchResults([]);
+        setSearchError(error instanceof Error ? error.message : "Ticker search failed");
       } finally {
-        setPositionPreviewLoading(false);
+        setSearchLoading(false);
       }
     }, 220);
 
     return () => window.clearTimeout(handle);
-  }, [searchTerm]);
+  }, [searchTerm, selectedSecurity]);
 
   useEffect(() => {
     if (!selectedPortfolio || activeTab !== "allocation" || selectedPortfolio.holdings.length === 0) {
@@ -1059,6 +1052,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     }
     const data = (await response.json()) as {
       series: Array<{ date: string; value: number }>;
+      dataState?: "live" | "unavailable";
     };
     return buildPortfolioHistory(data.series, range);
   }
@@ -1196,17 +1190,18 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               const riskData = (await riskResponse.json()) as {
                 holdings: WorkspacePortfolio["holdings"];
                 metrics: WorkspacePortfolio["metrics"];
+                error?: string;
               };
               setSelectedPortfolio((current) =>
                 current && current.id === portfolioId
                   ? {
                       ...current,
                       holdings: mergeHydratedHoldings(current.positions, riskData.holdings ?? []),
-                    metrics: riskData.metrics ?? current.metrics
+                      metrics: riskData.metrics ?? null
                   }
                   : current
               );
-              setRiskError(null);
+              setRiskError(riskData.error ?? null);
             })
             .catch((error) => {
               setRiskError(error instanceof Error ? error.message : "Live pricing and risk are unavailable");
@@ -1292,6 +1287,72 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     });
   }
 
+  async function loadPositionPreview(
+    symbol: string,
+    selection?: SecuritySearchResult | null
+  ) {
+    const normalizedSymbol = symbol.trim().toUpperCase();
+    if (!normalizedSymbol) {
+      setPositionPreview(null);
+      setPositionPreviewLoading(false);
+      return false;
+    }
+
+    setPositionPreviewLoading(true);
+    setSearchError(null);
+    try {
+      const response = await fetch(`/api/securities/${encodeURIComponent(normalizedSymbol)}/preview`, {
+        headers: {
+          ...(await getAuthHeaders())
+        }
+      });
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+      const data = (await response.json()) as {
+        preview: SecurityPreview | null;
+        valid?: boolean;
+        error?: string;
+      };
+      if (!data.valid || !data.preview) {
+        throw new Error(data.error ?? "No listed ticker found.");
+      }
+
+      setSelectedSecurity(
+        selection ?? {
+          symbol: data.preview.symbol,
+          companyName: data.preview.companyName,
+          exchange: data.preview.exchange,
+          quoteType: data.preview.quoteType,
+          sector: data.preview.sector,
+          hasPreviewData: true
+        }
+      );
+      setPositionTicker(data.preview.symbol);
+      setPositionName(data.preview.companyName);
+      setPositionPreview(data.preview);
+      setSearchResults([]);
+      return true;
+    } catch (error) {
+      setSelectedSecurity(null);
+      setPositionTicker("");
+      setPositionName("");
+      setPositionPreview(null);
+      setSearchError(error instanceof Error ? error.message : "Ticker preview failed");
+      return false;
+    } finally {
+      setPositionPreviewLoading(false);
+    }
+  }
+
+  async function handleSelectSearchResult(result: SecuritySearchResult) {
+    setSelectedSecurity(result);
+    setPositionTicker(result.symbol);
+    setPositionName(result.companyName);
+    setSearchTerm(result.symbol);
+    await loadPositionPreview(result.symbol, result);
+  }
+
   function resetPositionForm() {
     setPositionTicker("");
     setPositionName("");
@@ -1301,6 +1362,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     setPositionAssetClass("equities");
     setEditingTicker(null);
     setPositionPreview(null);
+    setSelectedSecurity(null);
+    setSearchResults([]);
+    setSearchLoading(false);
     setSearchError(null);
   }
 
@@ -1437,7 +1501,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       return;
     }
 
-    const normalizedTicker = positionTicker.trim().toUpperCase();
+    const normalizedTicker = (selectedSecurity?.symbol ?? positionTicker).trim().toUpperCase();
     const shares = Number(positionShares);
     const avgCost = Number(positionAvgCost);
 
@@ -1445,8 +1509,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       setErrorMessage("Choose a ticker before adding a position.");
       return;
     }
-    if (!editingTicker && (!positionPreview || positionPreview.symbol !== normalizedTicker)) {
-      setErrorMessage("Enter a valid listed ticker before adding a position.");
+    if (!selectedSecurity || selectedSecurity.symbol !== normalizedTicker) {
+      setErrorMessage("Select a listed ticker from search before saving the position.");
       return;
     }
     if (!Number.isFinite(shares) || shares <= 0) {
@@ -1491,15 +1555,23 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     }
 
     setEditingTicker(position.ticker);
+    const selection: SecuritySearchResult = {
+      symbol: position.ticker,
+      companyName: holding?.companyName ?? position.ticker,
+      exchange: holding?.exchange ?? "N/A",
+      quoteType: "EQUITY",
+      sector: holding?.sector,
+      hasPreviewData: true
+    };
+    setSelectedSecurity(selection);
     setPositionTicker(position.ticker);
     setPositionName(holding?.companyName ?? position.ticker);
-    setSearchTerm(
-      position.ticker
-    );
+    setSearchTerm(position.ticker);
     setPositionShares(String(position.shares));
     setPositionAvgCost(String(position.avgCost));
     setPositionAssetClass(position.assetClass);
     setActiveTab("holdings");
+    void loadPositionPreview(position.ticker, selection);
   }
 
   async function removePosition(ticker: string) {
@@ -1557,6 +1629,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           holdings?: WorkspacePortfolio["holdings"];
           metrics?: WorkspacePortfolio["metrics"];
           series?: Array<{ date: string; value: number }>;
+          error?: string;
         };
         setSelectedPortfolio((current) => {
           if (!current) {
@@ -1565,7 +1638,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           const nextPortfolio = {
             ...current,
             holdings: data.holdings ?? current.holdings,
-            metrics: data.metrics ?? current.metrics,
+            metrics: data.metrics ?? null,
             valueHistory: data.series
               ? buildPortfolioHistory(data.series, portfolioRange)
               : current.valueHistory
@@ -1573,7 +1646,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           updateSelectedPortfolioSnapshot(nextPortfolio);
           return nextPortfolio;
         });
-        if (persist) {
+        setRiskError(data.error ?? null);
+        if (persist && data.metrics) {
           await refreshPortfolioList();
           try {
             await refreshAudit();
@@ -1583,6 +1657,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           setRiskReport(null);
           setRiskInsight(null);
           setStatusMessage("Risk score refreshed.");
+        } else if (persist && data.error) {
+          setStatusMessage(null);
         }
       } catch (error) {
         setRiskError(error instanceof Error ? error.message : "Risk scoring failed");
@@ -2583,13 +2659,46 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   onChange={(event) => {
                     const nextQuery = event.target.value;
                     setSearchTerm(nextQuery);
+                    setSelectedSecurity(null);
                     setPositionTicker("");
                     setPositionName("");
                     setPositionPreview(null);
+                    setSearchError(null);
                   }}
                   placeholder="AAPL, KO, XOM..."
                   className="w-full rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
                 />
+                {searchTerm.trim() && !selectedSecurity ? (
+                  <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-xl border border-white/10 bg-panel/95 shadow-panel backdrop-blur-xl">
+                    {searchLoading ? (
+                      <div className="px-4 py-3 text-sm text-slate-400">Searching Yahoo Finance...</div>
+                    ) : searchResults.length > 0 ? (
+                      <div className="max-h-72 overflow-y-auto py-2">
+                        {searchResults.map((result) => (
+                          <button
+                            key={`${result.symbol}:${result.exchange}`}
+                            type="button"
+                            onClick={() => {
+                              void handleSelectSearchResult(result);
+                            }}
+                            className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition hover:bg-white/[0.04]"
+                          >
+                            <div>
+                              <p className="text-sm font-semibold text-white">{result.symbol}</p>
+                              <p className="mt-1 text-sm text-slate-400">{result.companyName}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{result.quoteType}</p>
+                              <p className="mt-1 text-sm text-slate-400">{result.exchange}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="px-4 py-3 text-sm text-slate-400">No listed Yahoo Finance matches found.</div>
+                    )}
+                  </div>
+                ) : null}
               </div>
 
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
@@ -2679,7 +2788,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               ) : null}
 
               <div className="flex gap-3">
-              <button type="submit" className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
+              <button
+                type="submit"
+                disabled={!selectedSecurity || positionPreviewLoading}
+                className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+              >
                 {editingTicker ? "Update Position" : "Add Position"}
               </button>
               {editingTicker ? (
@@ -3524,7 +3637,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       <div className="mt-3 flex flex-wrap items-end gap-3">
                         <p className="text-4xl font-semibold tracking-[-0.05em] text-white">
                           {formatCurrency(
-                            selectedHoldingDetail.currentPrice > 0
+                            selectedHoldingDetail.currentPrice != null &&
+                              selectedHoldingDetail.currentPrice > 0
                               ? selectedHoldingDetail.currentPrice
                               : null
                           )}

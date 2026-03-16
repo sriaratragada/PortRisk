@@ -1,11 +1,5 @@
 import type { ChartRange } from "@/lib/types";
 
-export const TWELVE_DATA_BASE_URL = "https://api.twelvedata.com";
-export const FMP_BASE_URL = "https://financialmodelingprep.com/stable";
-
-export const TWELVE_DATA_API_KEY = process.env.TWELVE_DATA_API_KEY;
-export const FMP_API_KEY = process.env.FMP_API_KEY;
-
 export const CHART_RANGE_CONFIG: Record<
   ChartRange,
   { interval: string; outputsize: number; revalidateSeconds: number }
@@ -18,10 +12,3 @@ export const CHART_RANGE_CONFIG: Record<
   "5Y": { interval: "1week", outputsize: 260, revalidateSeconds: 1800 },
   MAX: { interval: "1month", outputsize: 600, revalidateSeconds: 3600 }
 };
-
-export function assertProviderKey(name: "TWELVE_DATA_API_KEY" | "FMP_API_KEY", value?: string) {
-  if (!value) {
-    throw new Error(`${name} is not configured`);
-  }
-  return value;
-}

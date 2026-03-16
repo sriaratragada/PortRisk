@@ -37,6 +37,19 @@ export async function POST(request: NextRequest) {
   }
 
   const result = await hydratePortfolioRisk(positions, payload.drawdownThreshold);
+  if (!result.metrics) {
+    return json({
+      holdings: result.holdings,
+      series: result.series,
+      quotes: result.quotes,
+      metrics: null,
+      degraded: true,
+      error: "Insufficient Yahoo Finance history to compute a reliable risk score.",
+      marketDataState: result.marketDataState,
+      historyCoverageDays: result.historyCoverageDays
+    });
+  }
+
   if (payload.persist !== false && payload.portfolioId) {
     const supabase = createSupabaseAdminClient();
     const riskRow = {

@@ -2,8 +2,9 @@ import { NextRequest } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { requireEdgeUser } from "@/lib/auth-edge";
 import { enforceRateLimit } from "@/lib/ratelimit";
-import { buildStressSummary, estimateRecoveryDays, getPortfolioWithPositionsEdge, hydratePortfolioRisk, scoreStressedPortfolio, STRESS_SCENARIOS } from "@/lib/portfolio-edge";
+import { buildStressSummary, estimateRecoveryDays, getPortfolioWithPositionsEdge, hydratePortfolioRisk, scoreStressedPortfolio } from "@/lib/portfolio-edge";
 import { badRequest, json, parseJson } from "@/lib/http";
+import { STRESS_SCENARIOS } from "@/lib/stress-scenarios";
 import { stressSchema } from "@/lib/validation";
 
 export const runtime = "nodejs";
@@ -40,9 +41,21 @@ export async function POST(request: NextRequest) {
     return badRequest("Unknown stress scenario");
   }
 
+  if (!current.metrics) {
+    return badRequest("Insufficient Yahoo Finance history to run a reliable stress test.", 422);
+  }
+
   const basePrices = Object.fromEntries(
-    current.holdings.map((holding) => [holding.ticker.toUpperCase(), holding.currentPrice ?? 0])
+    current.holdings
+      .filter(
+        (holding): holding is typeof holding & { currentPrice: number } =>
+          holding.currentPrice != null && Number.isFinite(holding.currentPrice)
+      )
+      .map((holding) => [holding.ticker.toUpperCase(), holding.currentPrice])
   );
+  if (Object.keys(basePrices).length !== current.holdings.length) {
+    return badRequest("Current Yahoo Finance prices are unavailable for one or more holdings.", 422);
+  }
   const stressed = scoreStressedPortfolio(positions, basePrices, scenario);
   const recoveryDays = estimateRecoveryDays(
     Math.max(current.metrics.annualizedReturn, 0.01),
