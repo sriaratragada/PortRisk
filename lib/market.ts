@@ -304,6 +304,47 @@ function toIsoString(datetime: string) {
   return new Date(`${datetime}T00:00:00Z`).toISOString();
 }
 
+function subtractInterval(date: Date, interval: string, steps: number) {
+  const next = new Date(date);
+  if (interval.endsWith("min")) {
+    next.setUTCMinutes(next.getUTCMinutes() - steps * parseInt(interval, 10));
+    return next;
+  }
+  if (interval.endsWith("h")) {
+    next.setUTCHours(next.getUTCHours() - steps * parseInt(interval, 10));
+    return next;
+  }
+  if (interval.endsWith("day")) {
+    next.setUTCDate(next.getUTCDate() - steps * parseInt(interval, 10));
+    return next;
+  }
+  if (interval.endsWith("week")) {
+    next.setUTCDate(next.getUTCDate() - steps * 7 * parseInt(interval, 10));
+    return next;
+  }
+  if (interval.endsWith("month")) {
+    next.setUTCMonth(next.getUTCMonth() - steps * parseInt(interval, 10));
+    return next;
+  }
+  return next;
+}
+
+export function buildSyntheticHistorySeries(
+  price: number,
+  range: ChartRange,
+  now = new Date()
+): HistoricalPoint[] {
+  const config = CHART_RANGE_CONFIG[range];
+  const points = Math.max(config.outputsize, 2);
+  return Array.from({ length: points }, (_, index) => {
+    const remaining = points - index - 1;
+    return {
+      date: subtractInterval(now, config.interval, remaining).toISOString(),
+      close: price
+    };
+  });
+}
+
 function createAuthError(provider: string, status: number) {
   return new Error(`${provider} request failed with ${status}`);
 }
@@ -761,12 +802,7 @@ export async function fetchHistoricalSeries(
     if (!fallbackQuote) {
       throw new Error(`Failed to load price history for ${symbol.toUpperCase()}`);
     }
-    data = [
-      {
-        date: new Date().toISOString(),
-        close: fallbackQuote.price
-      }
-    ];
+    data = buildSyntheticHistorySeries(fallbackQuote.price, range);
   }
 
   historyCache.set(key, {

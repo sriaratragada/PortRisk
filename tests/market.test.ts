@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { CHART_RANGE_CONFIG } from "../lib/market-config.ts";
-import { getRangeFromDays, normalizeFmpQuote, normalizeTimeSeries, normalizeTwelveQuote } from "../lib/market.ts";
+import {
+  buildSyntheticHistorySeries,
+  getRangeFromDays,
+  normalizeFmpQuote,
+  normalizeTimeSeries,
+  normalizeTwelveQuote
+} from "../lib/market.ts";
 import { getDefaultSector, resolveSector } from "../lib/sectors.ts";
 
 test("chart range config maps long ranges to slower intervals", () => {
@@ -98,6 +104,15 @@ test("normalizeTimeSeries drops incomplete rows and normalizes datetimes", () =>
   assert.equal(points[0]?.close, 101.25);
   assert.ok(points[0]?.date.endsWith("Z"));
   assert.equal(points[1]?.close, 102.5);
+});
+
+test("buildSyntheticHistorySeries creates range-length flat fallback history", () => {
+  const points = buildSyntheticHistorySeries(100, "1M", new Date("2026-03-15T00:00:00.000Z"));
+
+  assert.equal(points.length, CHART_RANGE_CONFIG["1M"].outputsize);
+  assert.equal(points[0]?.close, 100);
+  assert.equal(points.at(-1)?.close, 100);
+  assert.ok((points[0]?.date ?? "") < (points.at(-1)?.date ?? ""));
 });
 
 test("resolveSector maps major operating companies into the fixed taxonomy", () => {
