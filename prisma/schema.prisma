@@ -119,3 +119,46 @@ model AuditLog {
   @@index([userId, timestamp(sort: Desc)])
   @@index([portfolioId, timestamp(sort: Desc)])
 }
+
+model MarketQuoteCache {
+  symbol           String   @id
+  price            Float
+  previousClose    Float
+  changePercent    Float
+  currency         String
+  shortName        String?
+  longName         String?
+  exchange         String?
+  marketCap        Float?
+  trailingPE       Float?
+  fiftyTwoWeekLow  Float?
+  fiftyTwoWeekHigh Float?
+  provider         String
+  asOf             DateTime
+  fetchedAt        DateTime @updatedAt
+  rawPayload       Json
+}
+
+model MarketHistoryCache {
+  id         String   @id @default(uuid())
+  symbol     String
+  range      String
+  series     Json
+  provider   String
+  asOf       DateTime
+  fetchedAt  DateTime @updatedAt
+  seriesStart DateTime?
+  seriesEnd   DateTime?
+  rawPayload Json
+
+  @@unique([symbol, range])
+}
+
+model SecurityIdentityCache {
+  symbol     String   @id
+  provider   String
+  asOf       DateTime
+  fetchedAt  DateTime @updatedAt
+  data       Json
+  rawPayload Json
+}

@@ -2,7 +2,6 @@ import { NextRequest } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { badRequest, json } from "@/lib/http";
 import { fetchSecurityPreview } from "@/lib/market";
-import { getDefaultSector } from "@/lib/sectors";
 
 type Context = {
   params: Promise<{ ticker: string }>;
@@ -27,14 +26,7 @@ export async function GET(_request: NextRequest, context: Context) {
   } catch (error) {
     return json(
       {
-        preview: {
-          symbol: ticker.toUpperCase(),
-          companyName: ticker.toUpperCase(),
-          exchange: "Unknown",
-          quoteType: "Security",
-          sector: getDefaultSector(),
-          dataStatus: "identity_only"
-        },
+        preview: null,
         valid: false,
         error: error instanceof Error ? error.message : "Failed to load security preview"
       },

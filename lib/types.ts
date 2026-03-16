@@ -1,5 +1,7 @@
 export type RiskTier = "LOW" | "MODERATE" | "ELEVATED" | "HIGH";
 export type ChartRange = "1D" | "1W" | "1M" | "3M" | "1Y" | "5Y" | "MAX";
+export type MarketDataState = "live" | "stale" | "unavailable";
+export type MarketDataProvider = "Twelve Data" | "FMP" | "cache" | null;
 export type {
   ResolvedSector
 } from "@/lib/sectors";
@@ -24,6 +26,9 @@ export type MarketQuote = {
   trailingPE?: number;
   fiftyTwoWeekLow?: number;
   fiftyTwoWeekHigh?: number;
+  dataState: MarketDataState;
+  asOf: string | null;
+  provider: MarketDataProvider;
 };
 
 export type HistoricalPoint = {
@@ -51,6 +56,9 @@ export type SecurityPreview = {
   currentPrice?: number | null;
   changePercent?: number | null;
   dataStatus: "full" | "identity_only" | "price_unavailable";
+  dataState: MarketDataState;
+  asOf: string | null;
+  provider: MarketDataProvider;
 };
 
 export type HoldingSnapshot = PositionInput & {
@@ -86,7 +94,7 @@ export type CompanyDetail = {
   ticker: string;
   companyName: string;
   exchange: string;
-  currentPrice: number;
+  currentPrice: number | null;
   currency: string;
   marketCap?: number;
   sector: import("@/lib/sectors").ResolvedSector;
@@ -113,11 +121,29 @@ export type CompanyDetail = {
   operatingCashflow?: number;
   targetMeanPrice?: number;
   chart: HistoricalPoint[];
+  dataState: MarketDataState;
+  asOf: string | null;
+  provider: MarketDataProvider;
+  historyDataState: MarketDataState;
+  historyAsOf: string | null;
+  historyProvider: MarketDataProvider;
+};
+
+export type HistoricalSeriesResult = {
+  symbol: string;
+  range: ChartRange;
+  points: HistoricalPoint[];
+  dataState: MarketDataState;
+  asOf: string | null;
+  provider: MarketDataProvider;
 };
 
 export type RiskReport = {
   portfolioId: string;
   summary: string;
+  marketDataState: MarketDataState;
+  historySufficient: boolean;
+  historyCoverageDays: number;
   sectorConcentration: Array<{
     sector: string;
     weight: number;
@@ -257,4 +283,16 @@ export type RiskInsight = {
   model: string;
   provider: string;
   source: "AI" | "FALLBACK";
+};
+
+export type HydratedPortfolioRisk = {
+  holdings: HoldingSnapshot[];
+  series: Array<{ date: string; value: number }>;
+  quotes: MarketQuote[];
+  metrics: RiskMetrics | null;
+  marketDataState: MarketDataState;
+  historySufficient: boolean;
+  historyCoverageDays: number;
+  asOf: string | null;
+  provider: MarketDataProvider;
 };

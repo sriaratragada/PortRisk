@@ -5,18 +5,27 @@ import {
   TWELVE_DATA_API_KEY,
   TWELVE_DATA_BASE_URL
 } from "@/lib/market-config";
+import {
+  readHistoryCache,
+  readIdentityCache,
+  readQuoteCache,
+  writeHistoryCache,
+  writeIdentityCache,
+  writeQuoteCache
+} from "@/lib/market-cache";
 import { resolveSector } from "@/lib/sectors";
 import type {
   ChartRange,
   CompanyDetail,
   HistoricalPoint,
+  HistoricalSeriesResult,
   MarketQuote,
   SecurityPreview,
   SecuritySearchResult
 } from "@/lib/types";
 
 const quoteCache = new Map<string, { expiresAt: number; data: MarketQuote }>();
-const historyCache = new Map<string, { expiresAt: number; data: HistoricalPoint[] }>();
+const historyCache = new Map<string, { expiresAt: number; data: HistoricalSeriesResult }>();
 const detailCache = new Map<string, { expiresAt: number; data: CompanyDetail }>();
 
 type TwelveDataQuoteResponse = {
@@ -131,6 +140,17 @@ type FmpQuote = {
   yearLow?: number;
   yearHigh?: number;
 };
+
+type FmpHistoricalPoint = {
+  date?: string;
+  close?: number | string;
+};
+
+type FmpHistoricalEodResponse =
+  | FmpHistoricalPoint[]
+  | {
+      historical?: FmpHistoricalPoint[];
+    };
 
 type FundamentalSnapshot = {
   profile?: FmpProfile;
@@ -329,24 +349,37 @@ function subtractInterval(date: Date, interval: string, steps: number) {
   return next;
 }
 
-export function buildSyntheticHistorySeries(
-  price: number,
-  range: ChartRange,
-  now = new Date()
-): HistoricalPoint[] {
-  const config = CHART_RANGE_CONFIG[range];
-  const points = Math.max(config.outputsize, 2);
-  return Array.from({ length: points }, (_, index) => {
-    const remaining = points - index - 1;
-    return {
-      date: subtractInterval(now, config.interval, remaining).toISOString(),
-      close: price
-    };
-  });
-}
-
 function createAuthError(provider: string, status: number) {
   return new Error(`${provider} request failed with ${status}`);
+}
+
+function parseProviderError(payload: unknown, provider: "Twelve Data" | "FMP") {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const candidate = payload as Record<string, unknown>;
+  if (provider === "FMP") {
+    const message =
+      (typeof candidate["Error Message"] === "string" && candidate["Error Message"]) ||
+      (typeof candidate.error === "string" && candidate.error) ||
+      (typeof candidate.message === "string" && candidate.message);
+    if (message) {
+      return new Error(message);
+    }
+  }
+
+  if (
+    typeof candidate.status === "string" &&
+    candidate.status.toLowerCase() === "error"
+  ) {
+    const message =
+      (typeof candidate.message === "string" && candidate.message) ||
+      `${provider} request failed`;
+    return new Error(message);
+  }
+
+  return null;
 }
 
 async function fetchProviderJson<T>(
@@ -365,7 +398,12 @@ async function fetchProviderJson<T>(
     throw createAuthError(provider, response.status);
   }
 
-  return (await response.json()) as T;
+  const payload = (await response.json()) as T;
+  const parsedError = parseProviderError(payload, provider);
+  if (parsedError) {
+    throw parsedError;
+  }
+  return payload;
 }
 
 function getTwelveQuoteUrl(symbol: string) {
@@ -385,6 +423,48 @@ function getTwelveTimeSeriesUrl(symbol: string, range: ChartRange) {
   url.searchParams.set("order", "ASC");
   url.searchParams.set("timezone", "UTC");
   return { url: url.toString(), revalidateSeconds: config.revalidateSeconds };
+}
+
+function getRangeLookbackDays(range: ChartRange) {
+  switch (range) {
+    case "1D":
+      return 2;
+    case "1W":
+      return 7;
+    case "1M":
+      return 31;
+    case "3M":
+      return 93;
+    case "1Y":
+      return 366;
+    case "5Y":
+      return 366 * 5;
+    case "MAX":
+      return null;
+  }
+}
+
+function getFmpHistoricalUrl(symbol: string, range: ChartRange) {
+  if (range === "1D" || range === "1W") {
+    const to = new Date();
+    const from = subtractInterval(to, "day", getRangeLookbackDays(range) ?? 7);
+    return getFmpUrl(`/historical-chart/1hour`, {
+      symbol,
+      from: from.toISOString().slice(0, 10),
+      to: to.toISOString().slice(0, 10)
+    });
+  }
+
+  const lookbackDays = getRangeLookbackDays(range);
+  const query: Record<string, string> = { symbol };
+  if (lookbackDays != null) {
+    const to = new Date();
+    const from = subtractInterval(to, "day", lookbackDays);
+    query.from = from.toISOString().slice(0, 10);
+    query.to = to.toISOString().slice(0, 10);
+  }
+
+  return getFmpUrl(`/historical-price-eod/full`, query);
 }
 
 function getFmpSearchUrl(query: string) {
@@ -458,6 +538,10 @@ function firstDefined<T>(...values: Array<T | undefined | null>) {
   return undefined;
 }
 
+function isUsableQuote(quote: MarketQuote | null | undefined) {
+  return Boolean(quote && Number.isFinite(quote.price) && quote.price > 0);
+}
+
 export function normalizeTwelveQuote(
   symbol: string,
   quote: TwelveDataQuoteResponse,
@@ -482,7 +566,10 @@ export function normalizeTwelveQuote(
     marketCap: metrics?.marketCap ?? profile?.mktCap,
     trailingPE: metrics?.peRatio,
     fiftyTwoWeekLow: parseRangeValue(profile?.range, 0),
-    fiftyTwoWeekHigh: parseRangeValue(profile?.range, 1)
+    fiftyTwoWeekHigh: parseRangeValue(profile?.range, 1),
+    dataState: "live",
+    asOf: new Date().toISOString(),
+    provider: "Twelve Data"
   };
 }
 
@@ -513,7 +600,10 @@ export function normalizeFmpQuote(
     marketCap: firstDefined(quote?.marketCap, metrics?.marketCap, profile?.mktCap),
     trailingPE,
     fiftyTwoWeekLow: quote?.yearLow ?? parseRangeValue(profile?.range, 0),
-    fiftyTwoWeekHigh: quote?.yearHigh ?? parseRangeValue(profile?.range, 1)
+    fiftyTwoWeekHigh: quote?.yearHigh ?? parseRangeValue(profile?.range, 1),
+    dataState: "live",
+    asOf: new Date().toISOString(),
+    provider: "FMP"
   };
 }
 
@@ -638,48 +728,68 @@ async function fetchFundamentalSnapshot(symbol: string) {
 
 export async function fetchSecurityIdentity(symbol: string) {
   const normalizedSymbol = symbol.toUpperCase();
-  const fundamentals: FundamentalSnapshot = FMP_API_KEY
-    ? await fetchFundamentalSnapshot(normalizedSymbol)
-    : {};
-  const profile = fundamentals.profile;
-  const quote = fundamentals.quote;
   const override = resolveCompanyOverride(normalizedSymbol);
-  const quoteType = buildQuoteType({
-    isEtf: profile?.isEtf,
-    isFund: profile?.isFund,
-    sector: profile?.sector
-  });
-  const sector = buildResolvedSector({
-    ticker: normalizedSymbol,
-    providerSector: profile?.sector,
-    providerIndustry: profile?.industry ?? override?.industry,
-    quoteType
-  });
 
-  return {
-    symbol: normalizedSymbol,
-    companyName: profile?.companyName ?? quote?.name ?? override?.companyName ?? normalizedSymbol,
-    exchange:
-      profile?.exchangeShortName ?? profile?.exchange ?? quote?.exchange ?? override?.exchange ?? "Unknown",
-    quoteType,
-    sector,
-    industry: profile?.industry ?? override?.industry,
-    marketCap: firstDefined(
-      fundamentals.metrics?.marketCap,
-      fundamentals.annualMetrics?.marketCap,
-      quote?.marketCap,
-      profile?.mktCap
-    ),
-    profile,
-    metrics: fundamentals.metrics,
-    annualMetrics: fundamentals.annualMetrics,
-    ratios: fundamentals.ratios,
-    annualRatios: fundamentals.annualRatios,
-    growth: fundamentals.growth,
-    cashFlow: fundamentals.cashFlow,
-    balanceSheet: fundamentals.balanceSheet,
-    quote
+  const buildIdentitySnapshot = (fundamentals: FundamentalSnapshot) => {
+    const profile = fundamentals.profile;
+    const quote = fundamentals.quote;
+    const quoteType = buildQuoteType({
+      isEtf: profile?.isEtf,
+      isFund: profile?.isFund,
+      sector: profile?.sector
+    });
+    const sector = buildResolvedSector({
+      ticker: normalizedSymbol,
+      providerSector: profile?.sector,
+      providerIndustry: profile?.industry ?? override?.industry,
+      quoteType
+    });
+
+    return {
+      symbol: normalizedSymbol,
+      companyName: profile?.companyName ?? quote?.name ?? override?.companyName ?? normalizedSymbol,
+      exchange:
+        profile?.exchangeShortName ?? profile?.exchange ?? quote?.exchange ?? override?.exchange ?? "Unknown",
+      quoteType,
+      sector,
+      industry: profile?.industry ?? override?.industry,
+      marketCap: firstDefined(
+        fundamentals.metrics?.marketCap,
+        fundamentals.annualMetrics?.marketCap,
+        quote?.marketCap,
+        profile?.mktCap
+      ),
+      profile,
+      metrics: fundamentals.metrics,
+      annualMetrics: fundamentals.annualMetrics,
+      ratios: fundamentals.ratios,
+      annualRatios: fundamentals.annualRatios,
+      growth: fundamentals.growth,
+      cashFlow: fundamentals.cashFlow,
+      balanceSheet: fundamentals.balanceSheet,
+      quote
+    };
   };
+
+  if (FMP_API_KEY) {
+    const fundamentals: FundamentalSnapshot = await fetchFundamentalSnapshot(normalizedSymbol).catch(
+      () => ({})
+    );
+    if (fundamentals.profile || fundamentals.quote) {
+      const snapshot = buildIdentitySnapshot(fundamentals);
+      await writeIdentityCache(normalizedSymbol, snapshot, fundamentals).catch(() => undefined);
+      return snapshot;
+    }
+  }
+
+  const cached = await readIdentityCache<ReturnType<typeof buildIdentitySnapshot>>(normalizedSymbol).catch(
+    () => null
+  );
+  if (cached) {
+    return cached;
+  }
+
+  throw new Error(`Failed to load security identity for ${normalizedSymbol}`);
 }
 
 export async function fetchQuote(symbol: string): Promise<MarketQuote> {
@@ -689,9 +799,10 @@ export async function fetchQuote(symbol: string): Promise<MarketQuote> {
     return cached.data;
   }
 
-  const fundamentals: FundamentalSnapshot = FMP_API_KEY ? await fetchFundamentalSnapshot(key) : {};
+  const identity = await fetchSecurityIdentity(key).catch(() => null);
 
   let data: MarketQuote | null = null;
+  let rawPayload: unknown = null;
 
   if (TWELVE_DATA_API_KEY) {
     try {
@@ -700,17 +811,39 @@ export async function fetchQuote(symbol: string): Promise<MarketQuote> {
         "Twelve Data",
         60
       );
-      data = normalizeTwelveQuote(key, quotePayload, fundamentals.profile, fundamentals.metrics);
+      const normalized = normalizeTwelveQuote(
+        key,
+        quotePayload,
+        identity?.profile,
+        identity?.metrics
+      );
+      if (isUsableQuote(normalized)) {
+        data = normalized;
+        rawPayload = quotePayload;
+      }
     } catch {
       data = null;
     }
   }
 
-  if (!data && (fundamentals.quote || fundamentals.profile?.price != null)) {
-    data = normalizeFmpQuote(key, fundamentals.quote, fundamentals.profile, fundamentals.metrics);
+  if (!data && FMP_API_KEY) {
+    try {
+      const fmpQuote = await fetchFmpQuote(key);
+      const normalized = normalizeFmpQuote(key, fmpQuote, identity?.profile, identity?.metrics);
+      if (isUsableQuote(normalized)) {
+        data = normalized;
+        rawPayload = fmpQuote;
+      }
+    } catch {
+      data = null;
+    }
   }
 
   if (!data) {
+    data = await readQuoteCache(key);
+  }
+
+  if (!data || !isUsableQuote(data)) {
     throw new Error(`Failed to load quote for ${key}`);
   }
 
@@ -718,6 +851,10 @@ export async function fetchQuote(symbol: string): Promise<MarketQuote> {
     expiresAt: Date.now() + 60_000,
     data
   });
+
+  if (data.provider !== "cache") {
+    await writeQuoteCache(data, rawPayload).catch(() => undefined);
+  }
 
   return data;
 }
@@ -730,7 +867,7 @@ export async function fetchQuotes(symbols: string[]) {
   });
 
   if (missing.length > 0) {
-    const results = await Promise.allSettled(
+    await Promise.allSettled(
       missing.map(async (symbol) => {
         const quote = await fetchQuote(symbol);
         quoteCache.set(symbol, {
@@ -739,17 +876,19 @@ export async function fetchQuotes(symbols: string[]) {
         });
       })
     );
-    for (const [index, result] of results.entries()) {
-      if (result.status === "rejected") {
-        const symbol = missing[index];
-        quoteCache.delete(symbol);
-      }
-    }
   }
 
-  return uniqueSymbols
-    .map((symbol) => quoteCache.get(symbol)?.data)
-    .filter((quote): quote is MarketQuote => Boolean(quote));
+  const results = await Promise.allSettled(
+    uniqueSymbols.map(async (symbol) => {
+      const memory = quoteCache.get(symbol)?.data;
+      if (memory) return memory;
+      return fetchQuote(symbol);
+    })
+  );
+
+  return results
+    .filter((result): result is PromiseFulfilledResult<MarketQuote> => result.status === "fulfilled")
+    .map((result) => result.value);
 }
 
 export function normalizeTimeSeries(payload: TwelveDataTimeSeriesResponse): HistoricalPoint[] {
@@ -768,18 +907,64 @@ export function normalizeTimeSeries(payload: TwelveDataTimeSeriesResponse): Hist
     .filter((point): point is HistoricalPoint => point !== null);
 }
 
-export async function fetchHistoricalSeries(
+function normalizeFmpHistoricalSeries(
+  payload: FmpHistoricalEodResponse,
+  range: ChartRange
+): HistoricalPoint[] {
+  const rows = Array.isArray(payload) ? payload : payload.historical ?? [];
+  const points = rows
+    .map((point) => {
+      const close = parseNumber(point.close);
+      const date = point.date;
+      if (!date || close == null) {
+        return null;
+      }
+      return {
+        date: toIsoString(date),
+        close
+      };
+    })
+    .filter((point): point is HistoricalPoint => point !== null)
+    .sort((left, right) => left.date.localeCompare(right.date));
+
+  const outputsize = CHART_RANGE_CONFIG[range].outputsize;
+  return points.slice(-outputsize);
+}
+
+async function fetchFmpHistoricalSeries(
+  symbol: string,
+  range: ChartRange
+): Promise<HistoricalSeriesResult> {
+  const rawPayload = await fetchProviderJson<FmpHistoricalEodResponse>(
+    getFmpHistoricalUrl(symbol.toUpperCase(), range),
+    "FMP",
+    CHART_RANGE_CONFIG[range].revalidateSeconds
+  );
+  const points = normalizeFmpHistoricalSeries(rawPayload, range);
+  return {
+    symbol: symbol.toUpperCase(),
+    range,
+    points,
+    dataState: "live",
+    asOf: new Date().toISOString(),
+    provider: "FMP"
+  };
+}
+
+export async function fetchHistoricalSeriesResult(
   symbol: string,
   range: ChartRange = "1Y"
-): Promise<HistoricalPoint[]> {
+): Promise<HistoricalSeriesResult> {
   const key = `${symbol.toUpperCase()}:${range}`;
   const cached = historyCache.get(key);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.data;
   }
 
-  const { url, revalidateSeconds } = getTwelveTimeSeriesUrl(symbol.toUpperCase(), range);
-  let data: HistoricalPoint[] | null = null;
+  const upperSymbol = symbol.toUpperCase();
+  const { url, revalidateSeconds } = getTwelveTimeSeriesUrl(upperSymbol, range);
+  let result: HistoricalSeriesResult | null = null;
+  let rawPayload: unknown = null;
 
   if (TWELVE_DATA_API_KEY) {
     try {
@@ -789,33 +974,73 @@ export async function fetchHistoricalSeries(
         revalidateSeconds
       );
 
-      if (payload.status !== "error") {
-        data = normalizeTimeSeries(payload);
+      const points = normalizeTimeSeries(payload);
+      if (points.length > 0) {
+        result = {
+          symbol: upperSymbol,
+          range,
+          points,
+          dataState: "live",
+          asOf: new Date().toISOString(),
+          provider: "Twelve Data"
+        };
+        rawPayload = payload;
       }
     } catch {
-      data = null;
+      result = null;
     }
   }
 
-  if (!data || data.length === 0) {
-    const fallbackQuote = await fetchQuote(symbol.toUpperCase()).catch(() => null);
-    if (!fallbackQuote) {
-      throw new Error(`Failed to load price history for ${symbol.toUpperCase()}`);
+  if (!result && FMP_API_KEY) {
+    try {
+      const fmpResult = await fetchFmpHistoricalSeries(upperSymbol, range);
+      if (fmpResult.points.length > 0) {
+        result = fmpResult;
+        rawPayload = fmpResult.points;
+      }
+    } catch {
+      result = null;
     }
-    data = buildSyntheticHistorySeries(fallbackQuote.price, range);
+  }
+
+  if (!result) {
+    result = await readHistoryCache(upperSymbol, range);
+  }
+
+  if (!result || result.points.length === 0) {
+    return {
+      symbol: upperSymbol,
+      range,
+      points: [],
+      dataState: "unavailable",
+      asOf: null,
+      provider: null
+    };
   }
 
   historyCache.set(key, {
     expiresAt: Date.now() + revalidateSeconds * 1000,
-    data
+    data: result
   });
 
-  return data;
+  if (result.provider !== "cache") {
+    await writeHistoryCache(result, rawPayload).catch(() => undefined);
+  }
+
+  return result;
+}
+
+export async function fetchHistoricalSeries(
+  symbol: string,
+  range: ChartRange = "1Y"
+): Promise<HistoricalPoint[]> {
+  const result = await fetchHistoricalSeriesResult(symbol, range);
+  return result.points;
 }
 
 export async function fetchHistoricalCloses(symbol: string, days = 252): Promise<HistoricalPoint[]> {
-  const series = await fetchHistoricalSeries(symbol, getRangeFromDays(days));
-  return series.slice(-days);
+  const result = await fetchHistoricalSeriesResult(symbol, getRangeFromDays(days));
+  return result.points.slice(-days);
 }
 
 export async function fetchCompanyDetail(
@@ -831,12 +1056,13 @@ export async function fetchCompanyDetail(
 
   const [quoteResult, chartResult, identityResult] = await Promise.allSettled([
     fetchQuote(normalizedSymbol),
-    fetchHistoricalSeries(normalizedSymbol, range),
+    fetchHistoricalSeriesResult(normalizedSymbol, range),
     fetchSecurityIdentity(normalizedSymbol)
   ]);
 
   const quote = quoteResult.status === "fulfilled" ? quoteResult.value : undefined;
-  const chart = chartResult.status === "fulfilled" ? chartResult.value : [];
+  const history = chartResult.status === "fulfilled" ? chartResult.value : null;
+  const chart = history?.points ?? [];
   const identity = identityResult.status === "fulfilled" ? identityResult.value : null;
 
   if (!quote && !identity && chart.length === 0) {
@@ -847,7 +1073,7 @@ export async function fetchCompanyDetail(
     ticker: normalizedSymbol,
     companyName: identity?.companyName ?? quote?.longName ?? quote?.shortName ?? normalizedSymbol,
     exchange: identity?.exchange ?? quote?.exchange ?? "Unknown",
-    currentPrice: quote?.price ?? identity?.quote?.price ?? 0,
+    currentPrice: quote?.price ?? null,
     currency: quote?.currency ?? "USD",
     marketCap: identity?.marketCap ?? quote?.marketCap,
     sector: identity?.sector ?? buildResolvedSector({ ticker: normalizedSymbol, quoteType: identity?.quoteType }),
@@ -915,7 +1141,13 @@ export async function fetchCompanyDetail(
     freeCashflow: identity?.cashFlow?.freeCashFlow,
     operatingCashflow: identity?.cashFlow?.operatingCashFlow,
     targetMeanPrice: undefined,
-    chart
+    chart,
+    dataState: quote?.dataState ?? "unavailable",
+    asOf: quote?.asOf ?? null,
+    provider: quote?.provider ?? null,
+    historyDataState: history?.dataState ?? "unavailable",
+    historyAsOf: history?.asOf ?? null,
+    historyProvider: history?.provider ?? null
   };
 
   detailCache.set(key, {
@@ -927,7 +1159,84 @@ export async function fetchCompanyDetail(
 }
 
 export async function fetchCompanyDetails(symbols: string[]) {
-  const results = await Promise.allSettled(symbols.map((symbol) => fetchCompanyDetail(symbol)));
+  const results = await Promise.allSettled(
+    symbols.map(async (symbol): Promise<CompanyDetail> => {
+      const identity = await fetchSecurityIdentity(symbol);
+      return {
+        ticker: identity.symbol,
+        companyName: identity.companyName,
+        exchange: identity.exchange,
+        currentPrice: null,
+        currency: "USD",
+        marketCap: identity.marketCap,
+        sector: identity.sector,
+        industry: identity.industry,
+        website: identity.profile?.website,
+        employeeCount: parseEmployeeCount(identity.profile?.fullTimeEmployees),
+        summary: identity.profile?.description,
+        fiftyTwoWeekLow: identity.quote?.yearLow ?? parseRangeValue(identity.profile?.range, 0),
+        fiftyTwoWeekHigh: identity.quote?.yearHigh ?? parseRangeValue(identity.profile?.range, 1),
+        trailingPE: firstDefined(
+          identity.metrics?.peRatio,
+          identity.metrics?.peRatioTTM,
+          identity.ratios?.priceToEarningsRatioTTM,
+          identity.quote?.pe
+        ),
+        forwardPE: undefined,
+        dividendYield: firstDefined(
+          identity.metrics?.dividendYield,
+          identity.metrics?.dividendYieldPercentageTTM,
+          identity.profile?.lastDiv
+        ),
+        beta: identity.profile?.beta,
+        profitMargins: firstDefined(
+          identity.ratios?.netProfitMargin,
+          identity.ratios?.netProfitMarginTTM,
+          identity.annualRatios?.netProfitMargin
+        ),
+        revenueGrowth: identity.growth?.revenueGrowth,
+        earningsGrowth: identity.growth?.netIncomeGrowth ?? identity.growth?.epsgrowth,
+        debtToEquity: firstDefined(
+          identity.ratios?.debtEquityRatio,
+          identity.ratios?.debtEquityRatioTTM,
+          identity.annualRatios?.debtEquityRatio
+        ),
+        currentRatio: firstDefined(
+          identity.ratios?.currentRatio,
+          identity.ratios?.currentRatioTTM,
+          identity.metrics?.currentRatio,
+          identity.metrics?.currentRatioTTM,
+          identity.annualRatios?.currentRatio,
+          identity.annualMetrics?.currentRatio
+        ),
+        quickRatio: firstDefined(
+          identity.ratios?.quickRatio,
+          identity.ratios?.quickRatioTTM,
+          identity.annualRatios?.quickRatio
+        ),
+        returnOnEquity: firstDefined(
+          identity.ratios?.returnOnEquity,
+          identity.ratios?.returnOnEquityTTM,
+          identity.metrics?.returnOnEquity,
+          identity.metrics?.returnOnEquityTTM,
+          identity.annualRatios?.returnOnEquity,
+          identity.annualMetrics?.returnOnEquity
+        ),
+        totalCash: identity.balanceSheet?.cashAndCashEquivalents,
+        totalDebt: identity.balanceSheet?.totalDebt,
+        freeCashflow: identity.cashFlow?.freeCashFlow,
+        operatingCashflow: identity.cashFlow?.operatingCashFlow,
+        targetMeanPrice: undefined,
+        chart: [],
+        dataState: "unavailable" as const,
+        asOf: null,
+        provider: null,
+        historyDataState: "unavailable" as const,
+        historyAsOf: null,
+        historyProvider: null
+      };
+    })
+  );
   return results
     .filter(
       (result): result is PromiseFulfilledResult<CompanyDetail> => result.status === "fulfilled"
@@ -964,7 +1273,10 @@ export async function fetchSecurityPreview(symbol: string): Promise<SecurityPrev
     marketCap: identity.marketCap,
     currentPrice: quote?.price ?? null,
     changePercent: quote?.changePercent ?? null,
-    dataStatus
+    dataStatus,
+    dataState: quote?.dataState ?? "unavailable",
+    asOf: quote?.asOf ?? null,
+    provider: quote?.provider ?? null
   };
 }
 

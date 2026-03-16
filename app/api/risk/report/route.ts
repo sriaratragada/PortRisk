@@ -32,6 +32,18 @@ export async function GET(request: NextRequest) {
   }));
   try {
     const hydrated = await hydratePortfolioRisk(positions);
+    if (!hydrated.metrics) {
+      return json(
+        {
+          report: null,
+          degraded: true,
+          error: "Insufficient real historical data to build the risk dashboard.",
+          marketDataState: hydrated.marketDataState,
+          historyCoverageDays: hydrated.historyCoverageDays
+        },
+        { status: 200 }
+      );
+    }
     const supabase = createSupabaseAdminClient();
     const [{ data: previousScores }, { data: recentActions }] = await Promise.all([
       supabase
@@ -48,7 +60,7 @@ export async function GET(request: NextRequest) {
         .order("timestamp", { ascending: false })
         .limit(12)
     ]);
-    const report = await buildRiskReport(portfolioId, hydrated.holdings, hydrated.metrics, hydrated.series, {
+    const baseReport = await buildRiskReport(portfolioId, hydrated.holdings, hydrated.metrics, hydrated.series, {
       previousScore: previousScores?.[1]
         ? {
             riskTier: previousScores[1].riskTier,
@@ -59,7 +71,14 @@ export async function GET(request: NextRequest) {
         : null,
       recentActions: recentActions ?? []
     });
-    return json({ report });
+    return json({
+      report: {
+        ...baseReport,
+        marketDataState: hydrated.marketDataState,
+        historySufficient: hydrated.historySufficient,
+        historyCoverageDays: hydrated.historyCoverageDays
+      }
+    });
   } catch (error) {
     return json(
       {

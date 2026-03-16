@@ -343,7 +343,7 @@ function formatRangeBounds(low?: number, high?: number) {
   if (low != null && high != null) {
     return `${formatCurrency(low)} - ${formatCurrency(high)}`;
   }
-  return low != null ? `${formatCurrency(low)} - N/A` : `N/A - ${formatCurrency(high ?? 0)}`;
+  return low != null ? `${formatCurrency(low)} - N/A` : `N/A - ${formatCurrency(high)}`;
 }
 
 function labelForRange(range: ChartRange) {
@@ -464,11 +464,17 @@ function buildFallbackCompanyDetail(holding: HoldingSnapshot): CompanyDetail {
     ticker: holding.ticker,
     companyName: holding.companyName ?? holding.ticker,
     exchange: holding.exchange ?? "N/A",
-    currentPrice: holding.currentPrice ?? 0,
+    currentPrice: holding.currentPrice ?? null,
     currency: "USD",
     sector: holding.sector ?? getDefaultSector(),
     industry: holding.industry,
-    chart: []
+    chart: [],
+    dataState: "unavailable",
+    asOf: null,
+    provider: null,
+    historyDataState: "unavailable",
+    historyAsOf: null,
+    historyProvider: null
   };
 }
 
@@ -631,11 +637,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           return;
         }
         const data = (await response.json()) as {
-          preview: SecurityPreview;
+          preview: SecurityPreview | null;
           valid?: boolean;
           error?: string;
         };
-        if (!data.valid) {
+        if (!data.valid || !data.preview) {
           setPositionTicker("");
           setPositionName("");
           setPositionPreview(null);
@@ -1196,17 +1202,19 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               const riskData = (await riskResponse.json()) as {
                 holdings: WorkspacePortfolio["holdings"];
                 metrics: WorkspacePortfolio["metrics"];
+                error?: string;
+                degraded?: boolean;
               };
               setSelectedPortfolio((current) =>
                 current && current.id === portfolioId
                   ? {
                       ...current,
                       holdings: mergeHydratedHoldings(current.positions, riskData.holdings ?? []),
-                    metrics: riskData.metrics ?? current.metrics
+                      metrics: "metrics" in riskData ? (riskData.metrics ?? null) : current.metrics
                   }
                   : current
               );
-              setRiskError(null);
+              setRiskError(riskData.error ?? null);
             })
             .catch((error) => {
               setRiskError(error instanceof Error ? error.message : "Live pricing and risk are unavailable");
@@ -1557,6 +1565,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           holdings?: WorkspacePortfolio["holdings"];
           metrics?: WorkspacePortfolio["metrics"];
           series?: Array<{ date: string; value: number }>;
+          error?: string;
         };
         setSelectedPortfolio((current) => {
           if (!current) {
@@ -1565,7 +1574,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           const nextPortfolio = {
             ...current,
             holdings: data.holdings ?? current.holdings,
-            metrics: data.metrics ?? current.metrics,
+            metrics: "metrics" in data ? (data.metrics ?? null) : current.metrics,
             valueHistory: data.series
               ? buildPortfolioHistory(data.series, portfolioRange)
               : current.valueHistory
@@ -1573,6 +1582,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           updateSelectedPortfolioSnapshot(nextPortfolio);
           return nextPortfolio;
         });
+        setRiskError(data.error ?? null);
         if (persist) {
           await refreshPortfolioList();
           try {
@@ -3524,7 +3534,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       <div className="mt-3 flex flex-wrap items-end gap-3">
                         <p className="text-4xl font-semibold tracking-[-0.05em] text-white">
                           {formatCurrency(
-                            selectedHoldingDetail.currentPrice > 0
+                            selectedHoldingDetail.currentPrice != null &&
+                              selectedHoldingDetail.currentPrice > 0
                               ? selectedHoldingDetail.currentPrice
                               : null
                           )}
