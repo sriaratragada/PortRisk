@@ -154,9 +154,6 @@ export async function buildRiskFeatureReport(
     .slice(0, 5);
 
   const benchmarkHistory = await fetchHistoricalCloses("SPY", 252);
-  if (benchmarkHistory.length < 60) {
-    throw new Error("Benchmark history unavailable");
-  }
   const benchmarkReturns = computeDailyReturns(benchmarkHistory.map((point) => point.close));
   const portfolioReturns = computeDailyReturns(portfolioSeries.map((point) => point.value));
   const benchmarkReturn =
@@ -469,9 +466,6 @@ export async function buildRiskFeatureReport(
   return {
     portfolioId,
     summary: summaryParts.join(" "),
-    marketDataState: "live",
-    historySufficient: portfolioSeries.length >= 60,
-    historyCoverageDays: portfolioSeries.length,
     sectorConcentration,
     singleNameConcentration,
     marketContext,

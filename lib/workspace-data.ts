@@ -157,7 +157,7 @@ export async function buildWorkspacePortfolio(portfolioId: string, userId: strin
   }
 
   try {
-    const [hydrated, history] = await Promise.all([
+    const [hydrated, historySeries] = await Promise.all([
       hydratePortfolioRisk(normalizedPositions),
       hydratePortfolioHistory(normalizedPositions, "1M")
     ]);
@@ -168,7 +168,7 @@ export async function buildWorkspacePortfolio(portfolioId: string, userId: strin
       holdings: hydrated.holdings,
       positions: normalizedPositions,
       metrics: hydrated.metrics,
-      valueHistory: buildValueHistory(history.series),
+      valueHistory: buildValueHistory(historySeries),
       auditLog: (auditLogs ?? []).map((entry) => ({
         id: entry.id,
         timestamp: entry.timestamp,

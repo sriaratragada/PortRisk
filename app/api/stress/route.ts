@@ -31,9 +31,6 @@ export async function POST(request: NextRequest) {
     assetClass: position.assetClass as "equities" | "bonds" | "commodities"
   }));
   const current = await hydratePortfolioRisk(positions);
-  if (!current.metrics) {
-    return badRequest("Insufficient real historical data to run a reliable stress test.", 422);
-  }
   const scenario =
     payload.scenarioName === "Custom"
       ? payload.customShocks
@@ -41,10 +38,6 @@ export async function POST(request: NextRequest) {
 
   if (!scenario) {
     return badRequest("Unknown stress scenario");
-  }
-
-  if (current.holdings.some((holding) => holding.currentPrice == null)) {
-    return badRequest("Current prices are unavailable for one or more holdings.", 422);
   }
 
   const basePrices = Object.fromEntries(

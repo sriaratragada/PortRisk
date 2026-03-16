@@ -147,30 +147,9 @@ export function buildPortfolioSeries(
   latestPrices: Record<string, number>
 ) {
   const tickers = positions.map((position) => position.ticker.toUpperCase());
-  const lengths = tickers.map((ticker) => historicalByTicker[ticker]?.length ?? 0);
-  if (lengths.length === 0 || lengths.some((length) => length === 0)) {
-    return {
-      series: [],
-      metrics: {
-        sharpe: 0,
-        maxDrawdown: 0,
-        var95: 0,
-        var95Amount: 0,
-        drawdownProb3m: 0,
-        drawdownProb6m: 0,
-        drawdownProb12m: 0,
-        riskTier: "HIGH" as RiskTier,
-        summary: "Risk unavailable: insufficient historical data.",
-        portfolioValue: positions.reduce(
-          (sum, position) => sum + position.shares * (latestPrices[position.ticker.toUpperCase()] ?? 0),
-          0
-        ),
-        annualizedReturn: 0,
-        annualizedVolatility: 0
-      } satisfies RiskMetrics
-    };
-  }
-  const minLength = Math.min(...lengths);
+  const minLength = Math.min(
+    ...tickers.map((ticker) => historicalByTicker[ticker]?.length ?? 0).filter(Boolean)
+  );
 
   const normalizedSeries = Array.from({ length: minLength }, (_, index) => {
     let value = 0;
@@ -178,37 +157,11 @@ export function buildPortfolioSeries(
     for (const position of positions) {
       const history = historicalByTicker[position.ticker.toUpperCase()];
       const point = history[history.length - minLength + index];
-      if (!point) {
-        return null;
-      }
       date = point.date;
       value += point.close * position.shares;
     }
     return { date, value };
-  }).filter((point): point is { date: string; value: number } => point !== null);
-
-  if (normalizedSeries.length === 0) {
-    return {
-      series: [],
-      metrics: {
-        sharpe: 0,
-        maxDrawdown: 0,
-        var95: 0,
-        var95Amount: 0,
-        drawdownProb3m: 0,
-        drawdownProb6m: 0,
-        drawdownProb12m: 0,
-        riskTier: "HIGH" as RiskTier,
-        summary: "Risk unavailable: insufficient historical data.",
-        portfolioValue: positions.reduce(
-          (sum, position) => sum + position.shares * (latestPrices[position.ticker.toUpperCase()] ?? 0),
-          0
-        ),
-        annualizedReturn: 0,
-        annualizedVolatility: 0
-      } satisfies RiskMetrics
-    };
-  }
+  });
 
   const portfolioValue = positions.reduce(
     (sum, position) => sum + position.shares * (latestPrices[position.ticker.toUpperCase()] ?? 0),

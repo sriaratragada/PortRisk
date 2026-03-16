@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { CHART_RANGE_CONFIG } from "../lib/market-config.ts";
 import {
+  buildSyntheticHistorySeries,
   getRangeFromDays,
   normalizeFmpQuote,
   normalizeTimeSeries,
@@ -55,9 +56,6 @@ test("normalizeTwelveQuote derives previous close and change percent", () => {
   assert.equal(quote.trailingPE, 31);
   assert.equal(quote.fiftyTwoWeekLow, 150);
   assert.equal(quote.fiftyTwoWeekHigh, 220);
-  assert.equal(quote.dataState, "live");
-  assert.equal(quote.provider, "Twelve Data");
-  assert.ok(quote.asOf);
 });
 
 test("normalizeFmpQuote preserves quote fallback fields when Twelve Data is unavailable", () => {
@@ -91,9 +89,6 @@ test("normalizeFmpQuote preserves quote fallback fields when Twelve Data is unav
   assert.equal(quote.trailingPE, 18);
   assert.equal(quote.fiftyTwoWeekLow, 10);
   assert.equal(quote.fiftyTwoWeekHigh, 55);
-  assert.equal(quote.dataState, "live");
-  assert.equal(quote.provider, "FMP");
-  assert.ok(quote.asOf);
 });
 
 test("normalizeTimeSeries drops incomplete rows and normalizes datetimes", () => {
@@ -109,6 +104,15 @@ test("normalizeTimeSeries drops incomplete rows and normalizes datetimes", () =>
   assert.equal(points[0]?.close, 101.25);
   assert.ok(points[0]?.date.endsWith("Z"));
   assert.equal(points[1]?.close, 102.5);
+});
+
+test("buildSyntheticHistorySeries creates range-length flat fallback history", () => {
+  const points = buildSyntheticHistorySeries(100, "1M", new Date("2026-03-15T00:00:00.000Z"));
+
+  assert.equal(points.length, CHART_RANGE_CONFIG["1M"].outputsize);
+  assert.equal(points[0]?.close, 100);
+  assert.equal(points.at(-1)?.close, 100);
+  assert.ok((points[0]?.date ?? "") < (points.at(-1)?.date ?? ""));
 });
 
 test("resolveSector maps major operating companies into the fixed taxonomy", () => {

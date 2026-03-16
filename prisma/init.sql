@@ -108,56 +108,6 @@ CREATE TABLE "AuditLog" (
     CONSTRAINT "AuditLog_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "MarketQuoteCache" (
-    "symbol" TEXT NOT NULL,
-    "price" DOUBLE PRECISION NOT NULL,
-    "previousClose" DOUBLE PRECISION NOT NULL,
-    "changePercent" DOUBLE PRECISION NOT NULL,
-    "currency" TEXT NOT NULL,
-    "shortName" TEXT,
-    "longName" TEXT,
-    "exchange" TEXT,
-    "marketCap" DOUBLE PRECISION,
-    "trailingPE" DOUBLE PRECISION,
-    "fiftyTwoWeekLow" DOUBLE PRECISION,
-    "fiftyTwoWeekHigh" DOUBLE PRECISION,
-    "provider" TEXT NOT NULL,
-    "asOf" TIMESTAMP(3) NOT NULL,
-    "fetchedAt" TIMESTAMP(3) NOT NULL,
-    "rawPayload" JSONB NOT NULL,
-
-    CONSTRAINT "MarketQuoteCache_pkey" PRIMARY KEY ("symbol")
-);
-
--- CreateTable
-CREATE TABLE "MarketHistoryCache" (
-    "id" TEXT NOT NULL,
-    "symbol" TEXT NOT NULL,
-    "range" TEXT NOT NULL,
-    "series" JSONB NOT NULL,
-    "provider" TEXT NOT NULL,
-    "asOf" TIMESTAMP(3) NOT NULL,
-    "fetchedAt" TIMESTAMP(3) NOT NULL,
-    "seriesStart" TIMESTAMP(3),
-    "seriesEnd" TIMESTAMP(3),
-    "rawPayload" JSONB NOT NULL,
-
-    CONSTRAINT "MarketHistoryCache_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "SecurityIdentityCache" (
-    "symbol" TEXT NOT NULL,
-    "provider" TEXT NOT NULL,
-    "asOf" TIMESTAMP(3) NOT NULL,
-    "fetchedAt" TIMESTAMP(3) NOT NULL,
-    "data" JSONB NOT NULL,
-    "rawPayload" JSONB NOT NULL,
-
-    CONSTRAINT "SecurityIdentityCache_pkey" PRIMARY KEY ("symbol")
-);
-
 -- CreateIndex
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
@@ -181,9 +131,6 @@ CREATE INDEX "AuditLog_userId_timestamp_idx" ON "AuditLog"("userId", "timestamp"
 
 -- CreateIndex
 CREATE INDEX "AuditLog_portfolioId_timestamp_idx" ON "AuditLog"("portfolioId", "timestamp" DESC);
-
--- CreateIndex
-CREATE UNIQUE INDEX "MarketHistoryCache_symbol_range_key" ON "MarketHistoryCache"("symbol", "range");
 
 -- AddForeignKey
 ALTER TABLE "Portfolio" ADD CONSTRAINT "Portfolio_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

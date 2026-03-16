@@ -59,16 +59,9 @@ export async function GET(request: NextRequest, context: Context) {
           ticker: ticker.toUpperCase(),
           companyName: ticker.toUpperCase(),
           exchange: "N/A",
-          currentPrice: null,
+          currentPrice: 0,
           currency: "USD",
-          chart: [],
-          sector: "ETFs / Funds / Other",
-          dataState: "unavailable",
-          asOf: null,
-          provider: null,
-          historyDataState: "unavailable",
-          historyAsOf: null,
-          historyProvider: null
+          chart: []
         },
         degraded: true,
         error: error instanceof Error ? error.message : "Failed to load company detail"

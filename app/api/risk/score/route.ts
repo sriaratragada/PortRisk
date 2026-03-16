@@ -37,18 +37,6 @@ export async function POST(request: NextRequest) {
   }
 
   const result = await hydratePortfolioRisk(positions, payload.drawdownThreshold);
-  if (!result.metrics) {
-    return json({
-      holdings: result.holdings,
-      metrics: null,
-      series: result.series,
-      degraded: true,
-      error: "Insufficient real historical data to compute a reliable risk score.",
-      marketDataState: result.marketDataState,
-      historyCoverageDays: result.historyCoverageDays
-    });
-  }
-
   if (payload.persist !== false && payload.portfolioId) {
     const supabase = createSupabaseAdminClient();
     const riskRow = {

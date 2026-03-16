@@ -30,7 +30,7 @@ export async function GET(request: NextRequest, context: Context) {
   }
 
   if (portfolio.positions.length === 0) {
-    return json({ range, series: [], dataState: "unavailable", asOf: null, provider: null });
+    return json({ range, series: [] });
   }
 
   const positions = portfolio.positions.map((position) => ({
@@ -40,9 +40,9 @@ export async function GET(request: NextRequest, context: Context) {
     assetClass: position.assetClass as "equities" | "bonds" | "commodities"
   }));
   try {
-    const history = await hydratePortfolioHistory(positions, range);
-    return json({ range, ...history });
+    const series = await hydratePortfolioHistory(positions, range);
+    return json({ range, series });
   } catch {
-    return json({ range, series: [], dataState: "unavailable", asOf: null, provider: null });
+    return json({ range, series: [] });
   }
 }
