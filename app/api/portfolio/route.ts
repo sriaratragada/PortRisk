@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getArchivedPortfolioIds } from "@/lib/portfolio-archive";
 import { ensureAppUserRecord } from "@/lib/user";
 import { portfolioCreateSchema } from "@/lib/validation";
+import { defaultBenchmarkForPortfolio } from "@/lib/benchmarks";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
     getArchivedPortfolioIds(auth.user.id),
     supabase
       .from("Portfolio")
-      .select("id,name,updatedAt,positions:Position(id),riskScores:RiskScore(riskTier,scoredAt)")
+      .select("id,name,benchmark,updatedAt,positions:Position(id),riskScores:RiskScore(riskTier,scoredAt)")
       .eq("userId", auth.user.id)
       .order("updatedAt", { ascending: false })
   ]);
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
   await ensureAppUserRecord(auth.user);
   const payload = await parseJson(request, portfolioCreateSchema);
   const positions = payload.positions ?? [];
+  const benchmark = defaultBenchmarkForPortfolio(payload.name, payload.benchmark);
   const supabase = createSupabaseAdminClient();
   const portfolioId = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -53,6 +55,7 @@ export async function POST(request: NextRequest) {
       id: portfolioId,
       userId: auth.user.id,
       name: payload.name,
+      benchmark,
       updatedAt: now
     })
     .select()

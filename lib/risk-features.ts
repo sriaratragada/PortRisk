@@ -112,6 +112,7 @@ export async function buildRiskFeatureReport(
   metrics: RiskMetrics,
   portfolioSeries: Array<{ date: string; value: number }>,
   options?: {
+    benchmark?: string;
     previousScore?: PreviousScore | null;
     recentActions?: RecentAction[];
   }
@@ -153,7 +154,8 @@ export async function buildRiskFeatureReport(
     .sort((left, right) => right.weight - left.weight)
     .slice(0, 5);
 
-  const benchmarkHistory = await fetchHistoricalCloses("SPY", 252);
+  const benchmark = options?.benchmark?.trim().toUpperCase() || "SPY";
+  const benchmarkHistory = await fetchHistoricalCloses(benchmark, 252);
   const benchmarkReturns = computeDailyReturns(benchmarkHistory.map((point) => point.close));
   const portfolioReturns = computeDailyReturns(portfolioSeries.map((point) => point.value));
   const benchmarkReturn =
@@ -174,16 +176,16 @@ export async function buildRiskFeatureReport(
     latestBenchmark > avg200 * 1.02 ? "BULLISH" : latestBenchmark < avg200 * 0.98 ? "BEARISH" : "NEUTRAL";
 
   const marketContext = {
-    benchmark: "SPY",
+    benchmark,
     trailingReturn: benchmarkReturn,
     trend,
     volatility: benchmarkVolatility,
     summary:
       trend === "BULLISH"
-        ? "The broad market remains above trend, which supports risk appetite but can disguise concentration build-up."
+        ? `The ${benchmark} benchmark remains above trend, which supports risk appetite but can disguise concentration build-up.`
         : trend === "BEARISH"
-          ? "The broad market is below trend, so crowded positions and leverage matter more."
-          : "The broad market is range-bound, increasing the value of diversification and balance-sheet quality."
+          ? `The ${benchmark} benchmark is below trend, so crowded positions and leverage matter more.`
+          : `The ${benchmark} benchmark is range-bound, increasing the value of diversification and balance-sheet quality.`
   } as const;
 
   const weightedDebt = weightedAverage(
@@ -487,7 +489,7 @@ export async function buildRiskFeatureReport(
       correlationToBenchmark
     },
     benchmarkComparison: {
-      benchmark: "SPY",
+      benchmark,
       portfolioReturn,
       benchmarkReturn,
       excessReturn: portfolioReturn - benchmarkReturn

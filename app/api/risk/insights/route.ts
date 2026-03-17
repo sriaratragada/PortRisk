@@ -110,6 +110,7 @@ async function buildInsightForPortfolio(portfolioId: string, userId: string) {
   ]);
 
   const report = await buildRiskReport(portfolioId, hydrated.holdings, hydrated.metrics, hydrated.series, {
+    benchmark: portfolio.benchmark,
     previousScore: previousScores?.[1]
       ? {
           riskTier: previousScores[1].riskTier,

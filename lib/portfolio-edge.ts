@@ -85,7 +85,7 @@ export async function getPortfolioWithPositionsEdge(portfolioId: string, userId:
   }
   const { data, error } = await supabase
     .from("Portfolio")
-    .select("id, userId, name, positions:Position(*)")
+    .select("id, userId, name, benchmark, positions:Position(*)")
     .eq("id", portfolioId)
     .eq("userId", userId)
     .single();
@@ -98,6 +98,7 @@ export async function getPortfolioWithPositionsEdge(portfolioId: string, userId:
     id: string;
     userId: string;
     name: string;
+    benchmark: string;
     positions: Array<{
       ticker: string;
       shares: number;

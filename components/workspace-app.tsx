@@ -15,11 +15,18 @@ import {
   XAxis,
   YAxis
 } from "recharts";
+import {
+  BENCHMARK_PRESETS,
+  defaultBenchmarkForPortfolio,
+  normalizeBenchmarkSymbol,
+  PORTFOLIO_TEMPLATE_BENCHMARKS
+} from "@/lib/benchmarks";
 import { STRESS_SCENARIOS } from "@/lib/stress-scenarios";
 import { getDefaultSector } from "@/lib/sectors";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { buildFallbackHoldings } from "@/lib/holdings";
 import type {
+  BenchmarkAnalytics,
   ChartRange,
   CompanyDetail,
   HoldingSnapshot,
@@ -65,13 +72,19 @@ const tabs: Array<{ id: TabId; label: string }> = [
 
 const chartRanges: ChartRange[] = ["1D", "1W", "1M", "3M", "1Y", "5Y", "MAX"];
 
-const portfolioTemplates = [
-  { name: "Growth", benchmark: "QQQ", description: "Focused on high capital appreciation through stock-heavy exposure and long-duration risk." },
-  { name: "Income", benchmark: "SCHD", description: "Built for recurring cash flow using dividend-paying equities and income-oriented holdings." },
-  { name: "Balanced", benchmark: "AOR", description: "A hybrid allocation that blends growth and income across stocks and bonds." },
-  { name: "Defensive/Conservative", benchmark: "AGG", description: "Prioritizes capital preservation with lower-volatility exposures and cash-like resilience." },
-  { name: "Speculative", benchmark: "ARKK", description: "High-risk, high-reward positioning intended for tactical and short-term market opportunities." }
-] as const;
+const portfolioTemplates = PORTFOLIO_TEMPLATE_BENCHMARKS.map((template) => ({
+  ...template,
+  description:
+    template.name === "Growth"
+      ? "Focused on high capital appreciation through stock-heavy exposure and long-duration risk."
+      : template.name === "Income"
+        ? "Built for recurring cash flow using dividend-paying equities and income-oriented holdings."
+        : template.name === "Balanced"
+          ? "A hybrid allocation that blends growth and income across stocks and bonds."
+          : template.name === "Defensive/Conservative"
+            ? "Prioritizes capital preservation with lower-volatility exposures and cash-like resilience."
+            : "High-risk, high-reward positioning intended for tactical and short-term market opportunities."
+}));
 
 const tierStyles: Record<RiskTier, string> = {
   LOW: "bg-success/15 text-success ring-success/30",
@@ -272,6 +285,7 @@ function mapSummary(
   portfolios: Array<{
     id: string;
     name: string;
+    benchmark: string;
     updatedAt: string;
     positions: unknown[];
     riskScores: Array<{ riskTier: string }>;
@@ -280,6 +294,7 @@ function mapSummary(
   return portfolios.map((portfolio) => ({
     id: portfolio.id,
     name: portfolio.name,
+    benchmark: portfolio.benchmark,
     updatedAt: portfolio.updatedAt,
     positionCount: portfolio.positions.length,
     latestRiskTier: portfolio.riskScores[0]?.riskTier ?? null
@@ -373,16 +388,6 @@ function median(values: number[]) {
   return sorted.length % 2 === 0
     ? (sorted[middle - 1]! + sorted[middle]!) / 2
     : sorted[middle]!;
-}
-
-function benchmarkForName(name: string) {
-  const lower = name.toLowerCase();
-  if (lower.includes("growth")) return "QQQ";
-  if (lower.includes("income")) return "SCHD";
-  if (lower.includes("balanced")) return "AOR";
-  if (lower.includes("defensive") || lower.includes("conservative")) return "AGG";
-  if (lower.includes("speculative")) return "ARKK";
-  return "SPY";
 }
 
 function RangeSelector({
@@ -500,11 +505,22 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   );
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [benchmarkAnalytics, setBenchmarkAnalytics] = useState<BenchmarkAnalytics | null>(null);
+  const [benchmarkAnalyticsLoading, setBenchmarkAnalyticsLoading] = useState(false);
+  const [benchmarkAnalyticsError, setBenchmarkAnalyticsError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<SecuritySearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [selectedSecurity, setSelectedSecurity] = useState<SecuritySearchResult | null>(null);
+  const [benchmarkSearchTerm, setBenchmarkSearchTerm] = useState("");
+  const [benchmarkSearchResults, setBenchmarkSearchResults] = useState<SecuritySearchResult[]>([]);
+  const [benchmarkSearchLoading, setBenchmarkSearchLoading] = useState(false);
+  const [benchmarkSearchError, setBenchmarkSearchError] = useState<string | null>(null);
+  const [selectedBenchmarkSecurity, setSelectedBenchmarkSecurity] =
+    useState<SecuritySearchResult | null>(null);
+  const [benchmarkPreview, setBenchmarkPreview] = useState<SecurityPreview | null>(null);
+  const [benchmarkPreviewLoading, setBenchmarkPreviewLoading] = useState(false);
   const [positionTicker, setPositionTicker] = useState("");
   const [positionName, setPositionName] = useState("");
   const [positionShares, setPositionShares] = useState("10");
@@ -600,6 +616,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       setProposedMetrics(null);
       setRiskReport(null);
       setRiskInsight(null);
+      resetBenchmarkForm();
       return;
     }
 
@@ -611,6 +628,18 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     );
     setProposedMetrics(selectedPortfolio.metrics);
     updateSelectedPortfolioSnapshot(selectedPortfolio);
+    setBenchmarkSearchTerm(selectedPortfolio.benchmark);
+    setBenchmarkPreview(null);
+    setBenchmarkSearchResults([]);
+    setBenchmarkSearchLoading(false);
+    setBenchmarkSearchError(null);
+    setSelectedBenchmarkSecurity({
+      symbol: selectedPortfolio.benchmark,
+      companyName: selectedPortfolio.benchmark,
+      exchange: "Benchmark",
+      quoteType: "ETF",
+      hasPreviewData: true
+    });
   }, [selectedPortfolio]);
 
   useEffect(() => {
@@ -650,6 +679,44 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
     return () => window.clearTimeout(handle);
   }, [searchTerm, selectedSecurity]);
+
+  useEffect(() => {
+    const query = benchmarkSearchTerm.trim();
+    if (!query || selectedBenchmarkSecurity?.symbol === query.toUpperCase()) {
+      setBenchmarkSearchResults([]);
+      setBenchmarkSearchLoading(false);
+      if (!query) {
+        setBenchmarkSearchError(null);
+      }
+      return;
+    }
+
+    const handle = window.setTimeout(async () => {
+      setBenchmarkSearchLoading(true);
+      setBenchmarkSearchError(null);
+      try {
+        const response = await fetch(`/api/securities/search?q=${encodeURIComponent(query)}`, {
+          headers: {
+            ...(await getAuthHeaders())
+          }
+        });
+        if (!response.ok) {
+          throw new Error(await readErrorMessage(response));
+        }
+        const data = (await response.json()) as {
+          results?: SecuritySearchResult[];
+        };
+        setBenchmarkSearchResults(data.results ?? []);
+      } catch (error) {
+        setBenchmarkSearchResults([]);
+        setBenchmarkSearchError(error instanceof Error ? error.message : "Benchmark search failed");
+      } finally {
+        setBenchmarkSearchLoading(false);
+      }
+    }, 220);
+
+    return () => window.clearTimeout(handle);
+  }, [benchmarkSearchTerm, selectedBenchmarkSecurity]);
 
   useEffect(() => {
     if (!selectedPortfolio || activeTab !== "allocation" || selectedPortfolio.holdings.length === 0) {
@@ -856,6 +923,68 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   }, [activeTab, selectedPortfolio?.id, holdingsDependencyKey]);
 
   useEffect(() => {
+    if (
+      !selectedPortfolio ||
+      selectedPortfolio.positions.length === 0 ||
+      !["overview", "holdings", "risk"].includes(activeTab)
+    ) {
+      setBenchmarkAnalytics(null);
+      setBenchmarkAnalyticsError(null);
+      setBenchmarkAnalyticsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const portfolioId = selectedPortfolio.id;
+    setBenchmarkAnalyticsLoading(true);
+    setBenchmarkAnalyticsError(null);
+
+    async function loadBenchmarkAnalytics() {
+      try {
+        const response = await fetch(
+          `/api/portfolio/${portfolioId}/benchmark?range=${portfolioRange}`,
+          {
+            headers: {
+              ...(await getAuthHeaders())
+            }
+          }
+        );
+        if (!response.ok) {
+          throw new Error(await readErrorMessage(response));
+        }
+        const data = (await response.json()) as {
+          analytics: BenchmarkAnalytics | null;
+          error?: string | null;
+        };
+        if (cancelled) {
+          return;
+        }
+        setBenchmarkAnalytics(data.analytics);
+        setBenchmarkAnalyticsError(
+          data.analytics ? null : data.error ?? "Benchmark comparison unavailable"
+        );
+      } catch (error) {
+        if (!cancelled) {
+          setBenchmarkAnalytics(null);
+          setBenchmarkAnalyticsError(
+            error instanceof Error ? error.message : "Benchmark comparison unavailable"
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setBenchmarkAnalyticsLoading(false);
+        }
+      }
+    }
+
+    void loadBenchmarkAnalytics();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, portfolioRange, selectedPortfolio?.id, holdingsDependencyKey]);
+
+  useEffect(() => {
     if (!selectedPortfolioId) {
       return;
     }
@@ -1014,6 +1143,41 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       percent: first > 0 ? absolute / first : 0
     };
   }, [selectedHoldingDetail?.chart]);
+  const holdingContributionMap = useMemo(
+    () =>
+      new Map(
+        (benchmarkAnalytics?.holdingAttribution ?? []).map((entry) => [entry.ticker.toUpperCase(), entry])
+      ),
+    [benchmarkAnalytics]
+  );
+  const topPositiveHoldingContributor = useMemo(
+    () =>
+      (benchmarkAnalytics?.holdingAttribution ?? [])
+        .filter((entry) => (entry.contribution ?? 0) > 0)
+        .sort((left, right) => (right.contribution ?? 0) - (left.contribution ?? 0))[0] ?? null,
+    [benchmarkAnalytics]
+  );
+  const topNegativeHoldingContributor = useMemo(
+    () =>
+      (benchmarkAnalytics?.holdingAttribution ?? [])
+        .filter((entry) => (entry.contribution ?? 0) < 0)
+        .sort((left, right) => (left.contribution ?? 0) - (right.contribution ?? 0))[0] ?? null,
+    [benchmarkAnalytics]
+  );
+  const topPositiveSectorContributor = useMemo(
+    () =>
+      (benchmarkAnalytics?.sectorAttribution ?? [])
+        .filter((entry) => entry.contribution > 0)
+        .sort((left, right) => right.contribution - left.contribution)[0] ?? null,
+    [benchmarkAnalytics]
+  );
+  const topNegativeSectorContributor = useMemo(
+    () =>
+      (benchmarkAnalytics?.sectorAttribution ?? [])
+        .filter((entry) => entry.contribution < 0)
+        .sort((left, right) => left.contribution - right.contribution)[0] ?? null,
+    [benchmarkAnalytics]
+  );
   async function refreshPortfolioList() {
     const response = await fetch("/api/portfolio", {
       headers: {
@@ -1028,6 +1192,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       portfolios: Array<{
         id: string;
         name: string;
+        benchmark: string;
         updatedAt: string;
         positions: unknown[];
         riskScores: Array<{ riskTier: string }>;
@@ -1106,6 +1271,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         portfolio: {
           id: string;
           name: string;
+          benchmark: string;
           updatedAt: string;
           positions: Array<{
             ticker: string;
@@ -1128,6 +1294,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       const nextPortfolio: WorkspacePortfolio = {
         id: portfolioData.portfolio.id,
         name: portfolioData.portfolio.name,
+        benchmark: portfolioData.portfolio.benchmark,
         updatedAt: portfolioData.portfolio.updatedAt,
         positions: portfolioData.portfolio.positions,
         holdings: buildFallbackHoldings(portfolioData.portfolio.positions),
@@ -1142,6 +1309,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       setAuditRows(nextPortfolio.auditLog);
       setRiskReport(null);
       setRiskInsight(null);
+      setBenchmarkAnalytics(null);
       setStressResult(null);
 
       const requests: Promise<void>[] = [
@@ -1257,6 +1425,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       setErrorMessage(null);
       setStatusMessage(null);
       try {
+        const benchmark = defaultBenchmarkForPortfolio(nextName);
         const response = await fetch("/api/portfolio", {
           method: "POST",
           headers: {
@@ -1265,6 +1434,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           },
           body: JSON.stringify({
             name: nextName,
+            benchmark,
             positions: []
           })
         });
@@ -1287,6 +1457,27 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     });
   }
 
+  async function fetchSecurityPreviewData(symbol: string) {
+    const normalizedSymbol = normalizeBenchmarkSymbol(symbol);
+    const response = await fetch(`/api/securities/${encodeURIComponent(normalizedSymbol)}/preview`, {
+      headers: {
+        ...(await getAuthHeaders())
+      }
+    });
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
+    }
+    const data = (await response.json()) as {
+      preview: SecurityPreview | null;
+      valid?: boolean;
+      error?: string;
+    };
+    if (!data.valid || !data.preview) {
+      throw new Error(data.error ?? "No listed ticker found.");
+    }
+    return data.preview;
+  }
+
   async function loadPositionPreview(
     symbol: string,
     selection?: SecuritySearchResult | null
@@ -1301,36 +1492,21 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     setPositionPreviewLoading(true);
     setSearchError(null);
     try {
-      const response = await fetch(`/api/securities/${encodeURIComponent(normalizedSymbol)}/preview`, {
-        headers: {
-          ...(await getAuthHeaders())
-        }
-      });
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response));
-      }
-      const data = (await response.json()) as {
-        preview: SecurityPreview | null;
-        valid?: boolean;
-        error?: string;
-      };
-      if (!data.valid || !data.preview) {
-        throw new Error(data.error ?? "No listed ticker found.");
-      }
+      const preview = await fetchSecurityPreviewData(normalizedSymbol);
 
       setSelectedSecurity(
         selection ?? {
-          symbol: data.preview.symbol,
-          companyName: data.preview.companyName,
-          exchange: data.preview.exchange,
-          quoteType: data.preview.quoteType,
-          sector: data.preview.sector,
+          symbol: preview.symbol,
+          companyName: preview.companyName,
+          exchange: preview.exchange,
+          quoteType: preview.quoteType,
+          sector: preview.sector,
           hasPreviewData: true
         }
       );
-      setPositionTicker(data.preview.symbol);
-      setPositionName(data.preview.companyName);
-      setPositionPreview(data.preview);
+      setPositionTicker(preview.symbol);
+      setPositionName(preview.companyName);
+      setPositionPreview(preview);
       setSearchResults([]);
       return true;
     } catch (error) {
@@ -1353,6 +1529,53 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     await loadPositionPreview(result.symbol, result);
   }
 
+  async function loadBenchmarkPreview(
+    symbol: string,
+    selection?: SecuritySearchResult | null
+  ) {
+    const normalizedSymbol = normalizeBenchmarkSymbol(symbol);
+    if (!normalizedSymbol) {
+      setBenchmarkPreview(null);
+      setBenchmarkPreviewLoading(false);
+      return false;
+    }
+
+    setBenchmarkPreviewLoading(true);
+    setBenchmarkSearchError(null);
+    try {
+      const preview = await fetchSecurityPreviewData(normalizedSymbol);
+      setSelectedBenchmarkSecurity(
+        selection ?? {
+          symbol: preview.symbol,
+          companyName: preview.companyName,
+          exchange: preview.exchange,
+          quoteType: preview.quoteType,
+          sector: preview.sector,
+          hasPreviewData: true
+        }
+      );
+      setBenchmarkSearchTerm(preview.symbol);
+      setBenchmarkPreview(preview);
+      setBenchmarkSearchResults([]);
+      return true;
+    } catch (error) {
+      setSelectedBenchmarkSecurity(null);
+      setBenchmarkPreview(null);
+      setBenchmarkSearchError(
+        error instanceof Error ? error.message : "Benchmark preview failed"
+      );
+      return false;
+    } finally {
+      setBenchmarkPreviewLoading(false);
+    }
+  }
+
+  async function handleSelectBenchmarkResult(result: SecuritySearchResult) {
+    setSelectedBenchmarkSecurity(result);
+    setBenchmarkSearchTerm(result.symbol);
+    await loadBenchmarkPreview(result.symbol, result);
+  }
+
   function resetPositionForm() {
     setPositionTicker("");
     setPositionName("");
@@ -1366,6 +1589,54 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     setSearchResults([]);
     setSearchLoading(false);
     setSearchError(null);
+  }
+
+  function resetBenchmarkForm() {
+    setBenchmarkSearchTerm("");
+    setBenchmarkSearchResults([]);
+    setBenchmarkSearchLoading(false);
+    setBenchmarkSearchError(null);
+    setSelectedBenchmarkSecurity(null);
+    setBenchmarkPreview(null);
+  }
+
+  async function saveBenchmarkSymbol(symbol: string, successMessage: string) {
+    if (!selectedPortfolio) {
+      return false;
+    }
+
+    return new Promise<boolean>((resolve) => {
+      startTransition(async () => {
+        setErrorMessage(null);
+        setStatusMessage(null);
+        try {
+          const response = await fetch(`/api/portfolio/${selectedPortfolio.id}`, {
+            method: "PATCH",
+            headers: {
+              "content-type": "application/json",
+              ...(await getAuthHeaders())
+            },
+            body: JSON.stringify({
+              benchmark: normalizeBenchmarkSymbol(symbol)
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(await readErrorMessage(response));
+          }
+
+          await loadPortfolio(selectedPortfolio.id);
+          await refreshPortfolioList();
+          setStatusMessage(successMessage);
+          resolve(true);
+        } catch (error) {
+          setBenchmarkSearchError(
+            error instanceof Error ? error.message : "Failed to update benchmark"
+          );
+          resolve(false);
+        }
+      });
+    });
   }
 
   async function saveSinglePosition(
@@ -1768,6 +2039,44 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     await rerunRiskScore(true);
   }
 
+  async function choosePresetBenchmark(symbol: string) {
+    const normalizedSymbol = normalizeBenchmarkSymbol(symbol);
+    setBenchmarkSearchError(null);
+    setSelectedBenchmarkSecurity({
+      symbol: normalizedSymbol,
+      companyName: normalizedSymbol,
+      exchange: "Preset benchmark",
+      quoteType: "ETF",
+      hasPreviewData: true
+    });
+    setBenchmarkSearchTerm(normalizedSymbol);
+    void loadBenchmarkPreview(normalizedSymbol);
+  }
+
+  async function applyBenchmarkSelection() {
+    if (!selectedPortfolio) {
+      return;
+    }
+
+    const symbol = normalizeBenchmarkSymbol(
+      benchmarkPreview?.symbol ?? selectedBenchmarkSecurity?.symbol ?? benchmarkSearchTerm
+    );
+    if (!symbol) {
+      setBenchmarkSearchError("Choose a benchmark ticker before saving.");
+      return;
+    }
+
+    if (!benchmarkPreview || benchmarkPreview.symbol !== symbol) {
+      setBenchmarkSearchError("Select a valid Yahoo benchmark result before saving.");
+      return;
+    }
+
+    const saved = await saveBenchmarkSymbol(symbol, `Benchmark updated to ${symbol}.`);
+    if (saved) {
+      setBenchmarkSearchTerm(symbol);
+    }
+  }
+
   async function logout() {
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
@@ -1890,7 +2199,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 tone={portfolioRangePerformance.absolute >= 0 ? "positive" : "negative"}
               />
               <InfoPill label="Risk Tier" value={selectedMetrics?.riskTier ?? "Unscored"} />
-              <InfoPill label="Benchmark" value={benchmarkForName(selectedPortfolio.name)} />
+              <InfoPill label="Benchmark" value={selectedPortfolio.benchmark} />
               <InfoPill label="Positions" value={`${selectedPortfolio.positions.length}`} />
             </div>
           )}
@@ -1919,7 +2228,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                   <div className="max-w-3xl">
                   <p className="text-sm uppercase tracking-[0.22em] text-slate-500">
-                    {selectedPortfolio.name} • Benchmark {benchmarkForName(selectedPortfolio.name)}
+                    {selectedPortfolio.name} • Benchmark {selectedPortfolio.benchmark}
                   </p>
                   <div className="mt-4 flex flex-wrap items-end gap-3">
                     <h2 className="text-5xl font-semibold tracking-[-0.05em] text-white">
@@ -2257,6 +2566,127 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           </Panel>
         </div>
 
+        <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+          <Panel title="Portfolio vs Benchmark">
+            {benchmarkAnalyticsError ? (
+              <div className="mb-4">
+                <InlineNotice message={benchmarkAnalyticsError} tone="warning" />
+              </div>
+            ) : null}
+            {!selectedPortfolio ? (
+              <EmptyState
+                title="No benchmark comparison yet"
+                copy="Select a portfolio to compare selected-range performance against its benchmark."
+              />
+            ) : !benchmarkAnalytics ? (
+              <EmptyState
+                title="Benchmark comparison loading"
+                copy="Selected-range portfolio and benchmark analytics appear here once Yahoo history resolves."
+              />
+            ) : (
+              <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-5">
+                  <InfoPill
+                    label="Portfolio"
+                    value={formatPercent(benchmarkAnalytics.portfolioReturn)}
+                    tone={(benchmarkAnalytics.portfolioReturn ?? 0) >= 0 ? "positive" : "negative"}
+                  />
+                  <InfoPill
+                    label={benchmarkAnalytics.benchmark}
+                    value={formatPercent(benchmarkAnalytics.benchmarkReturn)}
+                    tone={(benchmarkAnalytics.benchmarkReturn ?? 0) >= 0 ? "positive" : "negative"}
+                  />
+                  <InfoPill
+                    label="Excess Return"
+                    value={formatPercent(benchmarkAnalytics.excessReturn)}
+                    tone={(benchmarkAnalytics.excessReturn ?? 0) >= 0 ? "positive" : "negative"}
+                  />
+                  <InfoPill
+                    label="Correlation"
+                    value={
+                      benchmarkAnalytics.correlation != null
+                        ? benchmarkAnalytics.correlation.toFixed(2)
+                        : "N/A"
+                    }
+                  />
+                  <InfoPill
+                    label="Beta"
+                    value={
+                      benchmarkAnalytics.beta != null ? benchmarkAnalytics.beta.toFixed(2) : "N/A"
+                    }
+                  />
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/35 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Relative stance</p>
+                  <div className="mt-3 space-y-2">
+                    {benchmarkAnalytics.relativeNotes.map((note) => (
+                      <p key={note} className="text-sm text-slate-300">
+                        {note}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="Top Drivers">
+            {!benchmarkAnalytics ? (
+              <EmptyState
+                title="Attribution loading"
+                copy="Holding and sector contribution drivers populate from the active selected range."
+              />
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Top holding contributor</p>
+                  <p className="mt-2 text-lg font-semibold text-white">
+                    {topPositiveHoldingContributor?.ticker ?? "N/A"}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-400">
+                    {topPositiveHoldingContributor
+                      ? `${formatPercent(topPositiveHoldingContributor.contribution)} contribution`
+                      : "No positive holding contribution yet"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Top holding detractor</p>
+                  <p className="mt-2 text-lg font-semibold text-white">
+                    {topNegativeHoldingContributor?.ticker ?? "N/A"}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-400">
+                    {topNegativeHoldingContributor
+                      ? `${formatPercent(topNegativeHoldingContributor.contribution)} contribution`
+                      : "No negative holding contribution yet"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Top sector contributor</p>
+                  <p className="mt-2 text-lg font-semibold text-white">
+                    {topPositiveSectorContributor?.sector ?? "N/A"}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-400">
+                    {topPositiveSectorContributor
+                      ? `${formatPercent(topPositiveSectorContributor.contribution)} contribution`
+                      : "No positive sector contribution yet"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Top sector detractor</p>
+                  <p className="mt-2 text-lg font-semibold text-white">
+                    {topNegativeSectorContributor?.sector ?? "N/A"}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-400">
+                    {topNegativeSectorContributor
+                      ? `${formatPercent(topNegativeSectorContributor.contribution)} contribution`
+                      : "No negative sector contribution yet"}
+                  </p>
+                </div>
+              </div>
+            )}
+          </Panel>
+        </div>
+
         <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
           <Panel
             title="Portfolio Health Matrix"
@@ -2383,7 +2813,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 <div className="grid gap-3 md:grid-cols-3">
                   <InfoPill label="Sectors" value={`${riskReport.exposureDiagnostics.sectorCount}`} />
                   <InfoPill label="Industries" value={`${riskReport.exposureDiagnostics.industryCount}`} />
-                  <InfoPill label="Excess vs SPY" value={formatPercent(riskReport.benchmarkComparison.excessReturn)} tone={riskReport.benchmarkComparison.excessReturn >= 0 ? "positive" : "negative"} />
+                  <InfoPill
+                    label={`Excess vs ${selectedPortfolio?.benchmark ?? riskReport.benchmarkComparison.benchmark}`}
+                    value={formatPercent(benchmarkAnalytics?.excessReturn ?? riskReport.benchmarkComparison.excessReturn)}
+                    tone={(benchmarkAnalytics?.excessReturn ?? riskReport.benchmarkComparison.excessReturn) >= 0 ? "positive" : "negative"}
+                  />
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="rounded-xl border border-white/10 bg-black/35 p-4">
@@ -2427,8 +2861,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             copy="Select a sleeve to monitor holdings, top movers, and concentration."
           />
         ) : (
-          <div className="grid gap-3 lg:grid-cols-6">
+          <div className="grid gap-3 lg:grid-cols-7">
             <InfoPill label="Selected" value={selectedPortfolio.name} />
+            <InfoPill label="Benchmark" value={selectedPortfolio.benchmark} />
             <InfoPill
               label="Portfolio Value"
               value={selectedMetrics ? formatCurrency(selectedMetrics.portfolioValue) : "N/A"}
@@ -2437,6 +2872,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               label="Day Change"
               value={formatCurrency(dailyPnl)}
               tone={dailyPnl >= 0 ? "positive" : "negative"}
+            />
+            <InfoPill
+              label={labelForRange(portfolioRange)}
+              value={formatPercent(benchmarkAnalytics?.portfolioReturn ?? portfolioRangePerformance.percent)}
+              tone={(benchmarkAnalytics?.portfolioReturn ?? portfolioRangePerformance.percent) >= 0 ? "positive" : "negative"}
             />
             <InfoPill label="Holdings" value={`${sortedHoldings.length}`} />
             <InfoPill label="Median Weight" value={formatPercent(medianWeight)} />
@@ -2546,6 +2986,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
         <Panel title="Current Holdings" action={<span className="text-xs text-slate-500">Portfolio-scoped</span>}>
           {riskError ? <div className="mb-4"><InlineNotice message={riskError} tone="warning" /></div> : null}
+          {benchmarkAnalyticsError ? <div className="mb-4"><InlineNotice message={benchmarkAnalyticsError} tone="warning" /></div> : null}
           {!selectedPortfolio ? (
             <EmptyState
               title="Select or create a portfolio"
@@ -2557,7 +2998,46 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               copy="Search by ticker and add your first NYSE-listed equity or ETF to begin live risk monitoring."
             />
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-4">
+                <InfoPill
+                  label="Biggest contributor"
+                  value={
+                    topPositiveHoldingContributor
+                      ? `${topPositiveHoldingContributor.ticker} ${formatPercent(topPositiveHoldingContributor.contribution)}`
+                      : "N/A"
+                  }
+                  tone={(topPositiveHoldingContributor?.contribution ?? 0) >= 0 ? "positive" : "negative"}
+                />
+                <InfoPill
+                  label="Biggest detractor"
+                  value={
+                    topNegativeHoldingContributor
+                      ? `${topNegativeHoldingContributor.ticker} ${formatPercent(topNegativeHoldingContributor.contribution)}`
+                      : "N/A"
+                  }
+                  tone={(topNegativeHoldingContributor?.contribution ?? 0) >= 0 ? "positive" : "negative"}
+                />
+                <InfoPill
+                  label="Strongest sector"
+                  value={
+                    topPositiveSectorContributor
+                      ? `${topPositiveSectorContributor.sector} ${formatPercent(topPositiveSectorContributor.contribution)}`
+                      : "N/A"
+                  }
+                  tone={(topPositiveSectorContributor?.contribution ?? 0) >= 0 ? "positive" : "negative"}
+                />
+                <InfoPill
+                  label="Weakest sector"
+                  value={
+                    topNegativeSectorContributor
+                      ? `${topNegativeSectorContributor.sector} ${formatPercent(topNegativeSectorContributor.contribution)}`
+                      : "N/A"
+                  }
+                  tone={(topNegativeSectorContributor?.contribution ?? 0) >= 0 ? "positive" : "negative"}
+                />
+              </div>
+              <div className="space-y-2">
               {sortedHoldings.map((holding) => (
                 <button
                   key={holding.ticker}
@@ -2579,7 +3059,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       </p>
                     </div>
 
-                    <div className="grid min-w-[250px] gap-3 sm:grid-cols-4">
+                    <div className="grid min-w-[250px] gap-3 sm:grid-cols-5">
                       <div>
                         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Price</p>
                         <p className="mt-1 text-lg font-semibold text-white">{formatCurrency(holding.currentPrice)}</p>
@@ -2608,6 +3088,22 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                         <p className="mt-1 text-lg font-semibold text-white">{holding.shares.toFixed(2)} sh</p>
                         <p className="mt-1 text-xs text-slate-500">{holding.assetClass ?? "equities"}</p>
                       </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Contribution</p>
+                        <p
+                          className={cn(
+                            "mt-1 text-lg font-semibold",
+                            (holdingContributionMap.get(holding.ticker.toUpperCase())?.contribution ?? 0) >= 0
+                              ? "text-success"
+                              : "text-danger"
+                          )}
+                        >
+                          {formatPercent(holdingContributionMap.get(holding.ticker.toUpperCase())?.contribution)}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {portfolioRange} contribution
+                        </p>
+                      </div>
                     </div>
 
                     <div className="flex flex-wrap justify-end gap-2">
@@ -2635,6 +3131,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   </div>
                 </button>
               ))}
+              </div>
             </div>
           )}
         </Panel>
@@ -3095,8 +3592,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-        <Panel title="Regime and Benchmark Diagnostics">
-          {!riskReport ? (
+        <Panel title="Benchmark Relative">
+          {benchmarkAnalyticsError ? <div className="mb-4"><InlineNotice message={benchmarkAnalyticsError} tone="warning" /></div> : null}
+          {!riskReport || !selectedPortfolio ? (
             <EmptyState
               title="No regime diagnostics yet"
               copy="Benchmark-relative statistics appear once the deterministic report has loaded."
@@ -3104,15 +3602,44 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           ) : (
             <div className="space-y-4">
               <div className="grid gap-3 md:grid-cols-3">
-                <InfoPill label="Benchmark" value={riskReport.marketContext.benchmark} />
+                <InfoPill label="Benchmark" value={selectedPortfolio.benchmark} />
                 <InfoPill label="Trend" value={riskReport.marketContext.trend} />
                 <InfoPill label="Benchmark Vol" value={formatPercent(riskReport.marketContext.volatility)} />
               </div>
               <div className="grid gap-3 md:grid-cols-2">
-                <MetricStat label="Correlation to SPY" value={riskReport.returnDiagnostics.correlationToBenchmark.toFixed(2)} />
-                <MetricStat label="Beta to SPY" value={riskReport.returnDiagnostics.betaToBenchmark.toFixed(2)} />
-                <MetricStat label="Hit Rate" value={formatPercent(riskReport.returnDiagnostics.hitRate)} />
+                <MetricStat
+                  label={`Correlation to ${selectedPortfolio.benchmark}`}
+                  value={
+                    benchmarkAnalytics?.correlation != null
+                      ? benchmarkAnalytics.correlation.toFixed(2)
+                      : riskReport.returnDiagnostics.correlationToBenchmark.toFixed(2)
+                  }
+                />
+                <MetricStat
+                  label={`Beta to ${selectedPortfolio.benchmark}`}
+                  value={
+                    benchmarkAnalytics?.beta != null
+                      ? benchmarkAnalytics.beta.toFixed(2)
+                      : riskReport.returnDiagnostics.betaToBenchmark.toFixed(2)
+                  }
+                />
+                <MetricStat
+                  label="Excess Return"
+                  value={formatPercent(benchmarkAnalytics?.excessReturn ?? riskReport.benchmarkComparison.excessReturn)}
+                />
                 <MetricStat label="Current Drawdown" value={formatPercent(riskReport.returnDiagnostics.currentDrawdown)} />
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Benchmark-relative concentration notes</p>
+                <div className="mt-3 space-y-2">
+                  {(benchmarkAnalytics?.relativeNotes ?? [
+                    "Benchmark-relative notes are unavailable until the selected-range comparison loads."
+                  ]).map((note) => (
+                    <p key={note} className="text-sm text-slate-300">
+                      {note}
+                    </p>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -3491,10 +4018,129 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         <div className="space-y-4 text-sm text-slate-300">
           <p>Portfolios in workspace: {portfolioSummaries.length}</p>
           <p>Selected portfolio: {selectedPortfolio?.name ?? "None"}</p>
+          <p>Current benchmark: {selectedPortfolio?.benchmark ?? "None"}</p>
           <p>
             Use separate sleeves for growth, income, balanced, defensive, or speculative strategies,
             then compare their concentration and risk states independently.
           </p>
+          {selectedPortfolio ? (
+            <div className="space-y-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Benchmark presets</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {BENCHMARK_PRESETS.map((symbol) => (
+                    <button
+                      key={symbol}
+                      type="button"
+                      onClick={() => void choosePresetBenchmark(symbol)}
+                      className={cn(
+                        "rounded-md border px-3 py-2 text-sm transition",
+                        selectedPortfolio.benchmark === symbol
+                          ? "border-white/30 bg-white/[0.08] text-white"
+                          : "border-white/10 bg-black/40 text-zinc-200 hover:border-white/20 hover:bg-white/[0.04]"
+                      )}
+                    >
+                      {symbol}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="relative">
+                <label className="mb-2 block text-sm text-slate-300">Custom benchmark ticker</label>
+                {benchmarkSearchError ? <div className="mb-2"><InlineNotice message={benchmarkSearchError} tone="warning" /></div> : null}
+                <input
+                  value={benchmarkSearchTerm}
+                  onChange={(event) => {
+                    const nextQuery = event.target.value;
+                    setBenchmarkSearchTerm(nextQuery);
+                    setSelectedBenchmarkSecurity(null);
+                    setBenchmarkPreview(null);
+                    setBenchmarkSearchError(null);
+                  }}
+                  placeholder="QQQ, SPY, VTI..."
+                  className="w-full rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+                />
+                {benchmarkSearchTerm.trim() && !selectedBenchmarkSecurity ? (
+                  <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-xl border border-white/10 bg-panel/95 shadow-panel backdrop-blur-xl">
+                    {benchmarkSearchLoading ? (
+                      <div className="px-4 py-3 text-sm text-slate-400">Searching Yahoo Finance...</div>
+                    ) : benchmarkSearchResults.length > 0 ? (
+                      <div className="max-h-72 overflow-y-auto py-2">
+                        {benchmarkSearchResults.map((result) => (
+                          <button
+                            key={`${result.symbol}:${result.exchange}:benchmark`}
+                            type="button"
+                            onClick={() => {
+                              void handleSelectBenchmarkResult(result);
+                            }}
+                            className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition hover:bg-white/[0.04]"
+                          >
+                            <div>
+                              <p className="text-sm font-semibold text-white">{result.symbol}</p>
+                              <p className="mt-1 text-sm text-slate-400">{result.companyName}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{result.quoteType}</p>
+                              <p className="mt-1 text-sm text-slate-400">{result.exchange}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="px-4 py-3 text-sm text-slate-400">No listed Yahoo Finance matches found.</div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+
+              {benchmarkPreview ? (
+                <div className="rounded-xl border border-white/10 bg-black/35 p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Selected benchmark</p>
+                      <p className="mt-2 text-lg font-semibold text-white">{benchmarkPreview.symbol}</p>
+                      <p className="mt-1 text-sm text-slate-400">{benchmarkPreview.companyName}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Current price</p>
+                      <p className="mt-2 text-lg font-semibold text-white">
+                        {formatCurrency(benchmarkPreview.currentPrice)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <InfoPill label="Sector" value={benchmarkPreview.sector} />
+                    <InfoPill label="Exchange" value={benchmarkPreview.exchange} />
+                    <InfoPill label="Type" value={benchmarkPreview.quoteType} />
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => void applyBenchmarkSelection()}
+                  disabled={
+                    !selectedPortfolio ||
+                    !benchmarkPreview ||
+                    benchmarkPreview.symbol === selectedPortfolio.benchmark ||
+                    benchmarkPreviewLoading
+                  }
+                  className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Save Benchmark
+                </button>
+                <button
+                  type="button"
+                  onClick={resetBenchmarkForm}
+                  className="rounded-lg border border-white/10 px-5 py-3 text-sm text-slate-300 transition hover:border-white/20 hover:bg-white/[0.03]"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+          ) : null}
           {selectedPortfolio ? (
             <button
               onClick={deletePortfolio}

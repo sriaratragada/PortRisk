@@ -11,6 +11,7 @@ export const positionSchema = z.object({
 
 export const portfolioCreateSchema = z.object({
   name: z.string().trim().min(1).max(64),
+  benchmark: z.string().trim().min(1).max(12).optional(),
   positions: z.array(positionSchema).default([])
 });
 

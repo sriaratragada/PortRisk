@@ -61,6 +61,7 @@ export async function GET(request: NextRequest) {
         .limit(12)
     ]);
     const report = await buildRiskReport(portfolioId, hydrated.holdings, hydrated.metrics, hydrated.series, {
+      benchmark: portfolio.benchmark,
       previousScore: previousScores?.[1]
         ? {
             riskTier: previousScores[1].riskTier,

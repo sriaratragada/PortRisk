@@ -4,10 +4,13 @@ import { badRequest, json } from "@/lib/http";
 import { isPortfolioArchived } from "@/lib/portfolio-archive";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { positionSchema } from "@/lib/validation";
+import { normalizeBenchmarkSymbol } from "@/lib/benchmarks";
+import { fetchHistoricalSeriesResult, fetchSecurityPreview } from "@/lib/market";
 import { z } from "zod";
 
 const patchSchema = z.object({
   name: z.string().trim().min(1).max(64).optional(),
+  benchmark: z.string().trim().min(1).max(12).optional(),
   positions: z.array(positionSchema).optional()
 });
 
@@ -24,6 +27,20 @@ export const dynamic = "force-dynamic";
 type Context = {
   params: Promise<{ portfolioId: string }>;
 };
+
+async function validateBenchmarkSymbol(symbol: string) {
+  const normalizedSymbol = normalizeBenchmarkSymbol(symbol);
+  const [preview, history] = await Promise.all([
+    fetchSecurityPreview(normalizedSymbol),
+    fetchHistoricalSeriesResult(normalizedSymbol, "1M")
+  ]);
+
+  if (!preview.symbol || history.points.length < 2) {
+    throw new Error("Benchmark must be a Yahoo-valid ticker with price history.");
+  }
+
+  return normalizedSymbol;
+}
 
 export async function GET(request: NextRequest, context: Context) {
   const auth = await requireUser();
@@ -98,6 +115,17 @@ export async function PATCH(request: NextRequest, context: Context) {
     avgCost: position.avgCost,
     assetClass: position.assetClass
   }));
+  let nextBenchmark = existingPortfolio.benchmark;
+  if (payload.benchmark) {
+    try {
+      nextBenchmark = await validateBenchmarkSymbol(payload.benchmark);
+    } catch (error) {
+      return badRequest(
+        error instanceof Error ? error.message : "Benchmark must be a Yahoo-valid ticker.",
+        400
+      );
+    }
+  }
   const now = new Date().toISOString();
   const beforePositions = new Map<string, PortfolioPosition>(
     existing.positions.map((position: PortfolioPosition) => [position.ticker.toUpperCase(), position])
@@ -108,7 +136,7 @@ export async function PATCH(request: NextRequest, context: Context) {
 
   const { data: portfolio, error: updateError } = await supabase
     .from("Portfolio")
-    .update({ name: payload.name ?? existing.name, updatedAt: now })
+    .update({ name: payload.name ?? existing.name, benchmark: nextBenchmark, updatedAt: now })
     .eq("id", portfolioId)
     .eq("userId", auth.user.id)
     .select()
@@ -191,11 +219,19 @@ export async function PATCH(request: NextRequest, context: Context) {
   }
 
   if (auditEvents.length === 0) {
-    auditEvents.push({
-      actionType: "ALLOCATION_COMMITTED" as const,
-      beforeState: existing,
-      afterState: portfolio
-    });
+    if (payload.benchmark && payload.benchmark !== existingPortfolio.benchmark) {
+      auditEvents.push({
+        actionType: "PORTFOLIO_BENCHMARK_UPDATED" as const,
+        beforeState: { benchmark: existingPortfolio.benchmark },
+        afterState: { benchmark: nextBenchmark }
+      });
+    } else {
+      auditEvents.push({
+        actionType: "ALLOCATION_COMMITTED" as const,
+        beforeState: existing,
+        afterState: portfolio
+      });
+    }
   }
 
   const { error: auditError } = await supabase.from("AuditLog").insert(

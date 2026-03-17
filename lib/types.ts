@@ -139,6 +139,36 @@ export type HistoricalSeriesResult = {
   provider: MarketDataProvider;
 };
 
+export type BenchmarkAnalytics = {
+  benchmark: string;
+  portfolioReturn: number | null;
+  benchmarkReturn: number | null;
+  excessReturn: number | null;
+  trackingDifference: number | null;
+  correlation: number | null;
+  beta: number | null;
+  holdingAttribution: Array<{
+    ticker: string;
+    companyName: string;
+    sector: string;
+    startWeight: number | null;
+    holdingReturn: number | null;
+    contribution: number | null;
+  }>;
+  sectorAttribution: Array<{
+    sector: string;
+    weight: number;
+    contribution: number;
+  }>;
+  relativeNotes: string[];
+  relativeMode: "return_only" | "sector_relative";
+  benchmarkAvailable: boolean;
+  benchmarkSectorDataAvailable: boolean;
+  dataState: MarketDataState;
+  asOf: string | null;
+  provider: MarketDataProvider;
+};
+
 export type HydratedPortfolioRisk = {
   holdings: HoldingSnapshot[];
   series: Array<{

@@ -7,6 +7,7 @@ import { HoldingSnapshot, RiskMetrics } from "@/lib/types";
 export type PortfolioSummary = {
   id: string;
   name: string;
+  benchmark: string;
   updatedAt: string;
   positionCount: number;
   latestRiskTier: string | null;
@@ -33,6 +34,7 @@ export type StressTestView = {
 export type WorkspacePortfolio = {
   id: string;
   name: string;
+  benchmark: string;
   updatedAt: string;
   holdings: HoldingSnapshot[];
   positions: Array<{
@@ -93,7 +95,7 @@ export async function buildWorkspacePortfolio(portfolioId: string, userId: strin
     await Promise.all([
       supabase
         .from("Portfolio")
-        .select("id,name,updatedAt")
+        .select("id,name,benchmark,updatedAt")
         .eq("id", portfolioId)
         .eq("userId", userId)
         .single(),
@@ -132,6 +134,7 @@ export async function buildWorkspacePortfolio(portfolioId: string, userId: strin
     return {
       id: portfolio.id,
       name: portfolio.name,
+      benchmark: portfolio.benchmark,
       updatedAt: portfolio.updatedAt,
       holdings: [],
       positions: normalizedPositions,
@@ -164,6 +167,7 @@ export async function buildWorkspacePortfolio(portfolioId: string, userId: strin
     return {
       id: portfolio.id,
       name: portfolio.name,
+      benchmark: portfolio.benchmark,
       updatedAt: portfolio.updatedAt,
       holdings: hydrated.holdings,
       positions: normalizedPositions,
@@ -190,6 +194,7 @@ export async function buildWorkspacePortfolio(portfolioId: string, userId: strin
     return {
       id: portfolio.id,
       name: portfolio.name,
+      benchmark: portfolio.benchmark,
       updatedAt: portfolio.updatedAt,
       holdings: buildFallbackHoldings(normalizedPositions),
       positions: normalizedPositions,
@@ -222,7 +227,7 @@ export async function getWorkspaceData(user: { id: string; email: string }): Pro
       getArchivedPortfolioIds(user.id),
       supabase
         .from("Portfolio")
-        .select("id,name,updatedAt")
+        .select("id,name,benchmark,updatedAt")
         .eq("userId", user.id)
         .order("updatedAt", { ascending: false }),
       supabase.from("Position").select("portfolioId,id"),
@@ -260,6 +265,7 @@ export async function getWorkspaceData(user: { id: string; email: string }): Pro
     portfolios: activePortfolios.map((portfolio) => ({
       id: portfolio.id,
       name: portfolio.name,
+      benchmark: portfolio.benchmark,
       updatedAt: portfolio.updatedAt,
       positionCount: positionCountByPortfolio.get(portfolio.id) ?? 0,
       latestRiskTier: latestRiskTierByPortfolio.get(portfolio.id) ?? null
