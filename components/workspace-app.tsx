@@ -82,15 +82,164 @@ type ResearchPanelLayout = {
   researchInsight: number;
 };
 
-const tabs: Array<{ id: TabId; label: string }> = [
-  { id: "overview", label: "Overview" },
-  { id: "holdings", label: "Holdings" },
-  { id: "research", label: "Research" },
-  { id: "risk", label: "Risk" },
-  { id: "stress", label: "Stress Tests" },
-  { id: "allocation", label: "Allocation Modeler" },
-  { id: "audit", label: "Audit Log" },
-  { id: "settings", label: "Settings" }
+type IconProps = {
+  className?: string;
+};
+
+function IconBase({
+  className,
+  children,
+  viewBox = "0 0 24 24"
+}: IconProps & { children: ReactNode; viewBox?: string }) {
+  return (
+    <svg
+      viewBox={viewBox}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={cn("h-4 w-4", className)}
+    >
+      {children}
+    </svg>
+  );
+}
+
+function LogoMark({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={cn("h-7 w-7", className)}>
+      <rect x="2" y="2" width="9" height="9" rx="2.5" fill="currentColor" opacity="0.95" />
+      <rect x="13" y="2" width="9" height="9" rx="2.5" fill="currentColor" opacity="0.5" />
+      <rect x="2" y="13" width="9" height="9" rx="2.5" fill="currentColor" opacity="0.5" />
+      <rect x="13" y="13" width="9" height="9" rx="2.5" fill="currentColor" opacity="0.95" />
+    </svg>
+  );
+}
+
+function OverviewIcon({ className }: IconProps) {
+  return (
+    <IconBase className={className}>
+      <path d="M4 19V9" />
+      <path d="M10 19V5" />
+      <path d="M16 19v-7" />
+      <path d="M22 19v-4" />
+    </IconBase>
+  );
+}
+
+function HoldingsIcon({ className }: IconProps) {
+  return (
+    <IconBase className={className}>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" />
+      <path d="M3 10h18" />
+    </IconBase>
+  );
+}
+
+function ResearchIcon({ className }: IconProps) {
+  return (
+    <IconBase className={className}>
+      <circle cx="11" cy="11" r="6" />
+      <path d="m20 20-3.5-3.5" />
+    </IconBase>
+  );
+}
+
+function RiskIcon({ className }: IconProps) {
+  return (
+    <IconBase className={className}>
+      <path d="M12 3 5 6v5c0 4.6 2.9 8.7 7 10 4.1-1.3 7-5.4 7-10V6l-7-3Z" />
+      <path d="m9.5 12 1.6 1.6 3.4-4.1" />
+    </IconBase>
+  );
+}
+
+function StressIcon({ className }: IconProps) {
+  return (
+    <IconBase className={className}>
+      <path d="M13 2 5 14h5l-1 8 8-12h-5l1-8Z" />
+    </IconBase>
+  );
+}
+
+function AllocationIcon({ className }: IconProps) {
+  return (
+    <IconBase className={className}>
+      <path d="M4 7h10" />
+      <path d="M4 17h16" />
+      <path d="M14 7v10" />
+      <circle cx="17" cy="7" r="3" />
+      <circle cx="9" cy="17" r="3" />
+    </IconBase>
+  );
+}
+
+function AuditIcon({ className }: IconProps) {
+  return (
+    <IconBase className={className}>
+      <path d="M8 4h8" />
+      <path d="M7 8h10" />
+      <rect x="4" y="3" width="16" height="18" rx="2.5" />
+      <path d="M8 12h8" />
+      <path d="M8 16h5" />
+    </IconBase>
+  );
+}
+
+function SettingsIcon({ className }: IconProps) {
+  return (
+    <IconBase className={className}>
+      <circle cx="12" cy="12" r="3.5" />
+      <path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a2 2 0 1 1-4 0v-.2a1 1 0 0 0-.6-.9 1 1 0 0 0-1.1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a2 2 0 1 1 0-4h.2a1 1 0 0 0 .9-.6 1 1 0 0 0-.2-1.1l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.9V4a2 2 0 1 1 4 0v.2a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1 1 1 0 0 0 .9.6h.2a2 2 0 1 1 0 4h-.2a1 1 0 0 0-.9.6Z" />
+    </IconBase>
+  );
+}
+
+function PlusIcon({ className }: IconProps) {
+  return (
+    <IconBase className={className}>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </IconBase>
+  );
+}
+
+function MenuIcon({ className }: IconProps) {
+  return (
+    <IconBase className={className}>
+      <path d="M4 7h16" />
+      <path d="M4 12h16" />
+      <path d="M4 17h16" />
+    </IconBase>
+  );
+}
+
+function CloseIcon({ className }: IconProps) {
+  return (
+    <IconBase className={className}>
+      <path d="m6 6 12 12" />
+      <path d="M18 6 6 18" />
+    </IconBase>
+  );
+}
+
+const tabs: Array<{
+  id: TabId;
+  label: string;
+  shortLabel: string;
+  caption: string;
+  icon: (props: IconProps) => JSX.Element;
+}> = [
+  { id: "overview", label: "Overview", shortLabel: "Overview", caption: "Portfolio command", icon: OverviewIcon },
+  { id: "holdings", label: "Holdings", shortLabel: "Holdings", caption: "Blotter and positions", icon: HoldingsIcon },
+  { id: "research", label: "Research", shortLabel: "Research", caption: "Idea pipeline", icon: ResearchIcon },
+  { id: "risk", label: "Risk", shortLabel: "Risk", caption: "Deterministic score", icon: RiskIcon },
+  { id: "stress", label: "Stress Tests", shortLabel: "Stress", caption: "Scenario runner", icon: StressIcon },
+  { id: "allocation", label: "Allocation Modeler", shortLabel: "Allocation", caption: "Weight planning", icon: AllocationIcon },
+  { id: "audit", label: "Audit Log", shortLabel: "Audit", caption: "Compliance trail", icon: AuditIcon },
+  { id: "settings", label: "Settings", shortLabel: "Settings", caption: "Workspace controls", icon: SettingsIcon }
 ];
 
 const chartRanges: ChartRange[] = ["1D", "1W", "1M", "3M", "1Y", "5Y", "MAX"];
@@ -259,6 +408,92 @@ function InfoPill({
       >
         {value}
       </p>
+    </div>
+  );
+}
+
+function InlineMetric({
+  label,
+  value,
+  tone = "default"
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "positive" | "negative";
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="text-[11px] font-medium text-slate-500">{label}</p>
+      <p
+        className={cn(
+          "text-sm font-medium tracking-[-0.01em]",
+          tone === "positive" ? "text-success" : tone === "negative" ? "text-danger" : "text-white"
+        )}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function SidebarNavItem({
+  active,
+  label,
+  caption,
+  icon: Icon,
+  onClick
+}: {
+  active: boolean;
+  label: string;
+  caption: string;
+  icon: (props: IconProps) => JSX.Element;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-start gap-3 rounded-lg border px-3 py-3 text-left transition",
+        active
+          ? "border-white/[0.12] bg-white/[0.06] text-white"
+          : "border-transparent text-slate-400 hover:border-white/[0.06] hover:bg-white/[0.03] hover:text-white"
+      )}
+    >
+      <span
+        className={cn(
+          "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border",
+          active
+            ? "border-white/[0.12] bg-white/[0.08] text-white"
+            : "border-white/[0.06] bg-white/[0.03] text-slate-500"
+        )}
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-medium">{label}</span>
+        <span className="mt-1 block truncate text-xs text-slate-500">{caption}</span>
+      </span>
+    </button>
+  );
+}
+
+function WorkspaceToolbar({
+  title,
+  subtitle,
+  actions
+}: {
+  title: string;
+  subtitle?: string;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-4 border-b border-white/[0.06] px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-[-0.04em] text-white">{title}</h1>
+        {subtitle ? <p className="mt-1 text-sm text-slate-400">{subtitle}</p> : null}
+      </div>
+      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </div>
   );
 }
@@ -799,6 +1034,7 @@ async function readErrorMessage(response: Response) {
 export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [portfolioSummaries, setPortfolioSummaries] = useState(initialData.portfolios);
   const [selectedPortfolio, setSelectedPortfolio] = useState<WorkspacePortfolio | null>(
     initialData.selectedPortfolio
@@ -946,6 +1182,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   );
   const [isPending, startTransition] = useTransition();
   const prefersReducedMotion = useReducedMotion();
+  const activeTabMeta = tabs.find((tab) => tab.id === activeTab) ?? tabs[0]!;
 
   async function getAuthHeaders(): Promise<Record<string, string>> {
     const supabase = createSupabaseBrowserClient();
@@ -1000,6 +1237,10 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       }
     } catch {}
   }, []);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [activeTab, selectedPortfolioId]);
 
   useEffect(() => {
     if (!selectedPortfolio) {
@@ -3771,137 +4012,56 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
   const renderHoldings = () => (
     <div className="space-y-6">
-      <Panel title="Holdings">
+      <Panel title="Holdings status" action={<RangeSelector value={portfolioRange} onChange={setPortfolioRange} />}>
         {!selectedPortfolio ? (
           <EmptyState
             title="No portfolio selected"
             copy="Select a sleeve to monitor holdings, top movers, and concentration."
           />
         ) : (
-          <div className="grid gap-3 lg:grid-cols-7">
-            <InfoPill label="Selected" value={selectedPortfolio.name} />
-            <InfoPill label="Benchmark" value={selectedPortfolio.benchmark} />
-            <InfoPill
-              label="Portfolio Value"
-              value={selectedMetrics ? formatCurrency(selectedMetrics.portfolioValue) : "N/A"}
-            />
-            <InfoPill
-              label="Day Change"
-              value={formatCurrency(dailyPnl)}
-              tone={dailyPnl >= 0 ? "positive" : "negative"}
-            />
-            <InfoPill
-              label={labelForRange(portfolioRange)}
-              value={formatPercent(benchmarkAnalytics?.portfolioReturn ?? portfolioRangePerformance.percent)}
-              tone={(benchmarkAnalytics?.portfolioReturn ?? portfolioRangePerformance.percent) >= 0 ? "positive" : "negative"}
-            />
-            <InfoPill label="Holdings" value={`${sortedHoldings.length}`} />
-            <InfoPill label="Median Weight" value={formatPercent(medianWeight)} />
-            <InfoPill label="Top 3 Weight" value={formatPercent(topThreeConcentration)} />
-          </div>
-        )}
-      </Panel>
-
-      <Panel
-        title="Portfolio Performance"
-        action={<RangeSelector value={portfolioRange} onChange={setPortfolioRange} />}
-      >
-        {historyError ? <div className="mb-4"><InlineNotice message={historyError} tone="warning" /></div> : null}
-        {!selectedPortfolio || selectedPortfolio.valueHistory.length === 0 ? (
-          <EmptyState
-            title="No performance history yet"
-            copy="Select a portfolio and add holdings to see 1D through MAX performance."
-          />
-        ) : (
-          <div className="grid gap-4 xl:grid-cols-[1.4fr_0.6fr]">
-            <div className="rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.035] to-transparent p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm uppercase tracking-[0.2em] text-slate-500">
-                    {selectedPortfolio.name}
-                  </p>
-                  <p className="mt-2 text-4xl font-semibold tracking-[-0.04em] text-white">
-                    {selectedRangePortfolioValue > 0
-                      ? formatCurrency(selectedRangePortfolioValue)
-                      : "Awaiting price"}
-                  </p>
-                  <p className="mt-2 text-sm text-slate-400">
-                    {portfolioRange} return {formatCurrency(portfolioRangePerformance.absolute)} •{" "}
-                    {formatPercent(portfolioRangePerformance.percent)}
-                  </p>
-                </div>
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.45fr)_repeat(5,minmax(0,1fr))]">
+            <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
+              <p className="text-sm font-medium text-white">{selectedPortfolio.name}</p>
+              <div className="mt-3 flex flex-wrap items-end gap-4">
+                <p className="text-3xl font-semibold tracking-[-0.05em] text-white">
+                  {selectedMetrics ? formatCurrency(selectedMetrics.portfolioValue) : "N/A"}
+                </p>
                 <div
                   className={cn(
-                    "rounded-md px-4 py-2 text-sm font-medium",
-                    portfolioRangePerformance.absolute >= 0
-                      ? "bg-success/15 text-success"
-                      : "bg-danger/15 text-danger"
+                    "rounded-lg border px-3 py-2 text-sm font-medium",
+                    dailyPnl >= 0
+                      ? "border-success/20 bg-success/10 text-success"
+                      : "border-danger/20 bg-danger/10 text-danger"
                   )}
                 >
-                  {formatCurrency(portfolioRangePerformance.absolute)} /{" "}
-                  {formatPercent(portfolioRangePerformance.percent)}
+                  {formatCurrency(dailyPnl)}
                 </div>
               </div>
-              <div className={cn("mt-4 h-72 transition-opacity duration-200", historyLoading && "opacity-70")}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={selectedPortfolio.valueHistory}>
-                    <CartesianGrid stroke="rgba(148,163,184,0.12)" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill: "#94a3b8", fontSize: 12 }} minTickGap={24} />
-                    <YAxis tickFormatter={(value) => `$${Math.round(value / 1000)}k`} tick={{ fill: "#94a3b8", fontSize: 12 }} />
-                    <Tooltip
-                      cursor={{
-                        stroke: "rgba(255,255,255,0.28)",
-                        strokeWidth: 1,
-                        fill: "rgba(255,255,255,0.02)"
-                      }}
-                      wrapperStyle={{ outline: "none" }}
-                      content={<ChartTooltip formatter={formatCurrency} />}
-                    />
-                    <Area type="monotone" dataKey="drawdown" fill="rgba(239,68,68,0.12)" stroke="rgba(239,68,68,0.18)" />
-                    <Line type="monotone" dataKey="peak" stroke="rgba(255,255,255,0.18)" dot={false} strokeWidth={1.1} />
-                    <Line type="monotone" dataKey="value" stroke="#fafafa" dot={false} strokeWidth={2.4} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              <p className="mt-2 text-sm text-slate-400">
+                {labelForRange(portfolioRange)} {formatCurrency(portfolioRangePerformance.absolute)} • {" "}
+                {formatPercent(benchmarkAnalytics?.portfolioReturn ?? portfolioRangePerformance.percent)}
+              </p>
             </div>
-
-            <div className="grid gap-3">
-              <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Biggest gainer</p>
-                <p className="mt-2 text-lg font-semibold text-white">{biggestGainer?.ticker ?? "N/A"}</p>
-                <p className="mt-1 text-sm text-slate-400">
-                  {biggestGainer
-                    ? `${formatCurrency(biggestGainer.dailyPnl)} • ${formatPercent(biggestGainer.dailyPnlPercent)}`
-                    : "No positive movers"}
-                </p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Biggest loser</p>
-                <p className="mt-2 text-lg font-semibold text-white">{biggestLoser?.ticker ?? "N/A"}</p>
-                <p className="mt-1 text-sm text-slate-400">
-                  {biggestLoser
-                    ? `${formatCurrency(biggestLoser.dailyPnl)} • ${formatPercent(biggestLoser.dailyPnlPercent)}`
-                    : "No negative movers"}
-                </p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Concentration</p>
-                <p className="mt-2 text-lg font-semibold text-white">
-                  {topConcentration(sortedHoldings)?.ticker ?? "N/A"}
-                </p>
-                <p className="mt-1 text-sm text-slate-400">
-                  {topConcentration(sortedHoldings)
-                    ? `${formatPercent(topConcentration(sortedHoldings)?.weight ?? 0)} top weight`
-                    : "No holdings yet"}
-                </p>
-              </div>
-            </div>
+            <InfoPill label="Benchmark" value={selectedPortfolio.benchmark} />
+            <InfoPill label="Holdings" value={`${sortedHoldings.length}`} />
+            <InfoPill label="Median weight" value={formatPercent(medianWeight)} />
+            <InfoPill label="Top 3 weight" value={formatPercent(topThreeConcentration)} />
+            <InfoPill
+              label="Top mover"
+              value={biggestGainer ? `${biggestGainer.ticker} ${formatCurrency(biggestGainer.dailyPnl)}` : "N/A"}
+              tone={(biggestGainer?.dailyPnl ?? 0) >= 0 ? "positive" : "default"}
+            />
+            <InfoPill
+              label="Lagging name"
+              value={biggestLoser ? `${biggestLoser.ticker} ${formatCurrency(biggestLoser.dailyPnl)}` : "N/A"}
+              tone={(biggestLoser?.dailyPnl ?? 0) < 0 ? "negative" : "default"}
+            />
           </div>
         )}
       </Panel>
 
-      <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
-        <Panel title="Current Holdings" action={<span className="text-xs text-slate-500">Portfolio-scoped</span>}>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_380px]">
+        <Panel title="Positions" action={<span className="text-xs text-slate-500">Portfolio blotter</span>}>
           {riskError ? <div className="mb-4"><InlineNotice message={riskError} tone="warning" /></div> : null}
           {benchmarkAnalyticsError ? <div className="mb-4"><InlineNotice message={benchmarkAnalyticsError} tone="warning" /></div> : null}
           {!selectedPortfolio ? (
@@ -3912,7 +4072,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           ) : sortedHoldings.length === 0 ? (
             <EmptyState
               title="No positions yet"
-              copy="Search by ticker and add your first NYSE-listed equity or ETF to begin live risk monitoring."
+              copy="Search by ticker and add your first listed equity or ETF to begin live monitoring."
             />
           ) : (
             <div className="space-y-4">
@@ -3954,274 +4114,303 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   tone={(topNegativeSectorContributor?.contribution ?? 0) >= 0 ? "positive" : "negative"}
                 />
               </div>
-              <div className="space-y-2">
-              {sortedHoldings.map((holding) => (
-                <button
-                  key={holding.ticker}
-                  type="button"
-                  onClick={() => void openHoldingDetail(holding.ticker)}
-                  className="w-full rounded-lg border border-white/10 bg-black/40 p-4 text-left transition duration-200 hover:border-white/25 hover:bg-white/[0.045]"
-                >
-                  <div className="grid gap-4 xl:grid-cols-[0.9fr_1.35fr_auto] xl:items-center">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-3">
-                        <p className="text-lg font-semibold text-white">{holding.ticker}</p>
-                        <span className="rounded-lg bg-white/5 px-2.5 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-400">
-                          {holding.assetClass ?? "equities"}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-sm text-slate-400">{holding.companyName ?? holding.ticker}</p>
-                      <p className="mt-2 text-xs uppercase tracking-[0.2em] text-slate-500">
-                        {holding.exchange ?? "Exchange N/A"}
-                      </p>
-                    </div>
 
-                    <div className="grid min-w-[250px] gap-3 sm:grid-cols-5">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Price</p>
-                        <p className="mt-1 text-lg font-semibold text-white">{formatCurrency(holding.currentPrice)}</p>
-                        {holding.dailyPnl != null ? (
-                          <p className={cn("mt-1 text-xs", holding.dailyPnl >= 0 ? "text-success" : "text-danger")}>
-                            {formatCurrency(holding.dailyPnl)} today
-                          </p>
-                        ) : (
-                          <p className="mt-1 text-xs text-slate-500">Quote unavailable</p>
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Position</p>
-                        <p className="mt-1 text-lg font-semibold text-white">{formatCurrency(holding.currentValue)}</p>
-                        <p className="mt-1 text-xs text-slate-500">{formatPercent(holding.weight)} weight</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Total Return</p>
-                        <p className={cn("mt-1 text-lg font-semibold", (holding.totalGain ?? 0) >= 0 ? "text-success" : "text-danger")}>
-                          {formatCurrency(holding.totalGain)} • {formatPercent(holding.totalGainPercent)}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-500">Avg {formatCurrency(holding.avgCost)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Exposure</p>
-                        <p className="mt-1 text-lg font-semibold text-white">{holding.shares.toFixed(2)} sh</p>
-                        <p className="mt-1 text-xs text-slate-500">{holding.assetClass ?? "equities"}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Contribution</p>
-                        <p
-                          className={cn(
-                            "mt-1 text-lg font-semibold",
-                            (holdingContributionMap.get(holding.ticker.toUpperCase())?.contribution ?? 0) >= 0
-                              ? "text-success"
-                              : "text-danger"
-                          )}
-                        >
-                          {formatPercent(holdingContributionMap.get(holding.ticker.toUpperCase())?.contribution)}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {portfolioRange} contribution
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          startEditingPosition(holding.ticker);
-                        }}
-                        className="rounded-md border border-white/12 px-4 py-2 text-sm text-zinc-200 transition hover:border-white/25 hover:bg-white/[0.04]"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void removePosition(holding.ticker);
-                        }}
-                        className="rounded-md border border-danger/40 px-4 py-2 text-sm text-danger"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                </button>
-              ))}
+              <div className="overflow-hidden rounded-xl border border-white/[0.06]">
+                <div className="max-h-[720px] overflow-auto">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="sticky top-0 z-10 bg-panel/95 backdrop-blur">
+                      <tr className="border-b border-white/[0.06] text-slate-500">
+                        <th className="px-4 py-3 font-medium">Ticker</th>
+                        <th className="px-4 py-3 font-medium">Name</th>
+                        <th className="px-4 py-3 font-medium">Price</th>
+                        <th className="px-4 py-3 font-medium">Market value</th>
+                        <th className="px-4 py-3 font-medium">Weight</th>
+                        <th className="px-4 py-3 font-medium">Total return</th>
+                        <th className="px-4 py-3 font-medium">Contribution</th>
+                        <th className="px-4 py-3 font-medium text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/[0.06]">
+                      {sortedHoldings.map((holding) => {
+                        const contribution = holdingContributionMap.get(holding.ticker.toUpperCase())?.contribution;
+                        return (
+                          <tr key={holding.ticker} className="bg-panel/40 transition hover:bg-white/[0.02]">
+                            <td className="px-4 py-3 align-top">
+                              <button
+                                type="button"
+                                onClick={() => void openHoldingDetail(holding.ticker)}
+                                className="text-left"
+                              >
+                                <p className="font-semibold text-white">{holding.ticker}</p>
+                                <p className="mt-1 text-xs text-slate-500">{holding.assetClass ?? "equities"}</p>
+                              </button>
+                            </td>
+                            <td className="px-4 py-3 align-top">
+                              <p className="text-white">{holding.companyName ?? holding.ticker}</p>
+                              <p className="mt-1 text-xs text-slate-500">{holding.exchange ?? "Exchange N/A"}</p>
+                            </td>
+                            <td className="px-4 py-3 align-top">
+                              <p className="text-white">{formatCurrency(holding.currentPrice)}</p>
+                              <p className={cn("mt-1 text-xs", (holding.dailyPnl ?? 0) >= 0 ? "text-success" : "text-danger")}>
+                                {holding.dailyPnl != null ? formatCurrency(holding.dailyPnl) : "Quote unavailable"}
+                              </p>
+                            </td>
+                            <td className="px-4 py-3 align-top">
+                              <p className="text-white">{formatCurrency(holding.currentValue)}</p>
+                              <p className="mt-1 text-xs text-slate-500">{holding.shares.toFixed(2)} shares</p>
+                            </td>
+                            <td className="px-4 py-3 align-top text-white">{formatPercent(holding.weight)}</td>
+                            <td className="px-4 py-3 align-top">
+                              <p className={cn((holding.totalGain ?? 0) >= 0 ? "text-success" : "text-danger")}>
+                                {formatCurrency(holding.totalGain)}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-500">{formatPercent(holding.totalGainPercent)}</p>
+                            </td>
+                            <td className="px-4 py-3 align-top">
+                              <p className={cn((contribution ?? 0) >= 0 ? "text-success" : "text-danger")}>
+                                {formatPercent(contribution)}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-500">{portfolioRange}</p>
+                            </td>
+                            <td className="px-4 py-3 align-top">
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => void openHoldingDetail(holding.ticker)}
+                                  className="rounded-lg border border-white/[0.08] px-3 py-2 text-xs text-slate-300 transition hover:border-white/[0.14] hover:text-white"
+                                >
+                                  Detail
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => startEditingPosition(holding.ticker)}
+                                  className="rounded-lg border border-white/[0.08] px-3 py-2 text-xs text-slate-300 transition hover:border-white/[0.14] hover:text-white"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void removePosition(holding.ticker)}
+                                  className="rounded-lg border border-danger/30 px-3 py-2 text-xs text-danger"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
         </Panel>
 
-        <Panel title={editingTicker ? "Edit Position" : "Add Position"}>
-          {!selectedPortfolio ? (
-            <EmptyState
-              title="No portfolio selected"
-              copy="Create a portfolio first. Holdings are always saved into the active portfolio."
-            />
-          ) : (
-            <form onSubmit={handlePositionSubmit} className="space-y-4">
-              <label className="block space-y-2">
-                <span className="text-sm text-slate-300">Target portfolio</span>
-                {portfolioSelector}
-              </label>
-              <div className="relative">
-                <label className="mb-2 block text-sm text-slate-300">Search listed ticker</label>
-                {searchError ? <div className="mb-2"><InlineNotice message={searchError} tone="warning" /></div> : null}
-                <input
-                  value={searchTerm}
-                  onChange={(event) => {
-                    const nextQuery = event.target.value;
-                    setSearchTerm(nextQuery);
-                    setSelectedSecurity(null);
-                    setPositionTicker("");
-                    setPositionName("");
-                    setPositionPreview(null);
-                    setSearchError(null);
-                  }}
-                  placeholder="AAPL, KO, XOM..."
-                  className="w-full rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
-                />
-                {searchTerm.trim() && !selectedSecurity ? (
-                  <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-xl border border-white/10 bg-panel/95 shadow-panel backdrop-blur-xl">
-                    {searchLoading ? (
-                      <div className="px-4 py-3 text-sm text-slate-400">Searching Yahoo Finance...</div>
-                    ) : searchResults.length > 0 ? (
-                      <div className="max-h-72 overflow-y-auto py-2">
-                        {searchResults.map((result) => (
-                          <button
-                            key={`${result.symbol}:${result.exchange}`}
-                            type="button"
-                            onClick={() => {
-                              void handleSelectSearchResult(result);
-                            }}
-                            className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition hover:bg-white/[0.04]"
-                          >
-                            <div>
-                              <p className="text-sm font-semibold text-white">{result.symbol}</p>
-                              <p className="mt-1 text-sm text-slate-400">{result.companyName}</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{result.quoteType}</p>
-                              <p className="mt-1 text-sm text-slate-400">{result.exchange}</p>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="px-4 py-3 text-sm text-slate-400">No listed Yahoo Finance matches found.</div>
-                    )}
-                  </div>
-                ) : null}
-              </div>
+        <div className="space-y-6">
+          <Panel title={editingTicker ? "Edit position" : "Position inspector"}>
+            {!selectedPortfolio ? (
+              <EmptyState
+                title="No portfolio selected"
+                copy="Create a portfolio first. Holdings are always saved into the active portfolio."
+              />
+            ) : (
+              <form onSubmit={handlePositionSubmit} className="space-y-4">
+                <label className="block space-y-2">
+                  <span className="text-sm text-slate-300">Target portfolio</span>
+                  {portfolioSelector}
+                </label>
 
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Selected security</p>
-                <div className="mt-3 flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-lg font-semibold text-white">
-                      {positionTicker || "Choose a ticker"}
-                    </p>
-                    {positionName ? <p className="mt-1 text-sm text-slate-500">{positionName}</p> : null}
-                  </div>
-                  {positionPreviewLoading ? (
-                    <span className="text-sm text-slate-500">Loading preview...</span>
-                  ) : positionPreview ? (
-                    <div className="text-right">
-                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Current Price</p>
-                      <p className="mt-1 text-lg font-semibold text-white">
-                        {formatCurrency(positionPreview.currentPrice ?? null)}
-                      </p>
+                <div className="relative">
+                  <label className="mb-2 block text-sm text-slate-300">Search listed ticker</label>
+                  {searchError ? <div className="mb-2"><InlineNotice message={searchError} tone="warning" /></div> : null}
+                  <input
+                    value={searchTerm}
+                    onChange={(event) => {
+                      const nextQuery = event.target.value;
+                      setSearchTerm(nextQuery);
+                      setSelectedSecurity(null);
+                      setPositionTicker("");
+                      setPositionName("");
+                      setPositionPreview(null);
+                      setSearchError(null);
+                    }}
+                    placeholder="AAPL, KO, XOM..."
+                    className="w-full rounded-lg border border-white/[0.08] bg-[#0d1014] px-4 py-3 text-sm text-white outline-none focus:border-white/[0.16]"
+                  />
+                  {searchTerm.trim() && !selectedSecurity ? (
+                    <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-xl border border-white/[0.08] bg-panel shadow-panel">
+                      {searchLoading ? (
+                        <div className="px-4 py-3 text-sm text-slate-400">Searching Yahoo Finance...</div>
+                      ) : searchResults.length > 0 ? (
+                        <div className="max-h-72 overflow-y-auto py-2">
+                          {searchResults.map((result) => (
+                            <button
+                              key={`${result.symbol}:${result.exchange}`}
+                              type="button"
+                              onClick={() => {
+                                void handleSelectSearchResult(result);
+                              }}
+                              className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition hover:bg-white/[0.03]"
+                            >
+                              <div>
+                                <p className="text-sm font-semibold text-white">{result.symbol}</p>
+                                <p className="mt-1 text-sm text-slate-400">{result.companyName}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs text-slate-500">{result.quoteType}</p>
+                                <p className="mt-1 text-sm text-slate-400">{result.exchange}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="px-4 py-3 text-sm text-slate-400">No listed Yahoo Finance matches found.</div>
+                      )}
                     </div>
                   ) : null}
                 </div>
-                {positionPreview ? (
-                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-md border border-white/10 bg-black/40 p-3">
-                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Sector</p>
-                      <p className="mt-2 text-sm text-white">{positionPreview.sector ?? getDefaultSector()}</p>
+
+                <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-white">{positionTicker || "Choose a ticker"}</p>
+                      {positionName ? <p className="mt-1 text-sm text-slate-400">{positionName}</p> : null}
                     </div>
-                    <div className="rounded-md border border-white/10 bg-black/40 p-3">
-                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Exchange</p>
-                      <p className="mt-2 text-sm text-white">{positionPreview.exchange}</p>
-                    </div>
-                    <div className="rounded-md border border-white/10 bg-black/40 p-3">
-                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Market Cap</p>
-                      <p className="mt-2 text-sm text-white">{formatBigNumber(positionPreview.marketCap)}</p>
+                    <div className="text-right">
+                      <p className="text-[11px] text-slate-500">Current price</p>
+                      <p className="mt-1 text-lg font-semibold text-white">
+                        {positionPreviewLoading ? "Loading..." : formatCurrency(positionPreview?.currentPrice ?? null)}
+                      </p>
                     </div>
                   </div>
-                ) : null}
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block space-y-2">
-                  <span className="text-sm text-slate-300">Shares</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    inputMode="decimal"
-                    value={positionShares}
-                    onChange={(event) => setPositionShares(event.target.value)}
-                    className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
-                  />
-                </label>
-                <label className="block space-y-2">
-                  <span className="text-sm text-slate-300">Average cost</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    inputMode="decimal"
-                    value={positionAvgCost}
-                    onChange={(event) => setPositionAvgCost(event.target.value)}
-                    className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
-                  />
-                </label>
-              </div>
-
-              <label className="block space-y-2">
-                <span className="text-sm text-slate-300">Asset class</span>
-                <select
-                  value={positionAssetClass}
-                  onChange={(event) =>
-                    setPositionAssetClass(event.target.value as "equities" | "bonds" | "commodities")
-                  }
-                  className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
-                >
-                  <option value="equities">Equities</option>
-                  <option value="bonds">Bonds</option>
-                  <option value="commodities">Commodities</option>
-                </select>
-              </label>
-
-              {positionPreview ? (
-                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-300">
-                  Current market price is pulled live from market data. Average cost remains your entered cost basis.
+                  {positionPreview ? (
+                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                      <InfoPill label="Sector" value={positionPreview.sector ?? getDefaultSector()} />
+                      <InfoPill label="Exchange" value={positionPreview.exchange} />
+                      <InfoPill label="Market cap" value={formatBigNumber(positionPreview.marketCap)} />
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
 
-              <div className="flex gap-3">
-              <button
-                type="submit"
-                disabled={!selectedSecurity || positionPreviewLoading}
-                className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {editingTicker ? "Update Position" : "Add Position"}
-              </button>
-              {editingTicker ? (
-                <button
-                  type="button"
-                  onClick={resetPositionForm}
-                  className="rounded-lg border border-slate-700 px-5 py-3 text-sm text-slate-300"
-                >
-                  Cancel
-                </button>
-                ) : null}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block space-y-2">
+                    <span className="text-sm text-slate-300">Shares</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      inputMode="decimal"
+                      value={positionShares}
+                      onChange={(event) => setPositionShares(event.target.value)}
+                      className="w-full rounded-lg border border-white/[0.08] bg-[#0d1014] px-4 py-3 text-sm text-white outline-none focus:border-white/[0.16]"
+                    />
+                  </label>
+                  <label className="block space-y-2">
+                    <span className="text-sm text-slate-300">Average cost</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      inputMode="decimal"
+                      value={positionAvgCost}
+                      onChange={(event) => setPositionAvgCost(event.target.value)}
+                      className="w-full rounded-lg border border-white/[0.08] bg-[#0d1014] px-4 py-3 text-sm text-white outline-none focus:border-white/[0.16]"
+                    />
+                  </label>
+                </div>
+
+                <label className="block space-y-2">
+                  <span className="text-sm text-slate-300">Asset class</span>
+                  <select
+                    value={positionAssetClass}
+                    onChange={(event) =>
+                      setPositionAssetClass(event.target.value as "equities" | "bonds" | "commodities")
+                    }
+                    className="w-full rounded-lg border border-white/[0.08] bg-[#0d1014] px-4 py-3 text-sm text-white outline-none focus:border-white/[0.16]"
+                  >
+                    <option value="equities">Equities</option>
+                    <option value="bonds">Bonds</option>
+                    <option value="commodities">Commodities</option>
+                  </select>
+                </label>
+
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    disabled={!selectedSecurity || positionPreviewLoading}
+                    className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <PlusIcon className="h-4 w-4" />
+                    {editingTicker ? "Update position" : "Add position"}
+                  </button>
+                  {editingTicker ? (
+                    <button
+                      type="button"
+                      onClick={resetPositionForm}
+                      className="rounded-lg border border-white/[0.08] px-4 py-3 text-sm text-slate-300 transition hover:border-white/[0.14] hover:text-white"
+                    >
+                      Cancel
+                    </button>
+                  ) : null}
+                </div>
+              </form>
+            )}
+          </Panel>
+
+          <Panel title="Signals">
+            {!selectedPortfolio ? (
+              <EmptyState title="No portfolio selected" copy="Select a portfolio to monitor blotter signals." />
+            ) : (
+              <div className="space-y-4">
+                <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
+                  <p className="text-sm font-medium text-white">Concentration</p>
+                  <div className="mt-4 grid gap-4">
+                    <InlineMetric
+                      label="Top weight"
+                      value={
+                        topConcentration(sortedHoldings)
+                          ? `${topConcentration(sortedHoldings)?.ticker} ${formatPercent(topConcentration(sortedHoldings)?.weight ?? 0)}`
+                          : "N/A"
+                      }
+                    />
+                    <InlineMetric label="Top 3 weight" value={formatPercent(topThreeConcentration)} />
+                    <InlineMetric label="Median weight" value={formatPercent(medianWeight)} />
+                  </div>
+                </div>
+                <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
+                  <p className="text-sm font-medium text-white">Attribution</p>
+                  <div className="mt-4 grid gap-4">
+                    <InlineMetric
+                      label="Best sector"
+                      value={
+                        topPositiveSectorContributor
+                          ? `${topPositiveSectorContributor.sector} ${formatPercent(topPositiveSectorContributor.contribution)}`
+                          : "N/A"
+                      }
+                      tone={(topPositiveSectorContributor?.contribution ?? 0) >= 0 ? "positive" : "default"}
+                    />
+                    <InlineMetric
+                      label="Worst sector"
+                      value={
+                        topNegativeSectorContributor
+                          ? `${topNegativeSectorContributor.sector} ${formatPercent(topNegativeSectorContributor.contribution)}`
+                          : "N/A"
+                      }
+                      tone={(topNegativeSectorContributor?.contribution ?? 0) < 0 ? "negative" : "default"}
+                    />
+                    <InlineMetric
+                      label="Excess return"
+                      value={formatPercent(benchmarkAnalytics?.excessReturn)}
+                      tone={(benchmarkAnalytics?.excessReturn ?? 0) >= 0 ? "positive" : "negative"}
+                    />
+                  </div>
+                </div>
               </div>
-            </form>
-          )}
-        </Panel>
+            )}
+          </Panel>
+        </div>
       </div>
     </div>
   );
@@ -5149,16 +5338,10 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
   const renderRisk = () => (
     <div className="space-y-6">
-      <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <Panel
-          title="Risk Score"
-          action={
-            selectedMetrics ? (
-              <TierBadge tier={selectedMetrics.riskTier} />
-            ) : (
-              <span className="text-xs text-slate-500">No data</span>
-            )
-          }
+          title="Risk score"
+          action={selectedMetrics ? <TierBadge tier={selectedMetrics.riskTier} /> : <span className="text-xs text-slate-500">No data</span>}
         >
           {riskError ? <div className="mb-4"><InlineNotice message={riskError} tone="warning" /></div> : null}
           {!selectedMetrics ? (
@@ -5167,134 +5350,94 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               copy="Add positions to calculate risk-adjusted performance and downside metrics."
             />
           ) : (
-            <div className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <MetricStat
-                  label="Sharpe Ratio"
-                  value={selectedMetrics.sharpe.toFixed(2)}
-                  helper="Annualized excess return per unit of volatility."
-                />
-                <MetricStat
-                  label="Maximum Drawdown"
-                  value={formatPercent(selectedMetrics.maxDrawdown)}
-                  helper="Peak-to-trough loss over the trailing year."
-                />
-                <MetricStat
-                  label="VaR (95%)"
-                  value={`${formatPercent(selectedMetrics.var95)} / ${formatCurrency(
-                    selectedMetrics.var95Amount
-                  )}`}
-                  helper="Parametric one-day value at risk."
-                />
-                <MetricStat
-                  label="Annualized Volatility"
-                  value={formatPercent(selectedMetrics.annualizedVolatility)}
-                />
+            <div className="space-y-5">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <MetricStat label="Sharpe ratio" value={selectedMetrics.sharpe.toFixed(2)} helper="Annualized excess return per unit of volatility." />
+                <MetricStat label="Maximum drawdown" value={formatPercent(selectedMetrics.maxDrawdown)} helper="Peak-to-trough loss over the trailing year." />
+                <MetricStat label="VaR (95%)" value={`${formatPercent(selectedMetrics.var95)} / ${formatCurrency(selectedMetrics.var95Amount)}`} helper="Parametric one-day value at risk." />
+                <MetricStat label="Annual volatility" value={formatPercent(selectedMetrics.annualizedVolatility)} />
               </div>
-              <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5">
-                <div className="mb-4 flex flex-wrap gap-2">
-                  <InfoPill label="Portfolio Value" value={formatCurrency(selectedMetrics.portfolioValue)} />
-                  <InfoPill label="Annual Return" value={formatPercent(selectedMetrics.annualizedReturn)} />
+              <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
+                <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                  <InfoPill label="Portfolio value" value={formatCurrency(selectedMetrics.portfolioValue)} />
+                  <InfoPill label="Annual return" value={formatPercent(selectedMetrics.annualizedReturn)} />
                 </div>
                 <p className="text-sm leading-7 text-slate-300">{selectedMetrics.summary}</p>
               </div>
               <button
                 onClick={() => void rerunRiskScore(true)}
-                className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:-translate-y-0.5 hover:bg-zinc-200"
+                className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
               >
-                Re-run Risk Score
+                Re-run risk score
               </button>
             </div>
           )}
         </Panel>
 
-        <Panel title="Drawdown Probability Term Structure">
+        <Panel title="Drawdown probability term structure">
           {!selectedMetrics ? (
             <EmptyState
               title="Awaiting portfolio data"
               copy="Risk charts appear once positions have market history."
             />
           ) : (
-            <div className="rounded-[1.8rem] border border-white/10 bg-gradient-to-b from-white/[0.035] to-transparent p-4">
+            <div className="rounded-xl border border-white/[0.06] bg-[#0f1216] p-4">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Forward drawdown risk</p>
-                  <p className="mt-2 text-lg font-medium text-white">Monte Carlo term structure</p>
+                  <p className="text-sm font-medium text-white">Forward drawdown risk</p>
+                  <p className="mt-1 text-sm text-slate-400">Monte Carlo term structure</p>
                 </div>
                 <InfoPill label="Tier" value={selectedMetrics.riskTier} />
               </div>
-            <div className="h-96">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart
-                  data={[
-                    { horizon: "3M", probability: selectedMetrics.drawdownProb3m },
-                    { horizon: "6M", probability: selectedMetrics.drawdownProb6m },
-                    { horizon: "12M", probability: selectedMetrics.drawdownProb12m }
-                  ]}
-                >
-                  <CartesianGrid stroke="rgba(148,163,184,0.14)" vertical={false} />
-                  <XAxis dataKey="horizon" tick={{ fill: "#94a3b8", fontSize: 12 }} />
-                  <YAxis
-                    tickFormatter={(value) => `${Math.round(value * 100)}%`}
-                    tick={{ fill: "#94a3b8", fontSize: 12 }}
-                  />
-                  <Tooltip content={<ChartTooltip formatter={formatPercent} />} />
-                  <Area
-                    type="monotone"
-                    dataKey="probability"
-                    stroke="#fafafa"
-                    fill="rgba(255,255,255,0.1)"
-                    strokeWidth={2}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+              <div className="h-96">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={[
+                      { horizon: "3M", probability: selectedMetrics.drawdownProb3m },
+                      { horizon: "6M", probability: selectedMetrics.drawdownProb6m },
+                      { horizon: "12M", probability: selectedMetrics.drawdownProb12m }
+                    ]}
+                  >
+                    <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+                    <XAxis dataKey="horizon" tick={{ fill: "#6b7280", fontSize: 12 }} />
+                    <YAxis tickFormatter={(value) => `${Math.round(value * 100)}%`} tick={{ fill: "#6b7280", fontSize: 12 }} />
+                    <Tooltip content={<ChartTooltip formatter={formatPercent} />} />
+                    <Area type="monotone" dataKey="probability" stroke="#fafafa" fill="rgba(255,255,255,0.08)" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           )}
         </Panel>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)]">
         <Panel
-          title="Qualitative Risk Report"
-          action={
-            riskReportLoading ? (
-              <span className="text-xs text-slate-500">Loading report</span>
-            ) : null
-          }
+          title="Risk brief"
+          action={riskReportLoading ? <span className="text-xs text-slate-500">Loading report</span> : null}
         >
-          {riskError && !riskReport ? (
-            <div className="mb-4"><InlineNotice message={riskError} tone="warning" /></div>
-          ) : null}
+          {riskError && !riskReport ? <div className="mb-4"><InlineNotice message={riskError} tone="warning" /></div> : null}
           {!selectedPortfolio || selectedPortfolio.holdings.length === 0 ? (
             <EmptyState
               title="No holdings to analyze"
               copy="Add holdings to generate sector, market regime, and balance-sheet commentary."
             />
           ) : riskReport ? (
-            <div className="space-y-5">
-              <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5">
+            <div className="space-y-4">
+              <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
                 <p className="text-sm leading-7 text-slate-300">{riskReport.summary}</p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Market Regime</p>
-                  <p className="mt-3 text-xl font-semibold text-white">
-                    {riskReport.marketContext.trend}
-                  </p>
+                <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
+                  <p className="text-sm font-medium text-white">Market regime</p>
+                  <p className="mt-3 text-lg font-semibold text-white">{riskReport.marketContext.trend}</p>
                   <p className="mt-2 text-sm text-slate-400">
-                    {riskReport.marketContext.benchmark} trailing return{" "}
-                    {formatPercent(riskReport.marketContext.trailingReturn)} with volatility{" "}
-                    {formatPercent(riskReport.marketContext.volatility)}.
+                    {riskReport.marketContext.benchmark} trailing return {formatPercent(riskReport.marketContext.trailingReturn)} with volatility {formatPercent(riskReport.marketContext.volatility)}.
                   </p>
                 </div>
-                <div className="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                    Top Single Name
-                  </p>
-                  <p className="mt-3 text-xl font-semibold text-white">
-                    {riskReport.singleNameConcentration[0]?.ticker ?? "N/A"}
-                  </p>
+                <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
+                  <p className="text-sm font-medium text-white">Top single name</p>
+                  <p className="mt-3 text-lg font-semibold text-white">{riskReport.singleNameConcentration[0]?.ticker ?? "N/A"}</p>
                   <p className="mt-2 text-sm text-slate-400">
                     {riskReport.singleNameConcentration[0]
                       ? `${formatPercent(riskReport.singleNameConcentration[0].weight)} weight`
@@ -5302,14 +5445,12 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   </p>
                 </div>
               </div>
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                  Vulnerabilities
-                </p>
-                <div className="mt-3 space-y-3">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-white">Vulnerabilities</p>
                   {riskReport.vulnerabilities.length > 0 ? (
                     riskReport.vulnerabilities.map((item) => (
-                      <div key={item} className="rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+                      <div key={item} className="rounded-lg border border-danger/25 bg-danger/10 px-4 py-3 text-sm text-danger">
                         {item}
                       </div>
                     ))
@@ -5317,22 +5458,16 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     <p className="text-sm text-slate-400">No major vulnerabilities flagged.</p>
                   )}
                 </div>
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                  Resilience Factors
-                </p>
-                <div className="mt-3 space-y-3">
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-white">Resilience factors</p>
                   {riskReport.resilienceFactors.length > 0 ? (
                     riskReport.resilienceFactors.map((item) => (
-                      <div key={item} className="rounded-2xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
+                      <div key={item} className="rounded-lg border border-success/25 bg-success/10 px-4 py-3 text-sm text-success">
                         {item}
                       </div>
                     ))
                   ) : (
-                    <p className="text-sm text-slate-400">
-                      No standout resilience factors detected yet.
-                    </p>
+                    <p className="text-sm text-slate-400">No standout resilience factors detected yet.</p>
                   )}
                 </div>
               </div>
@@ -5345,194 +5480,142 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           )}
         </Panel>
 
-        <Panel title="Exposure and Balance-Sheet Signals">
+        <div className="space-y-6">
+          <Panel title="Benchmark relative">
+            {benchmarkAnalyticsError ? <div className="mb-4"><InlineNotice message={benchmarkAnalyticsError} tone="warning" /></div> : null}
+            {!riskReport || !selectedPortfolio ? (
+              <EmptyState
+                title="No regime diagnostics yet"
+                copy="Benchmark-relative statistics appear once the deterministic report has loaded."
+              />
+            ) : (
+              <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-3">
+                  <InfoPill label="Benchmark" value={selectedPortfolio.benchmark} />
+                  <InfoPill label="Trend" value={riskReport.marketContext.trend} />
+                  <InfoPill label="Benchmark vol" value={formatPercent(riskReport.marketContext.volatility)} />
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <MetricStat
+                    label={`Correlation to ${selectedPortfolio.benchmark}`}
+                    value={
+                      benchmarkAnalytics?.correlation != null
+                        ? benchmarkAnalytics.correlation.toFixed(2)
+                        : riskReport.returnDiagnostics.correlationToBenchmark.toFixed(2)
+                    }
+                  />
+                  <MetricStat
+                    label={`Beta to ${selectedPortfolio.benchmark}`}
+                    value={
+                      benchmarkAnalytics?.beta != null
+                        ? benchmarkAnalytics.beta.toFixed(2)
+                        : riskReport.returnDiagnostics.betaToBenchmark.toFixed(2)
+                    }
+                  />
+                  <MetricStat label="Excess return" value={formatPercent(benchmarkAnalytics?.excessReturn ?? riskReport.benchmarkComparison.excessReturn)} />
+                  <MetricStat label="Current drawdown" value={formatPercent(riskReport.returnDiagnostics.currentDrawdown)} />
+                </div>
+                <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
+                  <p className="text-sm font-medium text-white">Benchmark-relative notes</p>
+                  <div className="mt-3 space-y-2">
+                    {(benchmarkAnalytics?.relativeNotes ?? [
+                      "Benchmark-relative notes are unavailable until the selected-range comparison loads."
+                    ]).map((note) => (
+                      <p key={note} className="text-sm text-slate-300">
+                        {note}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="Contributors and quality">
+            {!riskReport ? (
+              <EmptyState
+                title="No contributor model yet"
+                copy="The engine will rank the holdings contributing most to concentration and realized risk."
+              />
+            ) : (
+              <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  <HealthScoreCard label="Liquidity" detail={riskReport.qualityScoreDetails.liquidity} />
+                  <HealthScoreCard label="Balance Sheet" detail={riskReport.qualityScoreDetails.balanceSheet} />
+                  <HealthScoreCard label="Profitability" detail={riskReport.qualityScoreDetails.profitability} />
+                  <HealthScoreCard label="Growth" detail={riskReport.qualityScoreDetails.growth} />
+                  <HealthScoreCard label="Concentration" detail={riskReport.qualityScoreDetails.concentration} />
+                  <HealthScoreCard label="Downside risk" detail={riskReport.qualityScoreDetails.downsideRisk} />
+                </div>
+                <div className="space-y-3">
+                  {riskReport.topRiskContributors.map((entry) => (
+                    <div key={entry.ticker} className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-white">{entry.ticker}</p>
+                          <p className="mt-1 text-sm text-slate-400">{entry.companyName}</p>
+                        </div>
+                        <span className="text-sm text-white">{formatPercent(entry.contribution)}</span>
+                      </div>
+                      <p className="mt-2 text-sm text-slate-300">{entry.reason}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Panel>
+        </div>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <Panel title="Exposure map">
           {!riskReport ? (
             <EmptyState
               title="No report data yet"
               copy="Run or refresh risk scoring to populate concentration and company-level signals."
             />
           ) : (
-            <div className="space-y-5">
+            <div className="grid gap-5 md:grid-cols-2">
               <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                  Sector Concentration
-                </p>
-                <div className="mt-3 space-y-3">
+                <p className="text-sm font-medium text-white">Sector concentration</p>
+                <div className="mt-4 space-y-3">
                   {riskReport.sectorConcentration.slice(0, 5).map((sector) => (
                     <div key={sector.sector}>
                       <div className="mb-2 flex items-center justify-between text-sm">
                         <span className="text-white">{sector.sector}</span>
                         <span className="text-slate-400">{formatPercent(sector.weight)}</span>
                       </div>
-                      <div className="h-2 rounded-full bg-slate-900">
-                        <div
-                          className="h-2 rounded-full bg-white"
-                          style={{ width: `${Math.min(sector.weight * 100, 100)}%` }}
-                        />
+                      <div className="h-2 rounded-full bg-white/[0.06]">
+                        <div className="h-2 rounded-full bg-white" style={{ width: `${Math.min(sector.weight * 100, 100)}%` }} />
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
-
               <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                  Top Holdings
-                </p>
-                <div className="mt-3 space-y-3">
+                <p className="text-sm font-medium text-white">Top holdings</p>
+                <div className="mt-4 space-y-3">
                   {riskReport.singleNameConcentration.slice(0, 5).map((holding) => (
-                    <div
-                      key={holding.ticker}
-                      className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-950/30 px-4 py-3"
-                    >
+                    <div key={holding.ticker} className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-muted/60 px-4 py-3">
                       <div>
                         <p className="font-medium text-white">{holding.ticker}</p>
                         <p className="text-sm text-slate-400">{holding.companyName}</p>
                       </div>
-                      <span className="text-sm text-slate-300">
-                        {formatPercent(holding.weight)}
-                      </span>
+                      <span className="text-sm text-slate-300">{formatPercent(holding.weight)}</span>
                     </div>
                   ))}
                 </div>
               </div>
-
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                  Company Red Flags
-                </p>
-                <div className="mt-3 space-y-3">
-                  {riskReport.balanceSheetSignals.length > 0 ? (
-                    riskReport.balanceSheetSignals.map((signal) => (
-                      <div
-                        key={`${signal.ticker}-${signal.signal}`}
-                        className={cn(
-                          "rounded-2xl border px-4 py-3 text-sm",
-                          signalStyles[signal.severity]
-                        )}
-                      >
-                        <p className="font-medium">
-                          {signal.ticker} • {signal.companyName}
-                        </p>
-                        <p className="mt-1">{signal.signal}</p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-400">
-                      No company-level balance-sheet warnings detected from the available data.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </Panel>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-        <Panel title="Benchmark Relative">
-          {benchmarkAnalyticsError ? <div className="mb-4"><InlineNotice message={benchmarkAnalyticsError} tone="warning" /></div> : null}
-          {!riskReport || !selectedPortfolio ? (
-            <EmptyState
-              title="No regime diagnostics yet"
-              copy="Benchmark-relative statistics appear once the deterministic report has loaded."
-            />
-          ) : (
-            <div className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-3">
-                <InfoPill label="Benchmark" value={selectedPortfolio.benchmark} />
-                <InfoPill label="Trend" value={riskReport.marketContext.trend} />
-                <InfoPill label="Benchmark Vol" value={formatPercent(riskReport.marketContext.volatility)} />
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <MetricStat
-                  label={`Correlation to ${selectedPortfolio.benchmark}`}
-                  value={
-                    benchmarkAnalytics?.correlation != null
-                      ? benchmarkAnalytics.correlation.toFixed(2)
-                      : riskReport.returnDiagnostics.correlationToBenchmark.toFixed(2)
-                  }
-                />
-                <MetricStat
-                  label={`Beta to ${selectedPortfolio.benchmark}`}
-                  value={
-                    benchmarkAnalytics?.beta != null
-                      ? benchmarkAnalytics.beta.toFixed(2)
-                      : riskReport.returnDiagnostics.betaToBenchmark.toFixed(2)
-                  }
-                />
-                <MetricStat
-                  label="Excess Return"
-                  value={formatPercent(benchmarkAnalytics?.excessReturn ?? riskReport.benchmarkComparison.excessReturn)}
-                />
-                <MetricStat label="Current Drawdown" value={formatPercent(riskReport.returnDiagnostics.currentDrawdown)} />
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Benchmark-relative concentration notes</p>
-                <div className="mt-3 space-y-2">
-                  {(benchmarkAnalytics?.relativeNotes ?? [
-                    "Benchmark-relative notes are unavailable until the selected-range comparison loads."
-                  ]).map((note) => (
-                    <p key={note} className="text-sm text-slate-300">
-                      {note}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </Panel>
-
-        <Panel title="Portfolio Quality Scorecards">
-          {!riskReport ? (
-            <EmptyState
-              title="Quality scorecards unavailable"
-              copy="Liquidity, profitability, growth, and balance-sheet diagnostics populate with the risk report."
-            />
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <HealthScoreCard label="Liquidity" detail={riskReport.qualityScoreDetails.liquidity} />
-              <HealthScoreCard label="Balance Sheet" detail={riskReport.qualityScoreDetails.balanceSheet} />
-              <HealthScoreCard label="Profitability" detail={riskReport.qualityScoreDetails.profitability} />
-              <HealthScoreCard label="Growth" detail={riskReport.qualityScoreDetails.growth} />
-              <HealthScoreCard label="Concentration" detail={riskReport.qualityScoreDetails.concentration} />
-              <HealthScoreCard label="Downside Risk" detail={riskReport.qualityScoreDetails.downsideRisk} />
-            </div>
-          )}
-        </Panel>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-        <Panel title="Top Contributors to Risk">
-          {!riskReport ? (
-            <EmptyState
-              title="No contributor model yet"
-              copy="The engine will rank the holdings contributing most to concentration and realized risk."
-            />
-          ) : (
-            <div className="space-y-3">
-              {riskReport.topRiskContributors.map((entry) => (
-                <div key={entry.ticker} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-white">{entry.ticker}</p>
-                      <p className="mt-1 text-sm text-slate-400">{entry.companyName}</p>
-                    </div>
-                    <span className="text-sm text-white">{formatPercent(entry.contribution)}</span>
-                  </div>
-                  <p className="mt-2 text-sm text-slate-300">{entry.reason}</p>
-                </div>
-              ))}
             </div>
           )}
         </Panel>
 
         <Panel
-          title="AI Analyst Notes"
+          title="AI analyst notes"
           action={
             <button
               onClick={() => void refreshRiskInsight()}
-              className="text-sm text-zinc-300 transition hover:text-white"
+              className="rounded-lg border border-white/[0.08] px-3 py-2 text-sm text-slate-300 transition hover:border-white/[0.14] hover:text-white"
             >
               Refresh AI
             </button>
@@ -5546,24 +5629,24 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             />
           ) : (
             <div className="space-y-4">
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">AI interpretation</p>
+                  <p className="text-sm font-medium text-white">AI interpretation</p>
                   <span className="text-xs text-slate-500">{riskInsight.source} • {riskInsight.model}</span>
                 </div>
                 <p className="text-sm leading-7 text-slate-300">{riskInsight.summary}</p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-xl border border-white/10 bg-black/35 p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Resilience Factors</p>
+                <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
+                  <p className="text-sm font-medium text-white">Resilience factors</p>
                   <div className="mt-3 space-y-2">
                     {riskInsight.resilienceFactors.map((item) => (
                       <p key={item} className="text-sm text-slate-300">{item}</p>
                     ))}
                   </div>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-black/35 p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Recommended Actions</p>
+                <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
+                  <p className="text-sm font-medium text-white">Recommended actions</p>
                   <div className="mt-3 space-y-2">
                     {riskInsight.recommendedActions.map((item) => (
                       <p key={item} className="text-sm text-slate-300">{item}</p>
@@ -6000,73 +6083,152 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   );
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.04),transparent_18%),linear-gradient(180deg,#030303_0%,#090909_100%)]">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <header className="mb-6 flex flex-col gap-6 rounded-[2rem] border border-white/10 bg-black/55 px-6 py-5 shadow-panel backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="font-mono text-xs uppercase tracking-[0.35em] text-zinc-300">
-              Portfolio Risk Engine
-            </p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-white">
-              Investment workspace
-            </h1>
-            <p className="mt-2 text-sm text-slate-400">
-              Logged in as {initialData.user.email}. Persisted portfolios, live quotes, company
-              detail, and compliance-grade history.
-            </p>
+    <div className="min-h-screen bg-surface text-slate-100">
+      <div className="relative flex min-h-screen">
+        <aside className="hidden w-64 shrink-0 border-r border-white/[0.06] bg-sidebar px-4 py-4 lg:flex lg:flex-col">
+          <div className="flex items-center gap-3 border-b border-white/[0.06] pb-4">
+            <span className="text-white">
+              <LogoMark />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-white">Portfolio Risk Engine</p>
+              <p className="mt-0.5 truncate text-xs text-slate-500">{initialData.user.email}</p>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+
+          <div className="mt-4 space-y-3">
+            <p className="text-xs font-medium text-slate-500">Portfolio</p>
             {portfolioSummaries.length > 0 ? portfolioSelector : null}
+          </div>
+
+          <nav className="mt-6 flex-1 space-y-1.5 overflow-y-auto pr-1">
+            {tabs.map((tab) => (
+              <SidebarNavItem
+                key={tab.id}
+                active={activeTab === tab.id}
+                label={tab.shortLabel}
+                caption={tab.caption}
+                icon={tab.icon}
+                onClick={() => setActiveTab(tab.id)}
+              />
+            ))}
+          </nav>
+
+          <div className="space-y-3 border-t border-white/[0.06] pt-4">
             <button
+              type="button"
               onClick={() => setActiveTab("holdings")}
-              className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black shadow-[0_18px_40px_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:bg-zinc-100"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-zinc-200"
             >
+              <PlusIcon className="h-4 w-4" />
               Add Position
             </button>
+            <div className="rounded-lg border border-white/[0.06] bg-muted/60 px-3 py-2.5">
+              <p className="text-[11px] text-slate-500">Selected sleeve</p>
+              <p className="mt-1 text-sm font-medium text-white">{selectedPortfolio?.name ?? "None"}</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {selectedPortfolio ? `${selectedPortfolio.positions.length} positions` : "Create or select a portfolio"}
+              </p>
+            </div>
           </div>
-        </header>
+        </aside>
 
-        <nav className="mb-6 flex gap-3 overflow-x-auto pb-2">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+        <div className="flex min-h-screen flex-1 flex-col bg-surface">
+          <WorkspaceToolbar
+            title={activeTabMeta.label}
+            subtitle={activeTabMeta.caption}
+            actions={
+              <>
+                <button
+                  type="button"
+                  onClick={() => setMobileNavOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-white/[0.08] px-3 py-2 text-sm text-slate-300 transition hover:border-white/[0.14] hover:text-white lg:hidden"
+                >
+                  <MenuIcon className="h-4 w-4" />
+                  Menu
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("holdings")}
+                  className="hidden items-center gap-2 rounded-lg border border-white/[0.08] px-3 py-2 text-sm text-slate-300 transition hover:border-white/[0.14] hover:text-white sm:inline-flex"
+                >
+                  <PlusIcon className="h-4 w-4" />
+                  Add Position
+                </button>
+              </>
+            }
+          />
+
+          {(statusMessage || errorMessage || portfolioLoading || isPending) && (
+            <div
               className={cn(
-                "rounded-lg px-4 py-2 text-sm transition duration-200",
-                activeTab === tab.id
-                  ? "bg-white text-black shadow-[0_10px_30px_rgba(255,255,255,0.12)]"
-                  : "border border-white/10 bg-black/35 text-slate-300 hover:border-white/20 hover:bg-white/[0.03] hover:text-white"
+                "mx-4 mt-4 rounded-lg border px-4 py-3 text-sm sm:mx-6 lg:mx-8",
+                errorMessage
+                  ? "border-danger/30 bg-danger/10 text-danger"
+                  : "border-white/[0.08] bg-muted/60 text-zinc-100"
               )}
             >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+              {errorMessage ??
+                statusMessage ??
+                (portfolioLoading || isPending ? "Updating workspace..." : null)}
+            </div>
+          )}
 
-        {(statusMessage || errorMessage || portfolioLoading || isPending) && (
-          <div
-            className={cn(
-              "mb-6 rounded-2xl border px-4 py-3 text-sm backdrop-blur",
-              errorMessage
-                ? "border-danger/30 bg-danger/10 text-danger"
-                : "border-white/10 bg-white/[0.04] text-zinc-100"
-            )}
-          >
-            {errorMessage ??
-              statusMessage ??
-              (portfolioLoading || isPending ? "Updating workspace..." : null)}
-          </div>
-        )}
-
-        {activeTab === "overview" && renderOverview()}
-        {activeTab === "holdings" && renderHoldings()}
-        {activeTab === "research" && renderResearch()}
-        {activeTab === "risk" && renderRisk()}
-        {activeTab === "stress" && renderStress()}
-        {activeTab === "allocation" && renderAllocation()}
-        {activeTab === "audit" && renderAudit()}
-        {activeTab === "settings" && renderSettings()}
+          <main className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 lg:px-8">
+            {activeTab === "overview" && renderOverview()}
+            {activeTab === "holdings" && renderHoldings()}
+            {activeTab === "research" && renderResearch()}
+            {activeTab === "risk" && renderRisk()}
+            {activeTab === "stress" && renderStress()}
+            {activeTab === "allocation" && renderAllocation()}
+            {activeTab === "audit" && renderAudit()}
+            {activeTab === "settings" && renderSettings()}
+          </main>
+        </div>
       </div>
+
+      {mobileNavOpen ? (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/70"
+            onClick={() => setMobileNavOpen(false)}
+          />
+          <aside className="relative z-10 h-full w-[88%] max-w-xs border-r border-white/[0.08] bg-sidebar px-4 py-4 shadow-shell">
+            <div className="flex items-center justify-between border-b border-white/[0.06] pb-4">
+              <div className="flex items-center gap-3">
+                <span className="text-white">
+                  <LogoMark />
+                </span>
+                <p className="text-sm font-semibold text-white">Portfolio Risk Engine</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(false)}
+                className="rounded-lg border border-white/[0.08] p-2 text-slate-300"
+              >
+                <CloseIcon className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-4 space-y-3">
+              <p className="text-xs font-medium text-slate-500">Portfolio</p>
+              {portfolioSummaries.length > 0 ? portfolioSelector : null}
+            </div>
+            <nav className="mt-6 space-y-1.5">
+              {tabs.map((tab) => (
+                <SidebarNavItem
+                  key={tab.id}
+                  active={activeTab === tab.id}
+                  label={tab.shortLabel}
+                  caption={tab.caption}
+                  icon={tab.icon}
+                  onClick={() => setActiveTab(tab.id)}
+                />
+              ))}
+            </nav>
+          </aside>
+        </div>
+      ) : null}
 
       {(holdingDetailLoading || selectedHoldingDetail) && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/72 backdrop-blur-sm">

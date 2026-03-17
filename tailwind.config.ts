@@ -9,23 +9,25 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        surface: "#0a0a0a",
-        panel: "#111111",
-        accent: "#ffffff",
+        surface: "#0f1217",
+        canvas: "#151a22",
+        sidebar: "#0b0f14",
+        panel: "#171d26",
+        muted: "#111720",
+        accent: "#f7f9fc",
+        border: "#2a323d",
         success: "#22c55e",
-        warning: "#facc15",
-        elevated: "#f97316",
-        danger: "#ef4444"
+        warning: "#f8cc5c",
+        elevated: "#f38d6b",
+        danger: "#ef6a70"
       },
       fontFamily: {
         sans: ["'IBM Plex Sans'", "ui-sans-serif", "system-ui", "sans-serif"],
         mono: ["'IBM Plex Mono'", "ui-monospace", "SFMono-Regular", "monospace"]
       },
       boxShadow: {
-        panel: "0 8px 24px rgba(0, 0, 0, 0.18)"
-      },
-      backgroundImage: {
-        grid: "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)"
+        panel: "0 10px 24px rgba(0, 0, 0, 0.24)",
+        shell: "0 18px 36px rgba(0, 0, 0, 0.35)"
       }
     }
   },
