@@ -9,11 +9,11 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        surface: "#0f1217",
-        canvas: "#151a22",
-        sidebar: "#0b0f14",
-        panel: "#171d26",
-        muted: "#111720",
+        surface: "#0c1118",
+        canvas: "#111925",
+        sidebar: "#090d14",
+        panel: "#131b27",
+        muted: "#101722",
         accent: "#f7f9fc",
         border: "#2a323d",
         success: "#22c55e",
@@ -22,11 +22,11 @@ const config: Config = {
         danger: "#ef6a70"
       },
       fontFamily: {
-        sans: ["'IBM Plex Sans'", "ui-sans-serif", "system-ui", "sans-serif"],
-        mono: ["'IBM Plex Mono'", "ui-monospace", "SFMono-Regular", "monospace"]
+        sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "monospace"]
       },
       boxShadow: {
-        panel: "0 10px 24px rgba(0, 0, 0, 0.24)",
+        panel: "0 12px 24px rgba(1, 4, 10, 0.28)",
         shell: "0 18px 36px rgba(0, 0, 0, 0.35)"
       }
     }

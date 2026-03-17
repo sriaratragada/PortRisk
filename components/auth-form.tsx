@@ -3,6 +3,14 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useState } from "react";
+import { motion } from "framer-motion";
+import {
+  Activity,
+  AlertTriangle,
+  ChartCandlestick,
+  LineChart,
+  ShieldCheck
+} from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { cn } from "@/lib/utils";
 
@@ -62,61 +70,118 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   }
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-[1.1fr_0.9fr]">
-      <section className="relative hidden overflow-hidden bg-slate-950 lg:flex lg:flex-col lg:justify-between">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.16),transparent_24%),radial-gradient(circle_at_72%_22%,rgba(255,255,255,0.06),transparent_18%),linear-gradient(160deg,#020202_18%,#0a0a0a_100%)]" />
-        <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(148,163,184,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.1)_1px,transparent_1px)] [background-size:44px_44px]" />
-        <div className="relative px-12 py-12">
-          <p className="font-mono text-xs uppercase tracking-[0.4em] text-zinc-300">Portfolio Risk Engine</p>
-        </div>
-        <div className="relative px-12 pb-16">
-          <div className="max-w-xl animate-[slideUpSoft_420ms_ease-out] space-y-6">
-            <h1 className="max-w-lg text-5xl font-semibold tracking-[-0.04em] text-white">
-              Build portfolios like an operator, not a spreadsheet.
+    <div className="grid min-h-screen lg:grid-cols-[1.22fr_0.78fr]">
+      <section className="relative hidden overflow-hidden border-r border-white/[0.08] lg:flex">
+        <img
+          src="https://images.unsplash.com/photo-1642543348745-8f8e7d3f73f1?auto=format&fit=crop&w=1800&q=80"
+          alt="Finance dashboard visualization"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-br from-[#070b10]/85 via-[#0b1118]/78 to-[#0f1622]/92" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] [background-size:32px_32px] opacity-20" />
+
+        <div className="relative z-10 flex h-full w-full flex-col p-10">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-white">Portfolio Risk Engine</p>
+            <div className="rounded-md border border-white/[0.12] bg-black/30 px-2.5 py-1 text-xs text-slate-300">
+              Yahoo-powered
+            </div>
+          </div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
+            className="mt-14 max-w-2xl space-y-4"
+          >
+            <h1 className="text-4xl font-semibold tracking-[-0.03em] text-white">
+              Institutional portfolio intelligence in one workspace.
             </h1>
-            <p className="max-w-lg text-lg leading-8 text-slate-300">
-              Realtime exposure, stress testing, and immutable audit trails in one secure workspace.
+            <p className="max-w-xl text-sm leading-7 text-slate-300">
+              Monitor allocations, benchmark-relative performance, deterministic risk, and research memos with a compact analyst interface.
             </p>
-            <div className="grid gap-4 sm:grid-cols-3">
-              {[
-                ["Realtime", "Live value, P&L, and risk tier changes"],
-                ["Compliant", "Append-only risk decisions and portfolio actions"],
-                ["Fast", "Edge-scored risk metrics and scenario analysis"]
-              ].map(([title, copy]) => (
-                <div
-                  key={title}
-                  className="rounded-[1.75rem] border border-white/10 bg-white/[0.045] p-4 backdrop-blur-sm transition duration-300 hover:border-white/20 hover:bg-white/[0.065]"
-                >
-                  <p className="text-sm font-semibold text-white">{title}</p>
-                  <p className="mt-2 text-sm text-slate-400">{copy}</p>
+          </motion.div>
+
+          <div className="mt-8 grid gap-3 md:grid-cols-3">
+            {[
+              { title: "Live pricing", value: "1,200+", icon: LineChart },
+              { title: "Coverage", value: "Global equities", icon: ChartCandlestick },
+              { title: "Risk engine", value: "Deterministic", icon: ShieldCheck }
+            ].map((item) => (
+              <motion.div
+                key={item.title}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, ease: "easeOut" }}
+                className="rounded-xl border border-white/[0.1] bg-black/30 p-3"
+              >
+                <div className="flex items-center gap-2 text-slate-300">
+                  <item.icon className="h-4 w-4" />
+                  <p className="text-xs">{item.title}</p>
                 </div>
-              ))}
+                <p className="mt-3 text-lg font-semibold text-white">{item.value}</p>
+              </motion.div>
+            ))}
+          </div>
+
+          <div className="mt-auto grid gap-3 md:grid-cols-2">
+            <div className="rounded-xl border border-white/[0.1] bg-black/35 p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-white">Portfolio pulse</p>
+                <Activity className="h-4 w-4 text-slate-300" />
+              </div>
+              <div className="mt-3 grid grid-cols-8 gap-1.5">
+                {[42, 37, 54, 49, 58, 46, 62, 57].map((value, index) => (
+                  <div key={index} className="flex h-16 items-end rounded-sm bg-white/[0.08]">
+                    <motion.div
+                      initial={{ height: 0 }}
+                      animate={{ height: `${value}%` }}
+                      transition={{ duration: 0.4, delay: index * 0.04 }}
+                      className="rounded-sm bg-white/70"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-xl border border-white/[0.1] bg-black/35 p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-white">Compliance state</p>
+                <AlertTriangle className="h-4 w-4 text-warning" />
+              </div>
+              <p className="mt-3 text-sm text-slate-300">
+                Audit logs are immutable. Risk decisions are timestamped and tied to holdings state.
+              </p>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="flex items-center justify-center px-6 py-12 sm:px-8">
-        <div className="w-full max-w-md animate-[fadeScaleIn_320ms_ease-out] rounded-[2rem] border border-white/10 bg-black/72 p-8 shadow-panel backdrop-blur-xl">
-          <div className="mb-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-              {mode === "login" ? "Secure Login" : "Create Account"}
+      <section className="flex items-center justify-center px-5 py-8 sm:px-8">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+          className="w-full max-w-md rounded-xl border border-white/[0.1] bg-panel/85 p-6 shadow-panel backdrop-blur-md"
+        >
+          <div className="mb-6">
+            <p className="text-xs font-medium text-slate-400">
+              {mode === "login" ? "Secure login" : "Create account"}
             </p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-white">
-              {mode === "login" ? "Welcome back" : "Open your risk workspace"}
+            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-white">
+              {mode === "login" ? "Welcome back" : "Create your workspace"}
             </h2>
-            <p className="mt-3 text-sm text-slate-400">
+            <p className="mt-2 text-sm text-slate-400">
               {mode === "login"
-                ? "Access your portfolios, risk history, and live exposure dashboard."
-                : "Create an account to save portfolios, risk scores, and stress test history."}
+                ? "Access portfolio risk, research pipeline, and benchmark attribution."
+                : "Create an account to save portfolios, watchlists, and risk history."}
             </p>
           </div>
 
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <label className="block space-y-2">
+          <form className="space-y-3.5" onSubmit={handleSubmit}>
+            <label className="block space-y-1.5">
               <span className="text-sm text-slate-300">Email</span>
               <input
-                className="w-full rounded-2xl border border-white/10 bg-black/55 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35 focus:bg-black/70"
+                className="w-full rounded-lg border border-white/[0.12] bg-[#0d131d] px-3.5 py-2.5 text-sm text-white outline-none transition focus:border-white/[0.22]"
                 type="email"
                 autoComplete="email"
                 value={email}
@@ -124,10 +189,10 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
                 required
               />
             </label>
-            <label className="block space-y-2">
+            <label className="block space-y-1.5">
               <span className="text-sm text-slate-300">Password</span>
               <input
-                className="w-full rounded-2xl border border-white/10 bg-black/55 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35 focus:bg-black/70"
+                className="w-full rounded-lg border border-white/[0.12] bg-[#0d131d] px-3.5 py-2.5 text-sm text-white outline-none transition focus:border-white/[0.22]"
                 type="password"
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
                 value={password}
@@ -140,7 +205,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
             {(error || status) && (
               <div
                 className={cn(
-                  "rounded-2xl px-4 py-3 text-sm",
+                  "rounded-lg px-3.5 py-2.5 text-sm",
                   error ? "bg-danger/10 text-danger" : "bg-success/10 text-success"
                 )}
               >
@@ -151,13 +216,13 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
             <button
               type="submit"
               disabled={pending}
-              className="w-full rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-black shadow-[0_18px_40px_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-70"
+              className="w-full rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {pending ? "Working..." : mode === "login" ? "Sign In" : "Create Account"}
+              {pending ? "Working..." : mode === "login" ? "Sign in" : "Create account"}
             </button>
           </form>
 
-          <p className="mt-6 text-sm text-slate-400">
+          <p className="mt-5 text-sm text-slate-400">
             {mode === "login" ? "New here?" : "Already have an account?"}{" "}
             <Link
               className="font-medium text-zinc-200 transition hover:text-white"
@@ -166,7 +231,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
               {mode === "login" ? "Create an account" : "Sign in"}
             </Link>
           </p>
-        </div>
+        </motion.div>
       </section>
     </div>
   );
