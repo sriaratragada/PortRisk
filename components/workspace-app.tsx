@@ -4,10 +4,15 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState, useTransition } from "react";
+import * as Tabs from "@radix-ui/react-tabs";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
+  Cell,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -15,6 +20,11 @@ import {
   XAxis,
   YAxis
 } from "recharts";
+import {
+  Group as ResizablePanelGroup,
+  Panel as ResizablePanel,
+  Separator as ResizablePanelResizeHandle
+} from "react-resizable-panels";
 import {
   BENCHMARK_PRESETS,
   defaultBenchmarkForPortfolio,
@@ -64,6 +74,12 @@ type PortfolioCardStats = {
   portfolioValue: number | null;
   dailyPnl: number | null;
   topWeight: number | null;
+};
+
+type ResearchPanelLayout = {
+  researchFeed: number;
+  researchNotebook: number;
+  researchInsight: number;
 };
 
 const tabs: Array<{ id: TabId; label: string }> = [
@@ -309,6 +325,219 @@ function ResearchBulletList({
         ) : (
           <p className="text-sm text-slate-500">No detail yet.</p>
         )}
+      </div>
+    </div>
+  );
+}
+
+function clampScore(value: number) {
+  return Math.max(0, Math.min(100, value));
+}
+
+function computeFitComposition(input: {
+  fitScore: number;
+  diversificationImpact?: string;
+  concentrationImpact?: string;
+  dataConfidence?: "HIGH" | "MEDIUM" | "LOW";
+}) {
+  const diversificationBoost =
+    input.diversificationImpact?.toLowerCase().includes("divers") ? 34 : 20;
+  const concentrationScore =
+    input.concentrationImpact?.toLowerCase().includes("worsen") ||
+    input.concentrationImpact?.toLowerCase().includes("increase")
+      ? 14
+      : 28;
+  const coverageScore =
+    input.dataConfidence === "HIGH" ? 24 : input.dataConfidence === "MEDIUM" ? 18 : 10;
+  const timingScore = clampScore(input.fitScore - diversificationBoost - concentrationScore - coverageScore);
+
+  return [
+    { key: "diversification", label: "Diversification", value: diversificationBoost, color: "#f8fafc" },
+    { key: "concentration", label: "Concentration", value: concentrationScore, color: "#38bdf8" },
+    { key: "coverage", label: "Coverage", value: coverageScore, color: "#34d399" },
+    { key: "timing", label: "Timing", value: timingScore, color: "#f59e0b" }
+  ];
+}
+
+function scoreFromRatio(value: number | undefined, healthy: number, stretched: number) {
+  if (value == null || Number.isNaN(value)) {
+    return 50;
+  }
+  if (value >= healthy) {
+    return 82;
+  }
+  if (value <= stretched) {
+    return 28;
+  }
+  const span = healthy - stretched;
+  return Math.round(28 + ((value - stretched) / span) * 54);
+}
+
+function scoreFromPercentage(value: number | undefined, strong: number, weak: number) {
+  if (value == null || Number.isNaN(value)) {
+    return 50;
+  }
+  if (value >= strong) {
+    return 86;
+  }
+  if (value <= weak) {
+    return 24;
+  }
+  const span = strong - weak;
+  return Math.round(24 + ((value - weak) / span) * 62);
+}
+
+function qualityScoreItems(bundle: ResearchFeatureBundle | null) {
+  if (!bundle) {
+    return [];
+  }
+
+  return [
+    {
+      label: "Growth",
+      score: scoreFromPercentage(bundle.revenueGrowth ?? bundle.earningsGrowth, 0.18, -0.02)
+    },
+    {
+      label: "Margins",
+      score: scoreFromPercentage(bundle.profitMargins, 0.2, 0.04)
+    },
+    {
+      label: "Balance Sheet",
+      score: bundle.debtToEquity == null ? 50 : scoreFromRatio(1 / Math.max(bundle.debtToEquity, 0.1), 1.2, 0.35)
+    },
+    {
+      label: "Liquidity",
+      score: scoreFromRatio(bundle.currentRatio ?? bundle.quickRatio, 1.6, 0.8)
+    }
+  ];
+}
+
+function ResearchFitComposition({
+  fitScore,
+  diversificationImpact,
+  concentrationImpact,
+  dataConfidence
+}: {
+  fitScore: number;
+  diversificationImpact?: string;
+  concentrationImpact?: string;
+  dataConfidence?: "HIGH" | "MEDIUM" | "LOW";
+}) {
+  const segments = computeFitComposition({
+    fitScore,
+    diversificationImpact,
+    concentrationImpact,
+    dataConfidence
+  });
+  const chartRow = segments.reduce<Record<string, number | string>>(
+    (accumulator, segment) => {
+      accumulator[segment.key] = segment.value;
+      return accumulator;
+    },
+    { label: "Fit" }
+  );
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/30 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Fit Composition</p>
+        <p className="text-sm font-semibold text-white">{fitScore}/100</p>
+      </div>
+      <div className="mt-3 h-12">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={[chartRow]} layout="vertical" margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+            <XAxis type="number" domain={[0, 100]} hide />
+            <YAxis type="category" dataKey="label" hide />
+            {segments.map((segment) => (
+              <Bar
+                key={segment.key}
+                dataKey={segment.key}
+                stackId="fit"
+                radius={segment.key === "timing" ? [0, 8, 8, 0] : segment.key === "diversification" ? [8, 0, 0, 8] : 0}
+                fill={segment.color}
+              />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        {segments.map((segment) => (
+          <div key={segment.key} className="rounded-lg border border-white/8 bg-white/[0.025] px-3 py-2">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{segment.label}</p>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: segment.color }} />
+              <span className="text-sm text-white">{segment.value}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ResearchQualityStrip({ bundle }: { bundle: ResearchFeatureBundle | null }) {
+  const items = qualityScoreItems(bundle);
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/30 p-4">
+      <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Quality Snapshot</p>
+      <div className="mt-4 space-y-3">
+        {items.length > 0 ? (
+          items.map((item) => (
+            <div key={item.label}>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-slate-300">{item.label}</p>
+                <p className="text-sm font-semibold text-white">{item.score}/100</p>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/8">
+                <motion.div
+                  className="h-full rounded-full bg-gradient-to-r from-sky-400 via-teal-300 to-white"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${item.score}%` }}
+                  transition={{ duration: 0.45, ease: "easeOut" }}
+                />
+              </div>
+            </div>
+          ))
+        ) : (
+          <p className="text-sm text-slate-500">Quality metrics will appear once Yahoo fundamentals are available.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ResearchStatusFlow({ status }: { status: WatchlistItem["status"] | "Feed candidate" }) {
+  const steps = ["NEW", "RESEARCHING", "READY", "PROMOTED"] as const;
+  const activeIndex = status === "Feed candidate" ? -1 : steps.indexOf(status as (typeof steps)[number]);
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/30 p-4">
+      <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Research Flow</p>
+      <div className="mt-4 flex items-center gap-2">
+        {steps.map((step, index) => {
+          const active = activeIndex >= index;
+          return (
+            <div key={step} className="flex min-w-0 flex-1 items-center gap-2">
+              <div
+                className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold tracking-[0.18em]",
+                  active ? "border-white/25 bg-white text-black" : "border-white/10 bg-white/[0.03] text-slate-500"
+                )}
+              >
+                {index + 1}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className={cn("truncate text-[10px] uppercase tracking-[0.18em]", active ? "text-white" : "text-slate-500")}>
+                  {step}
+                </p>
+                {index < steps.length - 1 ? (
+                  <div className={cn("mt-1 h-px w-full", activeIndex > index ? "bg-white/40" : "bg-white/10")} />
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -628,6 +857,14 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const [researchInsightLoading, setResearchInsightLoading] = useState(false);
   const [researchInsightError, setResearchInsightError] = useState<string | null>(null);
   const [researchSort, setResearchSort] = useState<"updated" | "conviction" | "marketCap">("updated");
+  const [activeResearchAnalysisTab, setActiveResearchAnalysisTab] = useState<
+    "fit" | "ai" | "quality" | "diligence"
+  >("fit");
+  const [researchPanelLayout, setResearchPanelLayout] = useState<ResearchPanelLayout>({
+    researchFeed: 32,
+    researchNotebook: 36,
+    researchInsight: 32
+  });
   const [researchSourceFilter, setResearchSourceFilter] = useState<
     "all" | "manual" | "related" | "screener" | "trending"
   >("all");
@@ -708,6 +945,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       : {}
   );
   const [isPending, startTransition] = useTransition();
+  const prefersReducedMotion = useReducedMotion();
 
   async function getAuthHeaders(): Promise<Record<string, string>> {
     const supabase = createSupabaseBrowserClient();
@@ -739,6 +977,29 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   function updateWatchlistSnapshot(items: WatchlistItem[]) {
     setWatchlistItems(items);
   }
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem("research-workstation-panels");
+      if (!raw) {
+        return;
+      }
+      const parsed = JSON.parse(raw) as unknown;
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        typeof (parsed as ResearchPanelLayout).researchFeed === "number" &&
+        typeof (parsed as ResearchPanelLayout).researchNotebook === "number" &&
+        typeof (parsed as ResearchPanelLayout).researchInsight === "number"
+      ) {
+        setResearchPanelLayout(parsed as ResearchPanelLayout);
+      }
+    } catch {}
+  }, []);
 
   useEffect(() => {
     if (!selectedPortfolio) {
@@ -3971,12 +4232,28 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       selectedFeedCandidate?.companyName ??
       researchPreview?.companyName ??
       selectedResearchTicker;
+    const selectedSector =
+      selectedWatchlistItem?.sector ??
+      selectedFeedCandidate?.sector ??
+      researchPreview?.sector ??
+      getDefaultSector();
+    const activeFitScoreValue =
+      researchInsight?.fitScore ?? selectedFeedCandidate?.fitScore ?? researchFeatureBundle?.fitScore ?? null;
+    const insightFitScore = activeFitScoreValue != null ? `${activeFitScoreValue}/100` : "N/A";
+    const analysisActionBias =
+      activeFitScoreValue == null
+        ? "Monitor"
+        : activeFitScoreValue >= 78
+          ? "Starter-ready"
+          : activeFitScoreValue >= 60
+            ? "Research deeper"
+            : "Watch";
     const insightBadges = researchFeatureBundle
       ? [
           {
             label:
               researchFeatureBundle.diversificationImpact.toLowerCase().includes("divers")
-                ? "Diversifying"
+                ? "New diversification"
                 : "Portfolio overlap",
             tone: researchFeatureBundle.diversificationImpact.toLowerCase().includes("divers")
               ? ("positive" as const)
@@ -4000,19 +4277,13 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           },
           {
             label:
-              researchFeatureBundle.missingData.length > 0
-                ? `${researchFeatureBundle.missingData.length} gaps`
-                : "Coverage solid",
-            tone: researchFeatureBundle.missingData.length > 0 ? ("warning" as const) : ("positive" as const)
+              researchFeatureBundle.starterPositionTopHolding
+                ? "Starter becomes top holding"
+                : "Starter size manageable",
+            tone: researchFeatureBundle.starterPositionTopHolding ? ("warning" as const) : ("positive" as const)
           }
         ]
       : [];
-    const insightFitScore =
-      researchInsight?.fitScore != null
-        ? `${researchInsight.fitScore}/100`
-        : selectedFeedCandidate
-          ? `${selectedFeedCandidate.fitScore}/100`
-          : "N/A";
     const notebookSections: Array<{
       id: "thesis" | "catalysts" | "risks" | "valuation" | "notes";
       label: string;
@@ -4023,6 +4294,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       { id: "valuation", label: "Valuation" },
       { id: "notes", label: "Notes" }
     ];
+
     const renderFeedPane = () => (
       <Panel
         title="Idea Feed"
@@ -4085,6 +4357,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                             key={`${result.symbol}:${result.exchange}`}
                             type="button"
                             onClick={() => {
+                              setActiveResearchAnalysisTab("fit");
                               void handleSelectResearchSearchResult(result);
                             }}
                             className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition hover:bg-white/[0.04]"
@@ -4144,7 +4417,12 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               </div>
 
               {researchPreview ? (
-                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                <motion.div
+                  layout
+                  initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="rounded-xl border border-white/10 bg-white/[0.03] p-4"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Selected idea</p>
@@ -4178,7 +4456,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       Save to Watchlist
                     </button>
                   </div>
-                </div>
+                </motion.div>
               ) : null}
             </div>
 
@@ -4200,7 +4478,13 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       return null;
                     }
                     return (
-                      <div key={sourceType} className="space-y-2">
+                      <motion.div
+                        key={sourceType}
+                        layout
+                        initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="space-y-2"
+                      >
                         <div className="flex items-center justify-between gap-3">
                           <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
                             {sourceType === "related"
@@ -4212,11 +4496,17 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                           <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Ranked by fit</p>
                         </div>
                         <div className="space-y-2">
-                          {rows.map((candidate) => (
-                            <button
+                          {rows.map((candidate, index) => (
+                            <motion.button
                               key={`${sourceType}:${candidate.ticker}`}
                               type="button"
+                              layout
+                              initial={prefersReducedMotion ? false : { opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ duration: 0.18, delay: prefersReducedMotion ? 0 : index * 0.03 }}
+                              whileHover={prefersReducedMotion ? undefined : { y: -2, scale: 1.005 }}
                               onClick={() => {
+                                setActiveResearchAnalysisTab("fit");
                                 setSelectedResearchTicker(candidate.ticker);
                                 setSelectedResearchItemId(null);
                                 setResearchPreview(null);
@@ -4225,54 +4515,66 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                               className={cn(
                                 "w-full rounded-xl border px-4 py-3 text-left transition",
                                 selectedResearchTicker === candidate.ticker
-                                  ? "border-white/25 bg-white/[0.045]"
+                                  ? "border-white/25 bg-white/[0.055] shadow-[0_0_0_1px_rgba(255,255,255,0.04)]"
                                   : "border-white/10 bg-black/35 hover:border-white/20"
                               )}
                             >
                               <div className="flex items-start justify-between gap-4">
-                                <div className="min-w-0">
+                                <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2">
                                     <p className="text-sm font-semibold text-white">{candidate.ticker}</p>
                                     <ResearchToneChip label={candidate.sourceLabel} />
+                                    <ResearchToneChip label={candidate.sector} />
                                   </div>
                                   <p className="mt-1 truncate text-sm text-slate-400">{candidate.companyName}</p>
                                   <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-300">
                                     {candidate.aiSummary ?? candidate.deterministicSummary}
                                   </p>
+                                  <div className="mt-3">
+                                    <ResearchFitComposition
+                                      fitScore={candidate.fitScore}
+                                      diversificationImpact={candidate.diversificationImpact}
+                                      concentrationImpact={candidate.concentrationImpact}
+                                      dataConfidence={candidate.dataConfidence}
+                                    />
+                                  </div>
                                 </div>
-                                <div className="shrink-0 text-right">
-                                  <p className="text-lg font-semibold text-white">{candidate.fitScore}</p>
-                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Fit</p>
+                                <div className="w-24 shrink-0 text-right">
+                                  <motion.p
+                                    className="text-xl font-semibold text-white"
+                                    key={`${candidate.ticker}:${candidate.fitScore}`}
+                                    initial={prefersReducedMotion ? false : { opacity: 0.6, scale: 0.92 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    transition={{ duration: 0.2 }}
+                                  >
+                                    {candidate.fitScore}
+                                  </motion.p>
+                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Fit score</p>
+                                  <p className="mt-3 text-xs text-slate-400">{formatCurrency(candidate.currentPrice)}</p>
+                                  <p className="mt-1 text-xs text-slate-500">{candidate.benchmarkContext}</p>
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      void saveWatchlistEntry({
+                                        ticker: candidate.ticker,
+                                        sourceType: candidate.sourceType,
+                                        sourceLabel: candidate.sourceLabel
+                                      });
+                                    }}
+                                    disabled={activeWatchlistTickerSet.has(candidate.ticker.toUpperCase())}
+                                    className="mt-3 rounded-md border border-white/12 px-3 py-1.5 text-xs text-zinc-200 transition hover:border-white/25 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {activeWatchlistTickerSet.has(candidate.ticker.toUpperCase())
+                                      ? "Saved"
+                                      : "Save"}
+                                  </button>
                                 </div>
                               </div>
-                              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-                                <div className="flex flex-wrap gap-2">
-                                  <span>{candidate.sector}</span>
-                                  <span>{formatCurrency(candidate.currentPrice)}</span>
-                                  <span>{candidate.benchmarkContext}</span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    void saveWatchlistEntry({
-                                      ticker: candidate.ticker,
-                                      sourceType: candidate.sourceType,
-                                      sourceLabel: candidate.sourceLabel
-                                    });
-                                  }}
-                                  disabled={activeWatchlistTickerSet.has(candidate.ticker.toUpperCase())}
-                                  className="rounded-md border border-white/12 px-3 py-1.5 text-xs text-zinc-200 transition hover:border-white/25 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  {activeWatchlistTickerSet.has(candidate.ticker.toUpperCase())
-                                    ? "In Watchlist"
-                                    : "Save"}
-                                </button>
-                              </div>
-                            </button>
+                            </motion.button>
                           ))}
                         </div>
-                      </div>
+                      </motion.div>
                     );
                   })}
                 </div>
@@ -4282,8 +4584,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         )}
       </Panel>
     );
+
     const renderNotebookPane = () => (
-      <Panel title="Watchlist Queue / Notebook" className="flex h-full min-h-[34rem] flex-col xl:min-h-0">
+      <Panel title="Queue / Notebook" className="flex h-full min-h-[34rem] flex-col xl:min-h-0">
         {!selectedPortfolio ? (
           <EmptyState
             title="No research queue"
@@ -4316,22 +4619,20 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               />
             ) : (
               <>
-                <div className="grid gap-2 md:grid-cols-5">
-                  {groupedWatchlist.map((group) => (
-                    <div key={group.status} className="rounded-xl border border-white/10 bg-black/25 px-3 py-2">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{group.status}</p>
-                      <p className="mt-1 text-lg font-semibold text-white">{group.items.length}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="min-h-0 max-h-60 overflow-y-auto rounded-xl border border-white/10 bg-black/20 p-2">
+                <ResearchStatusFlow status={selectedWatchlistItem?.status ?? "Feed candidate"} />
+                <div className="min-h-0 max-h-56 overflow-y-auto rounded-xl border border-white/10 bg-black/20 p-2">
                   <div className="space-y-2">
-                    {sortedWatchlist.map((item) => (
-                      <button
+                    {sortedWatchlist.map((item, index) => (
+                      <motion.button
                         key={item.id}
                         type="button"
+                        layout
+                        initial={prefersReducedMotion ? false : { opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.16, delay: prefersReducedMotion ? 0 : index * 0.02 }}
+                        whileHover={prefersReducedMotion ? undefined : { x: 2 }}
                         onClick={() => {
+                          setActiveResearchAnalysisTab("fit");
                           setSelectedResearchItemId(item.id);
                           setSelectedResearchTicker(item.ticker);
                           setResearchPreview(null);
@@ -4357,7 +4658,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                             {item.targetPrice != null ? formatCurrency(item.targetPrice) : "Target open"}
                           </p>
                         </div>
-                      </button>
+                      </motion.button>
                     ))}
                   </div>
                 </div>
@@ -4377,23 +4678,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                           <ResearchToneChip label={selectedWatchlistItem.sourceLabel} />
                           <ResearchToneChip label={selectedWatchlistItem.sector} />
                           <ResearchToneChip label={`Conviction ${selectedWatchlistItem.conviction}/5`} />
+                          <ResearchToneChip label={`Updated ${formatCompactDate(selectedWatchlistItem.updatedAt)}`} />
                         </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void promoteWatchlistItem(selectedWatchlistItem)}
-                          className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-zinc-200"
-                        >
-                          Promote
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void removeWatchlistItem(selectedWatchlistItem.id)}
-                          className="rounded-md border border-danger/40 px-4 py-2 text-sm text-danger"
-                        >
-                          Remove
-                        </button>
                       </div>
                     </div>
 
@@ -4540,17 +4826,33 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       ) : null}
                     </div>
 
-                    <div className="mt-4 flex items-center justify-between gap-3 border-t border-white/10 pt-4">
+                    <div className="sticky bottom-0 mt-4 flex items-center justify-between gap-3 border-t border-white/10 bg-panel/95 pt-4 backdrop-blur">
                       <p className="text-sm text-slate-400">
-                        Latest price {formatCurrency(researchPriceMap.get(selectedWatchlistItem.ticker.toUpperCase()))}
+                        Latest {formatCurrency(researchPriceMap.get(selectedWatchlistItem.ticker.toUpperCase()))}
                       </p>
-                      <button
-                        type="button"
-                        onClick={() => void saveWatchlistDraft()}
-                        className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-zinc-200"
-                      >
-                        Save Notebook
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void removeWatchlistItem(selectedWatchlistItem.id)}
+                          className="rounded-md border border-danger/40 px-4 py-2 text-sm text-danger"
+                        >
+                          Remove
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void promoteWatchlistItem(selectedWatchlistItem)}
+                          className="rounded-md border border-white/12 px-4 py-2 text-sm text-white transition hover:bg-white/[0.05]"
+                        >
+                          Promote
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void saveWatchlistDraft()}
+                          className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-zinc-200"
+                        >
+                          Save Notebook
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -4560,8 +4862,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         )}
       </Panel>
     );
+
     const renderInsightPane = () => (
-      <Panel title="Portfolio Fit" className="flex h-full min-h-[34rem] flex-col xl:min-h-0">
+      <Panel title="Analysis Rail" className="flex h-full min-h-[34rem] flex-col xl:min-h-0">
         {researchInsightError ? <div className="mb-3"><InlineNotice message={researchInsightError} tone="warning" /></div> : null}
         {!selectedPortfolio || !selectedResearchTicker ? (
           <EmptyState
@@ -4573,18 +4876,19 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             Building research memo and portfolio-fit summary...
           </div>
         ) : (
-          <div className="flex min-h-0 flex-1 flex-col gap-4">
+          <Tabs.Root
+            value={activeResearchAnalysisTab}
+            onValueChange={(value) =>
+              setActiveResearchAnalysisTab(value as "fit" | "ai" | "quality" | "diligence")
+            }
+            className="flex min-h-0 flex-1 flex-col"
+          >
             <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">{selectedResearchTicker}</p>
                   <p className="mt-2 text-2xl font-semibold text-white">{selectedLabel ?? selectedResearchTicker}</p>
-                  <p className="mt-2 text-sm text-slate-400">
-                    {selectedWatchlistItem?.sector ??
-                      selectedFeedCandidate?.sector ??
-                      researchPreview?.sector ??
-                      getDefaultSector()}
-                  </p>
+                  <p className="mt-2 text-sm text-slate-400">{selectedSector}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {insightBadges.map((badge) => (
@@ -4592,6 +4896,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   ))}
                 </div>
               </div>
+
               <div className="mt-4 grid gap-3 md:grid-cols-3">
                 <ResearchInsightCard label="Fit Score" value={insightFitScore} helper="Composite portfolio-fit rank." />
                 <ResearchInsightCard
@@ -4600,81 +4905,156 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   helper={researchInsight?.source === "AI" ? "Live Yahoo facts with AI synthesis." : "Deterministic fallback active."}
                 />
                 <ResearchInsightCard
-                  label="Data Coverage"
-                  value={researchInsight?.dataConfidence ?? selectedFeedCandidate?.dataConfidence ?? "N/A"}
-                  helper={
-                    researchFeatureBundle?.missingData.length
-                      ? researchFeatureBundle.missingData.join(", ")
-                      : "Coverage is strong enough for a first-pass memo."
-                  }
+                  label="Action Bias"
+                  value={analysisActionBias}
+                  helper="Condensed action framing from portfolio fit, coverage, and concentration context."
                 />
               </div>
-              {researchInsight ? (
-                <p className="mt-4 text-sm leading-6 text-slate-300">{researchInsight.summary}</p>
-              ) : null}
             </div>
 
-            {researchFeatureBundle ? (
-              <div className="grid gap-3 md:grid-cols-2">
-                <ResearchInsightCard
-                  label="Portfolio Fit"
-                  value={researchFeatureBundle.diversificationImpact}
-                  helper={researchInsight?.portfolioFit ?? researchFeatureBundle.overlapNote}
-                />
-                <ResearchInsightCard
-                  label="Benchmark Context"
-                  value={researchFeatureBundle.benchmarkContext}
-                  helper={`Benchmark ${researchFeatureBundle.benchmark} | Top sector ${researchFeatureBundle.topSector}`}
-                />
-                <ResearchInsightCard
-                  label="Quality Snapshot"
-                  value={
-                    researchFeatureBundle.trailingPE != null
-                      ? `P/E ${researchFeatureBundle.trailingPE.toFixed(1)}x`
-                      : "Valuation partial"
-                  }
-                  helper={
-                    researchInsight?.valuationFrame ??
-                    "Fundamental coverage is partial, so valuation should be cross-checked before promotion."
-                  }
-                />
-                <ResearchInsightCard
-                  label="Promotion Readiness"
-                  value={selectedWatchlistItem?.status ?? "Feed candidate"}
-                  helper={
-                    pendingPromotionItemId === selectedWatchlistItem?.id
-                      ? "Promotion handoff is already active in Holdings."
-                      : "Promote only after size, cost basis, and diligence are confirmed."
-                  }
-                />
-              </div>
-            ) : null}
+            <Tabs.List className="sticky top-0 z-10 mt-4 grid grid-cols-4 gap-2 rounded-xl border border-white/10 bg-black/35 p-2">
+              {[
+                ["fit", "Fit"],
+                ["ai", "AI"],
+                ["quality", "Quality"],
+                ["diligence", "Diligence"]
+              ].map(([value, label]) => (
+                <Tabs.Trigger
+                  key={value}
+                  value={value}
+                  className="rounded-lg border border-transparent px-3 py-2 text-xs uppercase tracking-[0.18em] text-slate-400 transition data-[state=active]:border-white/12 data-[state=active]:bg-white/[0.08] data-[state=active]:text-white"
+                >
+                  {label}
+                </Tabs.Trigger>
+              ))}
+            </Tabs.List>
 
-            {researchInsight ? (
-              <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-                <div className="grid gap-3">
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <ResearchInsightCard label="Why Now" value={researchInsight.whyNow} />
-                    <ResearchInsightCard label="Top Concern" value={researchInsight.topConcern} />
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <ResearchBulletList title="Thesis" items={researchInsight.thesis.slice(0, 3)} />
-                    <ResearchBulletList title="Catalysts" items={researchInsight.catalysts.slice(0, 3)} />
-                    <ResearchBulletList title="Risks" items={researchInsight.risks.slice(0, 3)} />
+            <div className="mt-4 min-h-0 flex-1 overflow-hidden">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeResearchAnalysisTab}
+                  initial={prefersReducedMotion ? false : { opacity: 0, x: 12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={prefersReducedMotion ? undefined : { opacity: 0, x: -12 }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
+                  className="h-full overflow-y-auto pr-1"
+                >
+                  <Tabs.Content value="fit" forceMount hidden={activeResearchAnalysisTab !== "fit"} className="space-y-3">
+                    {activeFitScoreValue != null ? (
+                      <ResearchFitComposition
+                        fitScore={activeFitScoreValue}
+                        diversificationImpact={researchFeatureBundle?.diversificationImpact}
+                        concentrationImpact={researchFeatureBundle?.concentrationImpact}
+                        dataConfidence={researchInsight?.dataConfidence ?? researchFeatureBundle?.dataConfidence}
+                      />
+                    ) : null}
+                    <div className="grid gap-3">
+                      <ResearchInsightCard
+                        label="Diversification Impact"
+                        value={researchFeatureBundle?.diversificationImpact ?? "Unavailable"}
+                        helper={researchInsight?.portfolioFit ?? researchFeatureBundle?.overlapNote}
+                      />
+                      <ResearchInsightCard
+                        label="Concentration Impact"
+                        value={researchFeatureBundle?.concentrationImpact ?? "Unavailable"}
+                        helper={
+                          researchFeatureBundle?.starterPositionTopHolding
+                            ? "Starter position would likely enter the top holding tier."
+                            : "Starter sizing appears manageable relative to current leaders."
+                        }
+                      />
+                      <ResearchInsightCard
+                        label="Benchmark Stance"
+                        value={researchFeatureBundle?.benchmarkContext ?? researchInsight?.benchmarkContext ?? "Unavailable"}
+                        helper={
+                          researchFeatureBundle
+                            ? `Top sector ${researchFeatureBundle.topSector} at ${formatPercent(researchFeatureBundle.topSectorWeight)}.`
+                            : undefined
+                        }
+                      />
+                      <div className="rounded-xl border border-white/10 bg-black/30 p-4">
+                        <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Portfolio Overlap</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {insightBadges.map((badge) => (
+                            <ResearchToneChip key={badge.label} label={badge.label} tone={badge.tone} />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </Tabs.Content>
+
+                  <Tabs.Content value="ai" forceMount hidden={activeResearchAnalysisTab !== "ai"} className="space-y-3">
+                    {researchInsight ? (
+                      <>
+                        <ResearchInsightCard label="AI interpretation" value={researchInsight.summary} />
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <ResearchInsightCard label="Why Now" value={researchInsight.whyNow} />
+                          <ResearchInsightCard label="Top Concern" value={researchInsight.topConcern} />
+                          <ResearchInsightCard label="Role in Portfolio" value={researchInsight.portfolioFit} />
+                          <ResearchInsightCard
+                            label="Coverage"
+                            value={researchInsight.dataConfidence}
+                            helper={
+                              researchInsight.missingData.length > 0
+                                ? researchInsight.missingData.join(", ")
+                                : "Coverage is strong enough for a first-pass memo."
+                            }
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <EmptyState
+                        title="No AI interpretation yet"
+                        copy="Select an idea or watchlist item to build a structured Yahoo-backed memo."
+                      />
+                    )}
+                  </Tabs.Content>
+
+                  <Tabs.Content value="quality" forceMount hidden={activeResearchAnalysisTab !== "quality"} className="space-y-3">
+                    <ResearchQualityStrip bundle={researchFeatureBundle} />
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <ResearchInsightCard
+                        label="Valuation"
+                        value={
+                          researchFeatureBundle?.trailingPE != null
+                            ? `P/E ${researchFeatureBundle.trailingPE.toFixed(1)}x`
+                            : "Valuation partial"
+                        }
+                        helper={
+                          researchInsight?.valuationFrame ??
+                          "Fundamental coverage is partial, so valuation should be cross-checked before promotion."
+                        }
+                      />
+                      <ResearchInsightCard
+                        label="Coverage Gaps"
+                        value={`${researchFeatureBundle?.missingData.length ?? 0} open items`}
+                        helper={
+                          researchFeatureBundle?.missingData.length
+                            ? researchFeatureBundle.missingData.join(", ")
+                            : "No major Yahoo data gaps for the current memo."
+                        }
+                      />
+                    </div>
+                  </Tabs.Content>
+
+                  <Tabs.Content
+                    value="diligence"
+                    forceMount
+                    hidden={activeResearchAnalysisTab !== "diligence"}
+                    className="space-y-3"
+                  >
+                    <ResearchBulletList title="Thesis" items={researchInsight?.thesis.slice(0, 3) ?? []} />
+                    <ResearchBulletList title="Catalysts" items={researchInsight?.catalysts.slice(0, 3) ?? []} />
+                    <ResearchBulletList title="Risks" items={researchInsight?.risks.slice(0, 3) ?? []} />
                     <ResearchBulletList
                       title="Diligence Questions"
-                      items={researchInsight.diligenceQuestions.slice(0, 3)}
+                      items={researchInsight?.diligenceQuestions.slice(0, 3) ?? []}
                     />
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <EmptyState
-                title="No research memo yet"
-                copy="Select an idea or watchlist item to build a portfolio-fit memo from Yahoo facts and AI interpretation."
-              />
-            )}
-          </div>
+                  </Tabs.Content>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </Tabs.Root>
         )}
       </Panel>
     );
@@ -4697,10 +5077,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   label="Idea Feed"
                   value={researchFeed.generatedAt ? formatCompactDate(researchFeed.generatedAt) : "Not loaded"}
                 />
-                <InfoPill
-                  label="Selected"
-                  value={selectedResearchTicker ?? "None"}
-                />
+                <InfoPill label="Selected" value={selectedResearchTicker ?? "None"} />
                 <InfoPill
                   label="AI"
                   value={researchInsight?.source === "AI" ? "Live interpretation" : "Deterministic fallback"}
@@ -4719,7 +5096,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                         : "border-white/10 bg-black/20 text-slate-400 hover:text-white"
                     )}
                   >
-                    {view === "feed" ? "Idea Feed" : view === "notebook" ? "Notebook" : "Portfolio Fit"}
+                    {view === "feed" ? "Idea Feed" : view === "notebook" ? "Notebook" : "Analysis"}
                   </button>
                 ))}
               </div>
@@ -4727,10 +5104,38 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           )}
         </Panel>
 
-        <div className="hidden gap-4 xl:grid xl:grid-cols-[0.95fr_1.05fr_1fr] xl:h-[calc(100vh-15rem)] xl:min-h-[46rem]">
-          {renderFeedPane()}
-          {renderNotebookPane()}
-          {renderInsightPane()}
+        <div className="hidden xl:block">
+          <ResizablePanelGroup
+            orientation="horizontal"
+            defaultLayout={researchPanelLayout}
+            onLayoutChanged={(layout) => {
+              setResearchPanelLayout(layout as ResearchPanelLayout);
+              if (typeof window !== "undefined") {
+                window.localStorage.setItem("research-workstation-panels", JSON.stringify(layout));
+              }
+            }}
+            className="h-[calc(100vh-15rem)] min-h-[46rem] gap-4"
+          >
+            <ResizablePanel id="researchFeed" defaultSize={researchPanelLayout.researchFeed} minSize={24}>
+              {renderFeedPane()}
+            </ResizablePanel>
+            <ResizablePanelResizeHandle className="mx-1 w-1 rounded-full bg-white/10 transition hover:bg-white/20" />
+            <ResizablePanel
+              id="researchNotebook"
+              defaultSize={researchPanelLayout.researchNotebook}
+              minSize={28}
+            >
+              {renderNotebookPane()}
+            </ResizablePanel>
+            <ResizablePanelResizeHandle className="mx-1 w-1 rounded-full bg-white/10 transition hover:bg-white/20" />
+            <ResizablePanel
+              id="researchInsight"
+              defaultSize={researchPanelLayout.researchInsight}
+              minSize={24}
+            >
+              {renderInsightPane()}
+            </ResizablePanel>
+          </ResizablePanelGroup>
         </div>
 
         <div className="space-y-4 xl:hidden">
