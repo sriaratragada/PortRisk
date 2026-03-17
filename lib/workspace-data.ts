@@ -2,7 +2,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getArchivedPortfolioIds, isPortfolioArchived } from "@/lib/portfolio-archive";
 import { buildFallbackHoldings } from "@/lib/holdings";
 import { hydratePortfolioHistory, hydratePortfolioRisk } from "@/lib/portfolio-edge";
-import { HoldingSnapshot, RiskMetrics } from "@/lib/types";
+import { mapWatchlistItemRow } from "@/lib/research";
+import { HoldingSnapshot, RiskMetrics, WatchlistItem } from "@/lib/types";
 
 export type PortfolioSummary = {
   id: string;
@@ -53,6 +54,7 @@ export type WorkspacePortfolio = {
   }>;
   auditLog: AuditEntryView[];
   stressTests: StressTestView[];
+  watchlist: WatchlistItem[];
 };
 
 export type WorkspaceData = {
@@ -91,7 +93,13 @@ export async function buildWorkspacePortfolio(portfolioId: string, userId: strin
   if (archived) {
     return null;
   }
-  const [{ data: portfolio, error: portfolioError }, { data: positions }, { data: stressTests }, { data: auditLogs }] =
+  const [
+    { data: portfolio, error: portfolioError },
+    { data: positions },
+    { data: stressTests },
+    { data: auditLogs },
+    { data: watchlistItems }
+  ] =
     await Promise.all([
       supabase
         .from("Portfolio")
@@ -116,7 +124,12 @@ export async function buildWorkspacePortfolio(portfolioId: string, userId: strin
         .eq("portfolioId", portfolioId)
         .eq("userId", userId)
         .order("timestamp", { ascending: false })
-        .limit(20)
+        .limit(20),
+      supabase
+        .from("WatchlistItem")
+        .select("*")
+        .eq("portfolioId", portfolioId)
+        .order("updatedAt", { ascending: false })
     ]);
 
   if (portfolioError || !portfolio) {
@@ -155,7 +168,8 @@ export async function buildWorkspacePortfolio(portfolioId: string, userId: strin
         projectedValue: entry.projectedValue,
         newRiskTier: entry.newRiskTier,
         recoveryDays: entry.recoveryDays
-      }))
+      })),
+      watchlist: (watchlistItems ?? []).map((item) => mapWatchlistItemRow(item))
     } satisfies WorkspacePortfolio;
   }
 
@@ -188,7 +202,8 @@ export async function buildWorkspacePortfolio(portfolioId: string, userId: strin
         projectedValue: entry.projectedValue,
         newRiskTier: entry.newRiskTier,
         recoveryDays: entry.recoveryDays
-      }))
+      })),
+      watchlist: (watchlistItems ?? []).map((item) => mapWatchlistItemRow(item))
     } satisfies WorkspacePortfolio;
   } catch {
     return {
@@ -215,7 +230,8 @@ export async function buildWorkspacePortfolio(portfolioId: string, userId: strin
         projectedValue: entry.projectedValue,
         newRiskTier: entry.newRiskTier,
         recoveryDays: entry.recoveryDays
-      }))
+      })),
+      watchlist: (watchlistItems ?? []).map((item) => mapWatchlistItemRow(item))
     } satisfies WorkspacePortfolio;
   }
 }

@@ -62,6 +62,118 @@ export type SecurityPreview = {
   provider: MarketDataProvider;
 };
 
+export type WatchlistStatus = "NEW" | "RESEARCHING" | "READY" | "PASSED" | "PROMOTED";
+export type ResearchSourceType = "manual" | "related" | "screener" | "trending";
+
+export type WatchlistItem = {
+  id: string;
+  portfolioId: string;
+  ticker: string;
+  companyName: string;
+  exchange: string;
+  quoteType: string;
+  sector: import("@/lib/sectors").ResolvedSector;
+  industry?: string;
+  status: WatchlistStatus;
+  conviction: number;
+  targetPrice: number | null;
+  thesis: string;
+  catalysts: string;
+  risks: string;
+  valuationNotes: string;
+  notes: string;
+  sourceType: ResearchSourceType;
+  sourceLabel: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ResearchCandidate = {
+  ticker: string;
+  companyName: string;
+  exchange: string;
+  quoteType: string;
+  sector: import("@/lib/sectors").ResolvedSector;
+  industry?: string;
+  currentPrice: number | null;
+  changePercent: number | null;
+  marketCap?: number;
+  sourceType: Exclude<ResearchSourceType, "manual">;
+  sourceLabel: string;
+  fitScore: number;
+  deterministicSummary: string;
+  aiSummary: string | null;
+  topConcern: string | null;
+  whyNow: string | null;
+  benchmarkContext: string;
+  diversificationImpact: string;
+  concentrationImpact: string;
+  overlapNote: string;
+  dataConfidence: "HIGH" | "MEDIUM" | "LOW";
+  dataState: MarketDataState;
+  asOf: string | null;
+  provider: MarketDataProvider;
+};
+
+export type ResearchInsight = {
+  ticker: string;
+  summary: string;
+  fitScore: number | null;
+  portfolioFit: string;
+  benchmarkContext: string;
+  whyNow: string;
+  topConcern: string;
+  thesis: string[];
+  catalysts: string[];
+  risks: string[];
+  valuationFrame: string;
+  diligenceQuestions: string[];
+  missingData: string[];
+  dataConfidence: "HIGH" | "MEDIUM" | "LOW";
+  generatedAt: string;
+  model: string;
+  provider: string;
+  source: "AI" | "FALLBACK";
+};
+
+export type ResearchFeatureBundle = {
+  ticker: string;
+  companyName: string;
+  exchange: string;
+  quoteType: string;
+  sector: string;
+  industry?: string;
+  currentPrice: number | null;
+  marketCap?: number;
+  trailingPE?: number;
+  forwardPE?: number;
+  revenueGrowth?: number;
+  earningsGrowth?: number;
+  profitMargins?: number;
+  returnOnEquity?: number;
+  debtToEquity?: number;
+  currentRatio?: number;
+  quickRatio?: number;
+  changePercent: number | null;
+  benchmark: string;
+  fitScore: number;
+  diversificationImpact: string;
+  concentrationImpact: string;
+  benchmarkContext: string;
+  overlapNote: string;
+  starterPositionTopHolding: boolean;
+  topSector: string;
+  topSectorWeight: number;
+  topHoldingTicker: string | null;
+  currentPositions: Array<{
+    ticker: string;
+    sector: string;
+    weight: number;
+  }>;
+  missingData: string[];
+  dataConfidence: "HIGH" | "MEDIUM" | "LOW";
+};
+
 export type HoldingSnapshot = PositionInput & {
   currentPrice: number | null;
   currentValue: number | null;

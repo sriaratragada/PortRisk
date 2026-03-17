@@ -1,6 +1,7 @@
 alter table "User" enable row level security;
 alter table "Portfolio" enable row level security;
 alter table "Position" enable row level security;
+alter table "WatchlistItem" enable row level security;
 alter table "RiskScore" enable row level security;
 alter table "StressTest" enable row level security;
 alter table "AuditLog" enable row level security;
@@ -35,6 +36,27 @@ with check (
     select 1
     from "Portfolio"
     where "Portfolio".id = "Position"."portfolioId"
+      and "Portfolio"."userId" = auth.uid()::text
+  )
+);
+
+create policy "watchlist_item_owner_all"
+on "WatchlistItem"
+for all
+to authenticated
+using (
+  exists (
+    select 1
+    from "Portfolio"
+    where "Portfolio".id = "WatchlistItem"."portfolioId"
+      and "Portfolio"."userId" = auth.uid()::text
+  )
+)
+with check (
+  exists (
+    select 1
+    from "Portfolio"
+    where "Portfolio".id = "WatchlistItem"."portfolioId"
       and "Portfolio"."userId" = auth.uid()::text
   )
 );

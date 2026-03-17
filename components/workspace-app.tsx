@@ -21,6 +21,7 @@ import {
   normalizeBenchmarkSymbol,
   PORTFOLIO_TEMPLATE_BENCHMARKS
 } from "@/lib/benchmarks";
+import { sortWatchlistItems } from "@/lib/research-client";
 import { STRESS_SCENARIOS } from "@/lib/stress-scenarios";
 import { getDefaultSector } from "@/lib/sectors";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
@@ -31,11 +32,15 @@ import type {
   CompanyDetail,
   HoldingSnapshot,
   PositionInput,
+  ResearchCandidate,
+  ResearchFeatureBundle,
+  ResearchInsight,
   RiskInsight,
   RiskReport,
   RiskTier,
   SecuritySearchResult,
-  SecurityPreview
+  SecurityPreview,
+  WatchlistItem
 } from "@/lib/types";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 import type {
@@ -48,6 +53,7 @@ import type {
 type TabId =
   | "overview"
   | "holdings"
+  | "research"
   | "risk"
   | "stress"
   | "allocation"
@@ -63,6 +69,7 @@ type PortfolioCardStats = {
 const tabs: Array<{ id: TabId; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "holdings", label: "Holdings" },
+  { id: "research", label: "Research" },
   { id: "risk", label: "Risk" },
   { id: "stress", label: "Stress Tests" },
   { id: "allocation", label: "Allocation Modeler" },
@@ -521,6 +528,50 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     useState<SecuritySearchResult | null>(null);
   const [benchmarkPreview, setBenchmarkPreview] = useState<SecurityPreview | null>(null);
   const [benchmarkPreviewLoading, setBenchmarkPreviewLoading] = useState(false);
+  const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>(
+    initialData.selectedPortfolio?.watchlist ?? []
+  );
+  const [researchFeed, setResearchFeed] = useState<{
+    generatedAt: string | null;
+    candidates: ResearchCandidate[];
+  }>({
+    generatedAt: null,
+    candidates: []
+  });
+  const [researchFeedLoading, setResearchFeedLoading] = useState(false);
+  const [researchFeedError, setResearchFeedError] = useState<string | null>(null);
+  const [researchSearchTerm, setResearchSearchTerm] = useState("");
+  const [researchSearchResults, setResearchSearchResults] = useState<SecuritySearchResult[]>([]);
+  const [researchSearchLoading, setResearchSearchLoading] = useState(false);
+  const [researchSearchError, setResearchSearchError] = useState<string | null>(null);
+  const [selectedResearchSecurity, setSelectedResearchSecurity] =
+    useState<SecuritySearchResult | null>(null);
+  const [researchPreview, setResearchPreview] = useState<SecurityPreview | null>(null);
+  const [researchPreviewLoading, setResearchPreviewLoading] = useState(false);
+  const [selectedResearchTicker, setSelectedResearchTicker] = useState<string | null>(
+    initialData.selectedPortfolio?.watchlist[0]?.ticker ?? null
+  );
+  const [selectedResearchItemId, setSelectedResearchItemId] = useState<string | null>(
+    initialData.selectedPortfolio?.watchlist[0]?.id ?? null
+  );
+  const [researchInsight, setResearchInsight] = useState<ResearchInsight | null>(null);
+  const [researchFeatureBundle, setResearchFeatureBundle] = useState<ResearchFeatureBundle | null>(
+    null
+  );
+  const [researchInsightLoading, setResearchInsightLoading] = useState(false);
+  const [researchInsightError, setResearchInsightError] = useState<string | null>(null);
+  const [researchSort, setResearchSort] = useState<"updated" | "conviction" | "marketCap">("updated");
+  const [pendingPromotionItemId, setPendingPromotionItemId] = useState<string | null>(null);
+  const [watchlistDraft, setWatchlistDraft] = useState({
+    status: "NEW" as WatchlistItem["status"],
+    conviction: "3",
+    targetPrice: "",
+    thesis: "",
+    catalysts: "",
+    risks: "",
+    valuationNotes: "",
+    notes: ""
+  });
   const [positionTicker, setPositionTicker] = useState("");
   const [positionName, setPositionName] = useState("");
   const [positionShares, setPositionShares] = useState("10");
@@ -610,12 +661,22 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     }));
   }
 
+  function updateWatchlistSnapshot(items: WatchlistItem[]) {
+    setWatchlistItems(items);
+  }
+
   useEffect(() => {
     if (!selectedPortfolio) {
       setAllocationWeights({});
       setProposedMetrics(null);
       setRiskReport(null);
       setRiskInsight(null);
+      setWatchlistItems([]);
+      setResearchFeed({ generatedAt: null, candidates: [] });
+      setSelectedResearchItemId(null);
+      setSelectedResearchTicker(null);
+      setResearchInsight(null);
+      setResearchFeatureBundle(null);
       resetBenchmarkForm();
       return;
     }
@@ -628,6 +689,12 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     );
     setProposedMetrics(selectedPortfolio.metrics);
     updateSelectedPortfolioSnapshot(selectedPortfolio);
+    setWatchlistItems(selectedPortfolio.watchlist);
+    setSelectedResearchItemId(selectedPortfolio.watchlist[0]?.id ?? null);
+    setSelectedResearchTicker(selectedPortfolio.watchlist[0]?.ticker ?? null);
+    setResearchInsight(null);
+    setResearchFeatureBundle(null);
+    setResearchInsightError(null);
     setBenchmarkSearchTerm(selectedPortfolio.benchmark);
     setBenchmarkPreview(null);
     setBenchmarkSearchResults([]);
@@ -717,6 +784,44 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
     return () => window.clearTimeout(handle);
   }, [benchmarkSearchTerm, selectedBenchmarkSecurity]);
+
+  useEffect(() => {
+    const query = researchSearchTerm.trim();
+    if (!query || selectedResearchSecurity?.symbol === query.toUpperCase()) {
+      setResearchSearchResults([]);
+      setResearchSearchLoading(false);
+      if (!query) {
+        setResearchSearchError(null);
+      }
+      return;
+    }
+
+    const handle = window.setTimeout(async () => {
+      setResearchSearchLoading(true);
+      setResearchSearchError(null);
+      try {
+        const response = await fetch(`/api/securities/search?q=${encodeURIComponent(query)}`, {
+          headers: {
+            ...(await getAuthHeaders())
+          }
+        });
+        if (!response.ok) {
+          throw new Error(await readErrorMessage(response));
+        }
+        const data = (await response.json()) as {
+          results?: SecuritySearchResult[];
+        };
+        setResearchSearchResults(data.results ?? []);
+      } catch (error) {
+        setResearchSearchResults([]);
+        setResearchSearchError(error instanceof Error ? error.message : "Research search failed");
+      } finally {
+        setResearchSearchLoading(false);
+      }
+    }, 220);
+
+    return () => window.clearTimeout(handle);
+  }, [researchSearchTerm, selectedResearchSecurity]);
 
   useEffect(() => {
     if (!selectedPortfolio || activeTab !== "allocation" || selectedPortfolio.holdings.length === 0) {
@@ -1058,6 +1163,82 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     };
   }, [holdingRange, selectedHoldingDetail?.ticker]);
 
+  useEffect(() => {
+    if (!selectedPortfolio) {
+      return;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const storageKey = `research-feed:${initialData.user.id}:${selectedPortfolio.id}`;
+    const loadedForDay = window.localStorage.getItem(storageKey);
+    if (loadedForDay === today && researchFeed.generatedAt) {
+      return;
+    }
+
+    let cancelled = false;
+    setResearchFeedLoading(true);
+    void loadResearchFeed(selectedPortfolio.id, false)
+      .catch((error) => {
+        if (!cancelled) {
+          setResearchFeedError(
+            error instanceof Error ? error.message : "Research feed unavailable"
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setResearchFeedLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialData.user.id, researchFeed.generatedAt, selectedPortfolio?.id]);
+
+  useEffect(() => {
+    const selectedItem =
+      watchlistItems.find((item) => item.id === selectedResearchItemId) ?? null;
+    if (!selectedItem) {
+      return;
+    }
+
+    setWatchlistDraft({
+      status: selectedItem.status,
+      conviction: String(selectedItem.conviction),
+      targetPrice: selectedItem.targetPrice != null ? String(selectedItem.targetPrice) : "",
+      thesis: selectedItem.thesis,
+      catalysts: selectedItem.catalysts,
+      risks: selectedItem.risks,
+      valuationNotes: selectedItem.valuationNotes,
+      notes: selectedItem.notes
+    });
+  }, [selectedResearchItemId, watchlistItems]);
+
+  useEffect(() => {
+    if (!selectedPortfolio || !selectedResearchTicker || activeTab !== "research") {
+      return;
+    }
+
+    const selectedWatchlistSource =
+      watchlistItems.find((item) => item.id === selectedResearchItemId)?.sourceType;
+    const selectedFeedSource =
+      researchFeed.candidates.find((candidate) => candidate.ticker === selectedResearchTicker)?.sourceType;
+
+    void loadResearchInsightForTicker(
+      selectedResearchTicker,
+      selectedResearchItemId,
+      selectedWatchlistSource ?? selectedFeedSource
+    );
+  }, [
+    activeTab,
+    selectedPortfolio?.id,
+    selectedResearchItemId,
+    selectedResearchTicker,
+    researchFeed.candidates,
+    watchlistItems
+  ]);
+
   const selectedMetrics = selectedPortfolio?.metrics ?? null;
   const dailyPnl = useMemo(
     () => selectedPortfolio?.holdings.reduce((sum, holding) => sum + (holding.dailyPnl ?? 0), 0) ?? 0,
@@ -1178,6 +1359,58 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         .sort((left, right) => left.contribution - right.contribution)[0] ?? null,
     [benchmarkAnalytics]
   );
+  const researchMarketCapMap = useMemo(() => {
+    const pairs: Array<[string, number | null]> = [];
+    for (const candidate of researchFeed.candidates) {
+      pairs.push([candidate.ticker.toUpperCase(), candidate.marketCap ?? null]);
+    }
+    if (researchPreview) {
+      pairs.push([researchPreview.symbol.toUpperCase(), researchPreview.marketCap ?? null]);
+    }
+    return new Map(pairs);
+  }, [researchFeed.candidates, researchPreview]);
+  const researchPriceMap = useMemo(() => {
+    const pairs: Array<[string, number | null]> = [];
+    for (const candidate of researchFeed.candidates) {
+      pairs.push([candidate.ticker.toUpperCase(), candidate.currentPrice]);
+    }
+    if (researchPreview) {
+      pairs.push([researchPreview.symbol.toUpperCase(), researchPreview.currentPrice ?? null]);
+    }
+    for (const holding of selectedPortfolio?.holdings ?? []) {
+      pairs.push([holding.ticker.toUpperCase(), holding.currentPrice ?? null]);
+    }
+    return new Map(pairs);
+  }, [researchFeed.candidates, researchPreview, selectedPortfolio?.holdings]);
+  const sortedWatchlist = useMemo(
+    () => sortWatchlistItems(watchlistItems, researchSort, researchMarketCapMap),
+    [researchMarketCapMap, researchSort, watchlistItems]
+  );
+  const groupedWatchlist = useMemo(
+    () =>
+      ["NEW", "RESEARCHING", "READY", "PASSED", "PROMOTED"].map((status) => ({
+        status,
+        items: sortedWatchlist.filter((item) => item.status === status)
+      })),
+    [sortedWatchlist]
+  );
+  const selectedWatchlistItem = useMemo(
+    () => watchlistItems.find((item) => item.id === selectedResearchItemId) ?? null,
+    [selectedResearchItemId, watchlistItems]
+  );
+  const selectedFeedCandidate = useMemo(
+    () => researchFeed.candidates.find((candidate) => candidate.ticker === selectedResearchTicker) ?? null,
+    [researchFeed.candidates, selectedResearchTicker]
+  );
+  const activeWatchlistTickerSet = useMemo(
+    () =>
+      new Set(
+        watchlistItems
+          .filter((item) => item.status !== "PASSED" && item.status !== "PROMOTED")
+          .map((item) => item.ticker.toUpperCase())
+      ),
+    [watchlistItems]
+  );
   async function refreshPortfolioList() {
     const response = await fetch("/api/portfolio", {
       headers: {
@@ -1288,6 +1521,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             recoveryDays: number;
           }>;
           auditLogs: AuditEntryView[];
+          watchlistItems: WatchlistItem[];
         };
       };
 
@@ -1301,7 +1535,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         metrics: null,
         valueHistory: [],
         auditLog: portfolioData.portfolio.auditLogs,
-        stressTests: portfolioData.portfolio.stressTests
+        stressTests: portfolioData.portfolio.stressTests,
+        watchlist: portfolioData.portfolio.watchlistItems ?? []
       };
 
       setSelectedPortfolio(nextPortfolio);
@@ -1576,6 +1811,313 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     await loadBenchmarkPreview(result.symbol, result);
   }
 
+  async function refreshWatchlist(portfolioId = selectedPortfolioId) {
+    if (!portfolioId) {
+      return [];
+    }
+
+    const response = await fetch(`/api/portfolio/${portfolioId}/watchlist`, {
+      headers: {
+        ...(await getAuthHeaders())
+      }
+    });
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
+    }
+    const data = (await response.json()) as { items: WatchlistItem[] };
+    updateWatchlistSnapshot(data.items ?? []);
+    return data.items ?? [];
+  }
+
+  async function loadResearchFeed(portfolioId: string, refresh = false) {
+    const todayKey = `research-feed:${initialData.user.id}:${portfolioId}`;
+    const response = await fetch(`/api/portfolio/${portfolioId}/research/feed`, {
+      method: refresh ? "POST" : "GET",
+      headers: {
+        ...(await getAuthHeaders())
+      }
+    });
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
+    }
+    const data = (await response.json()) as {
+      generatedAt: string | null;
+      candidates: ResearchCandidate[];
+      error?: string;
+    };
+    setResearchFeed({
+      generatedAt: data.generatedAt,
+      candidates: data.candidates ?? []
+    });
+    if (data.error) {
+      setResearchFeedError(data.error);
+    } else {
+      setResearchFeedError(null);
+      window.localStorage.setItem(todayKey, new Date().toISOString().slice(0, 10));
+    }
+    return data.candidates ?? [];
+  }
+
+  async function loadResearchPreview(
+    symbol: string,
+    selection?: SecuritySearchResult | null
+  ) {
+    const normalizedSymbol = normalizeBenchmarkSymbol(symbol);
+    if (!normalizedSymbol) {
+      setResearchPreview(null);
+      setResearchPreviewLoading(false);
+      return false;
+    }
+
+    setResearchPreviewLoading(true);
+    setResearchSearchError(null);
+    try {
+      const preview = await fetchSecurityPreviewData(normalizedSymbol);
+      setSelectedResearchSecurity(
+        selection ?? {
+          symbol: preview.symbol,
+          companyName: preview.companyName,
+          exchange: preview.exchange,
+          quoteType: preview.quoteType,
+          sector: preview.sector,
+          hasPreviewData: true
+        }
+      );
+      setResearchSearchTerm(preview.symbol);
+      setResearchPreview(preview);
+      setSelectedResearchTicker(preview.symbol);
+      setSelectedResearchItemId(null);
+      setResearchSearchResults([]);
+      return true;
+    } catch (error) {
+      setSelectedResearchSecurity(null);
+      setResearchPreview(null);
+      setResearchSearchError(error instanceof Error ? error.message : "Research preview failed");
+      return false;
+    } finally {
+      setResearchPreviewLoading(false);
+    }
+  }
+
+  async function handleSelectResearchSearchResult(result: SecuritySearchResult) {
+    setSelectedResearchSecurity(result);
+    setResearchSearchTerm(result.symbol);
+    await loadResearchPreview(result.symbol, result);
+  }
+
+  async function saveWatchlistEntry(input: {
+    ticker: string;
+    sourceType: "manual" | "related" | "screener" | "trending";
+    sourceLabel: string;
+  }) {
+    if (!selectedPortfolio) {
+      setErrorMessage("Select a portfolio before saving research ideas.");
+      return false;
+    }
+
+    return new Promise<boolean>((resolve) => {
+      startTransition(async () => {
+        try {
+          setResearchSearchError(null);
+          const response = await fetch(`/api/portfolio/${selectedPortfolio.id}/watchlist`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              ...(await getAuthHeaders())
+            },
+            body: JSON.stringify(input)
+          });
+
+          if (!response.ok) {
+            throw new Error(await readErrorMessage(response));
+          }
+
+          const data = (await response.json()) as { item: WatchlistItem };
+          const nextItems = await refreshWatchlist(selectedPortfolio.id);
+          setSelectedResearchItemId(data.item.id);
+          setSelectedResearchTicker(data.item.ticker);
+          setStatusMessage(`${data.item.ticker} saved to research queue.`);
+          if (nextItems.length > 0) {
+            setResearchPreview(null);
+            setSelectedResearchSecurity(null);
+            setResearchSearchTerm("");
+          }
+          resolve(true);
+        } catch (error) {
+          setResearchSearchError(
+            error instanceof Error ? error.message : "Failed to save research idea"
+          );
+          resolve(false);
+        }
+      });
+    });
+  }
+
+  async function saveWatchlistDraft() {
+    if (!selectedPortfolio || !selectedResearchItemId) {
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const response = await fetch(
+          `/api/portfolio/${selectedPortfolio.id}/watchlist/${selectedResearchItemId}`,
+          {
+            method: "PATCH",
+            headers: {
+              "content-type": "application/json",
+              ...(await getAuthHeaders())
+            },
+            body: JSON.stringify({
+              status: watchlistDraft.status,
+              conviction: Number(watchlistDraft.conviction),
+              targetPrice: watchlistDraft.targetPrice ? Number(watchlistDraft.targetPrice) : null,
+              thesis: watchlistDraft.thesis,
+              catalysts: watchlistDraft.catalysts,
+              risks: watchlistDraft.risks,
+              valuationNotes: watchlistDraft.valuationNotes,
+              notes: watchlistDraft.notes
+            })
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(await readErrorMessage(response));
+        }
+
+        await refreshWatchlist(selectedPortfolio.id);
+        setStatusMessage("Research notebook updated.");
+      } catch (error) {
+        setResearchInsightError(
+          error instanceof Error ? error.message : "Failed to update research item"
+        );
+      }
+    });
+  }
+
+  async function removeWatchlistItem(itemId: string) {
+    if (!selectedPortfolio) {
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const response = await fetch(`/api/portfolio/${selectedPortfolio.id}/watchlist/${itemId}`, {
+          method: "DELETE",
+          headers: {
+            ...(await getAuthHeaders())
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(await readErrorMessage(response));
+        }
+
+        const nextItems = await refreshWatchlist(selectedPortfolio.id);
+        const nextItem = nextItems[0] ?? null;
+        setSelectedResearchItemId(nextItem?.id ?? null);
+        setSelectedResearchTicker(nextItem?.ticker ?? null);
+        setStatusMessage("Research item removed.");
+      } catch (error) {
+        setResearchInsightError(
+          error instanceof Error ? error.message : "Failed to remove research item"
+        );
+      }
+    });
+  }
+
+  async function markWatchlistPromoted(itemId: string) {
+    if (!selectedPortfolio) {
+      return false;
+    }
+
+    const response = await fetch(
+      `/api/portfolio/${selectedPortfolio.id}/watchlist/${itemId}/promote`,
+      {
+        method: "POST",
+        headers: {
+          ...(await getAuthHeaders())
+        }
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
+    }
+
+    await refreshWatchlist(selectedPortfolio.id);
+    return true;
+  }
+
+  async function promoteWatchlistItem(item: WatchlistItem) {
+    const selection: SecuritySearchResult = {
+      symbol: item.ticker,
+      companyName: item.companyName,
+      exchange: item.exchange,
+      quoteType: item.quoteType,
+      sector: item.sector,
+      hasPreviewData: true
+    };
+
+    setPendingPromotionItemId(item.id);
+    setEditingTicker(null);
+    setPositionShares("");
+    setPositionAvgCost("");
+    setPositionAssetClass("equities");
+    setActiveTab("holdings");
+    setSelectedSecurity(selection);
+    setPositionTicker(item.ticker);
+    setPositionName(item.companyName);
+    setSearchTerm(item.ticker);
+    setPositionPreview(null);
+    await loadPositionPreview(item.ticker, selection);
+    setStatusMessage(`Review size and cost basis, then add ${item.ticker} as a holding.`);
+  }
+
+  async function loadResearchInsightForTicker(
+    ticker: string,
+    watchlistItemId?: string | null,
+    sourceType?: "manual" | "related" | "screener" | "trending"
+  ) {
+    if (!selectedPortfolio) {
+      return;
+    }
+
+    setResearchInsightLoading(true);
+    setResearchInsightError(null);
+    try {
+      const response = await fetch(`/api/portfolio/${selectedPortfolio.id}/research/insight`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(await getAuthHeaders())
+        },
+        body: JSON.stringify({
+          ticker,
+          watchlistItemId: watchlistItemId ?? undefined,
+          sourceType
+        })
+      });
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+      const data = (await response.json()) as {
+        insight: ResearchInsight;
+        featureBundle: ResearchFeatureBundle;
+      };
+      setResearchInsight(data.insight);
+      setResearchFeatureBundle(data.featureBundle);
+    } catch (error) {
+      setResearchInsight(null);
+      setResearchFeatureBundle(null);
+      setResearchInsightError(
+        error instanceof Error ? error.message : "Research copilot unavailable"
+      );
+    } finally {
+      setResearchInsightLoading(false);
+    }
+  }
+
   function resetPositionForm() {
     setPositionTicker("");
     setPositionName("");
@@ -1589,6 +2131,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     setSearchResults([]);
     setSearchLoading(false);
     setSearchError(null);
+    setPendingPromotionItemId(null);
   }
 
   function resetBenchmarkForm() {
@@ -1810,6 +2353,18 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       actionLabel
     );
     if (saved) {
+      if (pendingPromotionItemId) {
+        try {
+          await markWatchlistPromoted(pendingPromotionItemId);
+          setStatusMessage(`${normalizedTicker} promoted into holdings.`);
+        } catch (error) {
+          setErrorMessage(
+            error instanceof Error ? error.message : "Position saved, but research promotion failed."
+          );
+        } finally {
+          setPendingPromotionItemId(null);
+        }
+      }
       resetPositionForm();
     }
   }
@@ -3309,6 +3864,644 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     </div>
   );
 
+  const renderResearch = () => {
+    const selectedLabel =
+      selectedWatchlistItem?.companyName ??
+      selectedFeedCandidate?.companyName ??
+      researchPreview?.companyName ??
+      selectedResearchTicker;
+
+    return (
+      <div className="space-y-6">
+        <Panel title="Research Command Strip">
+          {!selectedPortfolio ? (
+            <EmptyState
+              title="No portfolio selected"
+              copy="Select a portfolio to source ideas, build a watchlist, and promote research names into holdings."
+            />
+          ) : (
+            <div className="grid gap-3 lg:grid-cols-6">
+              <InfoPill label="Portfolio" value={selectedPortfolio.name} />
+              <InfoPill label="Benchmark" value={selectedPortfolio.benchmark} />
+              <InfoPill label="Watchlist" value={`${watchlistItems.length} names`} />
+              <InfoPill
+                label="Idea Feed"
+                value={researchFeed.generatedAt ? formatCompactDate(researchFeed.generatedAt) : "Not loaded"}
+              />
+              <InfoPill
+                label="Selected"
+                value={selectedResearchTicker ?? "None"}
+              />
+              <InfoPill
+                label="AI"
+                value={researchInsight?.source === "AI" ? "Live interpretation" : "Deterministic fallback"}
+              />
+            </div>
+          )}
+        </Panel>
+
+        <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+          <Panel
+            title="Idea Feed"
+            action={
+              selectedPortfolio ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResearchFeedLoading(true);
+                    void loadResearchFeed(selectedPortfolio.id, true)
+                      .catch((error) => {
+                        setResearchFeedError(
+                          error instanceof Error ? error.message : "Failed to refresh research feed"
+                        );
+                      })
+                      .finally(() => setResearchFeedLoading(false));
+                  }}
+                  className="text-sm text-zinc-300 transition hover:text-white"
+                >
+                  Refresh Feed
+                </button>
+              ) : null
+            }
+          >
+            {researchFeedError ? <div className="mb-4"><InlineNotice message={researchFeedError} tone="warning" /></div> : null}
+            {!selectedPortfolio ? (
+              <EmptyState
+                title="Research feed unavailable"
+                copy="Pick an active portfolio first so Yahoo candidate sourcing can use its benchmark and current holdings."
+              />
+            ) : (
+              <div className="space-y-5">
+                <div className="relative">
+                  <label className="mb-2 block text-sm text-slate-300">Manual Yahoo search</label>
+                  {researchSearchError ? <div className="mb-2"><InlineNotice message={researchSearchError} tone="warning" /></div> : null}
+                  <input
+                    value={researchSearchTerm}
+                    onChange={(event) => {
+                      const nextQuery = event.target.value;
+                      setResearchSearchTerm(nextQuery);
+                      setSelectedResearchSecurity(null);
+                      setResearchPreview(null);
+                      setResearchSearchError(null);
+                    }}
+                    placeholder="Search ideas by ticker or company..."
+                    className="w-full rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+                  />
+                  {researchSearchTerm.trim() && !selectedResearchSecurity ? (
+                    <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-xl border border-white/10 bg-panel/95 shadow-panel backdrop-blur-xl">
+                      {researchSearchLoading ? (
+                        <div className="px-4 py-3 text-sm text-slate-400">Searching Yahoo Finance...</div>
+                      ) : researchSearchResults.length > 0 ? (
+                        <div className="max-h-72 overflow-y-auto py-2">
+                          {researchSearchResults.map((result) => (
+                            <button
+                              key={`${result.symbol}:${result.exchange}`}
+                              type="button"
+                              onClick={() => {
+                                void handleSelectResearchSearchResult(result);
+                              }}
+                              className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition hover:bg-white/[0.04]"
+                            >
+                              <div>
+                                <p className="text-sm font-semibold text-white">{result.symbol}</p>
+                                <p className="mt-1 text-sm text-slate-400">{result.companyName}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{result.quoteType}</p>
+                                <p className="mt-1 text-sm text-slate-400">{result.exchange}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="px-4 py-3 text-sm text-slate-400">No listed Yahoo matches found.</div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+
+                {researchPreview ? (
+                  <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Selected idea</p>
+                        <p className="mt-2 text-lg font-semibold text-white">{researchPreview.symbol}</p>
+                        <p className="mt-1 text-sm text-slate-400">{researchPreview.companyName}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Current price</p>
+                        <p className="mt-2 text-lg font-semibold text-white">
+                          {formatCurrency(researchPreview.currentPrice ?? null)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                      <InfoPill label="Sector" value={researchPreview.sector} />
+                      <InfoPill label="Exchange" value={researchPreview.exchange} />
+                      <InfoPill label="Market Cap" value={formatBigNumber(researchPreview.marketCap)} />
+                    </div>
+                    <div className="mt-4 flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void saveWatchlistEntry({
+                            ticker: researchPreview.symbol,
+                            sourceType: "manual",
+                            sourceLabel: "Manual search"
+                          })
+                        }
+                        className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-zinc-200"
+                      >
+                        Save to Watchlist
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {researchFeedLoading ? (
+                  <div className="rounded-xl border border-white/10 bg-black/35 p-4 text-sm text-slate-400">
+                    Building Yahoo candidate feed...
+                  </div>
+                ) : researchFeed.candidates.length === 0 ? (
+                  <EmptyState
+                    title="No ideas surfaced yet"
+                    copy="Use manual Yahoo search or refresh the feed to source related, screener, and trending candidates for this portfolio."
+                  />
+                ) : (
+                  <div className="space-y-4">
+                    {(["related", "screener", "trending"] as const).map((sourceType) => {
+                      const rows = researchFeed.candidates.filter((candidate) => candidate.sourceType === sourceType);
+                      if (rows.length === 0) {
+                        return null;
+                      }
+                      return (
+                        <div key={sourceType} className="space-y-2">
+                          <p className="text-xs uppercase tracking-[0.22em] text-slate-500">
+                            {sourceType === "related"
+                              ? "Related ideas"
+                              : sourceType === "screener"
+                                ? "Benchmark-aware screens"
+                                : "Trending names"}
+                          </p>
+                          {rows.map((candidate) => (
+                            <button
+                              key={`${sourceType}:${candidate.ticker}`}
+                              type="button"
+                              onClick={() => {
+                                setSelectedResearchTicker(candidate.ticker);
+                                setSelectedResearchItemId(null);
+                                setResearchPreview(null);
+                              }}
+                              className={cn(
+                                "w-full rounded-xl border p-4 text-left transition",
+                                selectedResearchTicker === candidate.ticker
+                                  ? "border-white/25 bg-white/[0.045]"
+                                  : "border-white/10 bg-black/35 hover:border-white/20"
+                              )}
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-4">
+                                <div>
+                                  <div className="flex items-center gap-3">
+                                    <p className="text-base font-semibold text-white">{candidate.ticker}</p>
+                                    <span className="rounded-md border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                                      {candidate.sourceLabel}
+                                    </span>
+                                  </div>
+                                  <p className="mt-1 text-sm text-slate-400">{candidate.companyName}</p>
+                                  <p className="mt-2 text-sm text-slate-300">
+                                    {candidate.aiSummary ?? candidate.deterministicSummary}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">AI fit</p>
+                                  <p className="mt-1 text-xl font-semibold text-white">{candidate.fitScore}/100</p>
+                                  <p className="mt-1 text-sm text-slate-400">{candidate.sector}</p>
+                                </div>
+                              </div>
+                              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                                <div className="flex flex-wrap gap-2 text-xs text-slate-400">
+                                  <span>{formatCurrency(candidate.currentPrice)}</span>
+                                  <span>{formatBigNumber(candidate.marketCap)}</span>
+                                  <span>{candidate.benchmarkContext}</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void saveWatchlistEntry({
+                                      ticker: candidate.ticker,
+                                      sourceType: candidate.sourceType,
+                                      sourceLabel: candidate.sourceLabel
+                                    });
+                                  }}
+                                  disabled={activeWatchlistTickerSet.has(candidate.ticker.toUpperCase())}
+                                  className="rounded-md border border-white/12 px-3 py-2 text-sm text-zinc-200 transition hover:border-white/25 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {activeWatchlistTickerSet.has(candidate.ticker.toUpperCase())
+                                    ? "In Watchlist"
+                                    : "Save to Watchlist"}
+                                </button>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="Watchlist Queue / Notebook">
+            {!selectedPortfolio ? (
+              <EmptyState
+                title="No research queue"
+                copy="Select a portfolio to persist thesis notes, catalysts, risks, and conviction for candidate names."
+              />
+            ) : (
+              <div className="space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm text-slate-400">
+                    Portfolio-scoped research queue with editable thesis and promotion workflow.
+                  </p>
+                  <select
+                    value={researchSort}
+                    onChange={(event) =>
+                      setResearchSort(event.target.value as "updated" | "conviction" | "marketCap")
+                    }
+                    className="rounded-md border border-white/10 bg-black/50 px-3 py-2 text-sm text-white outline-none"
+                  >
+                    <option value="updated">Sort by updated</option>
+                    <option value="conviction">Sort by conviction</option>
+                    <option value="marketCap">Sort by market cap</option>
+                  </select>
+                </div>
+
+                {watchlistItems.length === 0 ? (
+                  <EmptyState
+                    title="No saved research names"
+                    copy="Save a Yahoo search result or feed candidate to start a thesis notebook for this portfolio."
+                  />
+                ) : (
+                  <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+                    <div className="space-y-4">
+                      {groupedWatchlist.map((group) =>
+                        group.items.length > 0 ? (
+                          <div key={group.status} className="space-y-2">
+                            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">{group.status}</p>
+                            {group.items.map((item) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedResearchItemId(item.id);
+                                  setSelectedResearchTicker(item.ticker);
+                                  setResearchPreview(null);
+                                }}
+                                className={cn(
+                                  "w-full rounded-xl border p-4 text-left transition",
+                                  selectedResearchItemId === item.id
+                                    ? "border-white/25 bg-white/[0.045]"
+                                    : "border-white/10 bg-black/35 hover:border-white/20"
+                                )}
+                              >
+                                <div className="flex items-start justify-between gap-4">
+                                  <div>
+                                    <p className="text-base font-semibold text-white">{item.ticker}</p>
+                                    <p className="mt-1 text-sm text-slate-400">{item.companyName}</p>
+                                    <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">
+                                      {item.sector}
+                                    </p>
+                                  </div>
+                                  <div className="text-right text-sm">
+                                    <p className="text-white">Conviction {item.conviction}/5</p>
+                                    <p className="mt-1 text-slate-400">
+                                      {item.targetPrice != null ? formatCurrency(item.targetPrice) : "Target open"}
+                                    </p>
+                                    <p className="mt-1 text-slate-500">
+                                      {formatCurrency(researchPriceMap.get(item.ticker.toUpperCase()))}
+                                    </p>
+                                  </div>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        ) : null
+                      )}
+                    </div>
+
+                    <div>
+                      {!selectedWatchlistItem ? (
+                        <EmptyState
+                          title="Select a watchlist item"
+                          copy="Pick a saved research name to edit thesis notes, conviction, status, and promotion readiness."
+                        />
+                      ) : (
+                        <div className="space-y-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="text-lg font-semibold text-white">{selectedWatchlistItem.ticker}</p>
+                              <p className="mt-1 text-sm text-slate-400">{selectedWatchlistItem.companyName}</p>
+                              <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">
+                                {selectedWatchlistItem.sourceLabel}
+                              </p>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void promoteWatchlistItem(selectedWatchlistItem)}
+                                className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-zinc-200"
+                              >
+                                Promote to Holding
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void removeWatchlistItem(selectedWatchlistItem.id)}
+                                className="rounded-md border border-danger/40 px-4 py-2 text-sm text-danger"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid gap-4 sm:grid-cols-3">
+                            <label className="block space-y-2">
+                              <span className="text-sm text-slate-300">Status</span>
+                              <select
+                                value={watchlistDraft.status}
+                                onChange={(event) =>
+                                  setWatchlistDraft((current) => ({
+                                    ...current,
+                                    status: event.target.value as WatchlistItem["status"]
+                                  }))
+                                }
+                                className="w-full rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white outline-none"
+                              >
+                                <option value="NEW">NEW</option>
+                                <option value="RESEARCHING">RESEARCHING</option>
+                                <option value="READY">READY</option>
+                                <option value="PASSED">PASSED</option>
+                                <option value="PROMOTED">PROMOTED</option>
+                              </select>
+                            </label>
+                            <label className="block space-y-2">
+                              <span className="text-sm text-slate-300">Conviction</span>
+                              <input
+                                value={watchlistDraft.conviction}
+                                onChange={(event) =>
+                                  setWatchlistDraft((current) => ({
+                                    ...current,
+                                    conviction: event.target.value
+                                  }))
+                                }
+                                type="number"
+                                min="1"
+                                max="5"
+                                className="w-full rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white outline-none"
+                              />
+                            </label>
+                            <label className="block space-y-2">
+                              <span className="text-sm text-slate-300">Target price</span>
+                              <input
+                                value={watchlistDraft.targetPrice}
+                                onChange={(event) =>
+                                  setWatchlistDraft((current) => ({
+                                    ...current,
+                                    targetPrice: event.target.value
+                                  }))
+                                }
+                                type="number"
+                                min="0"
+                                step="any"
+                                className="w-full rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white outline-none"
+                              />
+                            </label>
+                          </div>
+
+                          <label className="block space-y-2">
+                            <span className="text-sm text-slate-300">Thesis</span>
+                            <textarea
+                              value={watchlistDraft.thesis}
+                              onChange={(event) =>
+                                setWatchlistDraft((current) => ({ ...current, thesis: event.target.value }))
+                              }
+                              rows={4}
+                              className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none"
+                            />
+                          </label>
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <label className="block space-y-2">
+                              <span className="text-sm text-slate-300">Catalysts</span>
+                              <textarea
+                                value={watchlistDraft.catalysts}
+                                onChange={(event) =>
+                                  setWatchlistDraft((current) => ({ ...current, catalysts: event.target.value }))
+                                }
+                                rows={4}
+                                className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none"
+                              />
+                            </label>
+                            <label className="block space-y-2">
+                              <span className="text-sm text-slate-300">Risks</span>
+                              <textarea
+                                value={watchlistDraft.risks}
+                                onChange={(event) =>
+                                  setWatchlistDraft((current) => ({ ...current, risks: event.target.value }))
+                                }
+                                rows={4}
+                                className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none"
+                              />
+                            </label>
+                          </div>
+                          <label className="block space-y-2">
+                            <span className="text-sm text-slate-300">Valuation notes</span>
+                            <textarea
+                              value={watchlistDraft.valuationNotes}
+                              onChange={(event) =>
+                                setWatchlistDraft((current) => ({
+                                  ...current,
+                                  valuationNotes: event.target.value
+                                }))
+                              }
+                              rows={3}
+                              className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none"
+                            />
+                          </label>
+                          <label className="block space-y-2">
+                            <span className="text-sm text-slate-300">General notes</span>
+                            <textarea
+                              value={watchlistDraft.notes}
+                              onChange={(event) =>
+                                setWatchlistDraft((current) => ({ ...current, notes: event.target.value }))
+                              }
+                              rows={4}
+                              className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => void saveWatchlistDraft()}
+                            className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-zinc-200"
+                          >
+                            Save Notebook
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </Panel>
+        </div>
+
+        <Panel title="Portfolio Fit">
+          {researchInsightError ? <div className="mb-4"><InlineNotice message={researchInsightError} tone="warning" /></div> : null}
+          {!selectedPortfolio || !selectedResearchTicker ? (
+            <EmptyState
+              title="No selected research name"
+              copy="Pick a feed candidate or watchlist item to see AI-assisted memo output and deterministic portfolio-fit context."
+            />
+          ) : researchInsightLoading ? (
+            <div className="rounded-xl border border-white/10 bg-black/35 p-5 text-sm text-slate-400">
+              Building research memo and portfolio-fit summary...
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.22em] text-slate-500">
+                    {selectedResearchTicker}
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-white">{selectedLabel ?? selectedResearchTicker}</p>
+                  <p className="mt-2 text-sm text-slate-400">
+                    {selectedWatchlistItem?.sector ??
+                      selectedFeedCandidate?.sector ??
+                      researchPreview?.sector ??
+                      getDefaultSector()}
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <InfoPill
+                    label="Fit Score"
+                    value={
+                      researchInsight?.fitScore != null
+                        ? `${researchInsight.fitScore}/100`
+                        : selectedFeedCandidate
+                          ? `${selectedFeedCandidate.fitScore}/100`
+                          : "N/A"
+                    }
+                  />
+                  <InfoPill
+                    label="Data Confidence"
+                    value={researchInsight?.dataConfidence ?? selectedFeedCandidate?.dataConfidence ?? "N/A"}
+                  />
+                  <InfoPill
+                    label="Latest Price"
+                    value={formatCurrency(researchPriceMap.get(selectedResearchTicker.toUpperCase()))}
+                  />
+                </div>
+              </div>
+
+              {researchFeatureBundle ? (
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <MetricStat
+                    label="Diversification"
+                    value={researchFeatureBundle.sector}
+                    helper={researchFeatureBundle.diversificationImpact}
+                  />
+                  <MetricStat
+                    label="Concentration"
+                    value={researchFeatureBundle.topSector}
+                    helper={researchFeatureBundle.concentrationImpact}
+                  />
+                  <MetricStat
+                    label="Benchmark"
+                    value={researchFeatureBundle.benchmark}
+                    helper={researchFeatureBundle.benchmarkContext}
+                  />
+                  <MetricStat
+                    label="Missing Data"
+                    value={`${researchFeatureBundle.missingData.length}`}
+                    helper={
+                      researchFeatureBundle.missingData.length > 0
+                        ? researchFeatureBundle.missingData.join(", ")
+                        : "Yahoo coverage looks complete enough for a first pass."
+                    }
+                  />
+                </div>
+              ) : null}
+
+              {researchInsight ? (
+                <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+                  <div className="space-y-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                    <p className="text-xs uppercase tracking-[0.22em] text-slate-500">AI interpretation</p>
+                    <p className="text-sm leading-7 text-slate-300">{researchInsight.summary}</p>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="rounded-lg border border-white/10 bg-black/35 p-4">
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Portfolio fit</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-300">{researchInsight.portfolioFit}</p>
+                      </div>
+                      <div className="rounded-lg border border-white/10 bg-black/35 p-4">
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Top concern</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-300">{researchInsight.topConcern}</p>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-white/10 bg-black/35 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Why now</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-300">{researchInsight.whyNow}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-lg border border-white/10 bg-black/35 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Thesis</p>
+                      <div className="mt-3 space-y-2">
+                        {researchInsight.thesis.map((entry) => (
+                          <p key={entry} className="text-sm text-slate-300">{entry}</p>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-white/10 bg-black/35 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Catalysts</p>
+                      <div className="mt-3 space-y-2">
+                        {researchInsight.catalysts.map((entry) => (
+                          <p key={entry} className="text-sm text-slate-300">{entry}</p>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-white/10 bg-black/35 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Risks</p>
+                      <div className="mt-3 space-y-2">
+                        {researchInsight.risks.map((entry) => (
+                          <p key={entry} className="text-sm text-slate-300">{entry}</p>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-white/10 bg-black/35 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Diligence Questions</p>
+                      <div className="mt-3 space-y-2">
+                        {researchInsight.diligenceQuestions.map((entry) => (
+                          <p key={entry} className="text-sm text-slate-300">{entry}</p>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <EmptyState
+                  title="No research memo yet"
+                  copy="Select an idea or watchlist item to build a portfolio-fit memo from Yahoo facts and AI interpretation."
+                />
+              )}
+            </div>
+          )}
+        </Panel>
+      </div>
+    );
+  };
+
   const renderRisk = () => (
     <div className="space-y-6">
       <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
@@ -4222,6 +5415,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
         {activeTab === "overview" && renderOverview()}
         {activeTab === "holdings" && renderHoldings()}
+        {activeTab === "research" && renderResearch()}
         {activeTab === "risk" && renderRisk()}
         {activeTab === "stress" && renderStress()}
         {activeTab === "allocation" && renderAllocation()}

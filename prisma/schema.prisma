@@ -25,6 +25,7 @@ model Portfolio {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   positions   Position[]
+  watchlistItems WatchlistItem[]
   riskScores  RiskScore[]
   riskInsights RiskInsight[]
   stressTests StressTest[]
@@ -45,6 +46,33 @@ model Position {
 
   @@unique([portfolioId, ticker])
   @@index([portfolioId])
+}
+
+model WatchlistItem {
+  id             String    @id @default(uuid())
+  portfolioId    String
+  ticker         String
+  companyName    String
+  exchange       String
+  quoteType      String
+  sector         String
+  industry       String?
+  status         String    @default("NEW")
+  conviction     Int       @default(3)
+  targetPrice    Float?
+  thesis         String    @default("")
+  catalysts      String    @default("")
+  risks          String    @default("")
+  valuationNotes String    @default("")
+  notes          String    @default("")
+  sourceType     String    @default("manual")
+  sourceLabel    String    @default("Manual search")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  portfolio      Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@index([portfolioId, updatedAt(sort: Desc)])
+  @@index([portfolioId, status, updatedAt(sort: Desc)])
 }
 
 model RiskScore {

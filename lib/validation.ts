@@ -39,3 +39,36 @@ export const riskInsightSchema = z.object({
   refresh: z.boolean().optional().default(true),
   persist: z.boolean().optional().default(true)
 });
+
+export const watchlistStatusSchema = z.enum([
+  "NEW",
+  "RESEARCHING",
+  "READY",
+  "PASSED",
+  "PROMOTED"
+]);
+
+export const researchSourceTypeSchema = z.enum(["manual", "related", "screener", "trending"]);
+
+export const watchlistCreateSchema = z.object({
+  ticker: z.string().trim().min(1).max(12),
+  sourceType: researchSourceTypeSchema.optional().default("manual"),
+  sourceLabel: z.string().trim().min(1).max(64).optional().default("Manual search")
+});
+
+export const watchlistUpdateSchema = z.object({
+  status: watchlistStatusSchema.optional(),
+  conviction: z.number().int().min(1).max(5).optional(),
+  targetPrice: z.number().positive().nullable().optional(),
+  thesis: z.string().max(4000).optional(),
+  catalysts: z.string().max(4000).optional(),
+  risks: z.string().max(4000).optional(),
+  valuationNotes: z.string().max(4000).optional(),
+  notes: z.string().max(4000).optional()
+});
+
+export const researchInsightSchema = z.object({
+  ticker: z.string().trim().min(1).max(12),
+  watchlistItemId: z.string().uuid().optional(),
+  sourceType: researchSourceTypeSchema.optional()
+});

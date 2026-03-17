@@ -6,6 +6,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { positionSchema } from "@/lib/validation";
 import { normalizeBenchmarkSymbol } from "@/lib/benchmarks";
 import { fetchHistoricalSeriesResult, fetchSecurityPreview } from "@/lib/market";
+import { mapWatchlistItemRow } from "@/lib/research";
 import { z } from "zod";
 
 const patchSchema = z.object({
@@ -51,7 +52,14 @@ export async function GET(request: NextRequest, context: Context) {
     return badRequest("Portfolio not found", 404);
   }
 
-  const [{ data: portfolio, error }, { data: positions }, { data: riskScores }, { data: stressTests }, { data: auditLogs }] =
+  const [
+    { data: portfolio, error },
+    { data: positions },
+    { data: riskScores },
+    { data: stressTests },
+    { data: auditLogs },
+    { data: watchlistItems }
+  ] =
     await Promise.all([
       supabase
         .from("Portfolio")
@@ -62,7 +70,8 @@ export async function GET(request: NextRequest, context: Context) {
       supabase.from("Position").select("*").eq("portfolioId", portfolioId).order("ticker", { ascending: true }),
       supabase.from("RiskScore").select("*").eq("portfolioId", portfolioId).order("scoredAt", { ascending: false }).limit(10),
       supabase.from("StressTest").select("*").eq("portfolioId", portfolioId).order("runAt", { ascending: false }).limit(10),
-      supabase.from("AuditLog").select("*").eq("portfolioId", portfolioId).eq("userId", auth.user.id).order("timestamp", { ascending: false }).limit(20)
+      supabase.from("AuditLog").select("*").eq("portfolioId", portfolioId).eq("userId", auth.user.id).order("timestamp", { ascending: false }).limit(20),
+      supabase.from("WatchlistItem").select("*").eq("portfolioId", portfolioId).order("updatedAt", { ascending: false })
     ]);
 
   if (error || !portfolio) {
@@ -75,7 +84,8 @@ export async function GET(request: NextRequest, context: Context) {
       positions: positions ?? [],
       riskScores: riskScores ?? [],
       stressTests: stressTests ?? [],
-      auditLogs: auditLogs ?? []
+      auditLogs: auditLogs ?? [],
+      watchlistItems: (watchlistItems ?? []).map((item) => mapWatchlistItemRow(item))
     }
   });
 }

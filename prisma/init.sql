@@ -37,6 +37,32 @@ CREATE TABLE "Position" (
 );
 
 -- CreateTable
+CREATE TABLE "WatchlistItem" (
+    "id" TEXT NOT NULL,
+    "portfolioId" TEXT NOT NULL,
+    "ticker" TEXT NOT NULL,
+    "companyName" TEXT NOT NULL,
+    "exchange" TEXT NOT NULL,
+    "quoteType" TEXT NOT NULL,
+    "sector" TEXT NOT NULL,
+    "industry" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'NEW',
+    "conviction" INTEGER NOT NULL DEFAULT 3,
+    "targetPrice" DOUBLE PRECISION,
+    "thesis" TEXT NOT NULL DEFAULT '',
+    "catalysts" TEXT NOT NULL DEFAULT '',
+    "risks" TEXT NOT NULL DEFAULT '',
+    "valuationNotes" TEXT NOT NULL DEFAULT '',
+    "notes" TEXT NOT NULL DEFAULT '',
+    "sourceType" TEXT NOT NULL DEFAULT 'manual',
+    "sourceLabel" TEXT NOT NULL DEFAULT 'Manual search',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "WatchlistItem_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "RiskScore" (
     "id" TEXT NOT NULL,
     "portfolioId" TEXT NOT NULL,
@@ -118,6 +144,17 @@ CREATE INDEX "Position_portfolioId_idx" ON "Position"("portfolioId");
 CREATE UNIQUE INDEX "Position_portfolioId_ticker_key" ON "Position"("portfolioId", "ticker");
 
 -- CreateIndex
+CREATE INDEX "WatchlistItem_portfolioId_updatedAt_idx" ON "WatchlistItem"("portfolioId", "updatedAt" DESC);
+
+-- CreateIndex
+CREATE INDEX "WatchlistItem_portfolioId_status_updatedAt_idx" ON "WatchlistItem"("portfolioId", "status", "updatedAt" DESC);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "WatchlistItem_portfolioId_ticker_active_key"
+ON "WatchlistItem"("portfolioId", "ticker")
+WHERE "status" NOT IN ('PASSED', 'PROMOTED');
+
+-- CreateIndex
 CREATE INDEX "RiskScore_portfolioId_scoredAt_idx" ON "RiskScore"("portfolioId", "scoredAt" DESC);
 
 -- CreateIndex
@@ -137,6 +174,9 @@ ALTER TABLE "Portfolio" ADD CONSTRAINT "Portfolio_userId_fkey" FOREIGN KEY ("use
 
 -- AddForeignKey
 ALTER TABLE "Position" ADD CONSTRAINT "Position_portfolioId_fkey" FOREIGN KEY ("portfolioId") REFERENCES "Portfolio"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WatchlistItem" ADD CONSTRAINT "WatchlistItem_portfolioId_fkey" FOREIGN KEY ("portfolioId") REFERENCES "Portfolio"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "RiskScore" ADD CONSTRAINT "RiskScore_portfolioId_fkey" FOREIGN KEY ("portfolioId") REFERENCES "Portfolio"("id") ON DELETE CASCADE ON UPDATE CASCADE;
