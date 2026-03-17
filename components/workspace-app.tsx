@@ -136,13 +136,13 @@ function Panel({
   return (
     <section
       className={cn(
-        "animate-[fadeIn_220ms_ease-out] rounded-2xl border border-white/10 bg-panel/90 p-5 shadow-panel backdrop-blur-xl",
+        "animate-[fadeIn_220ms_ease-out] rounded-xl border border-white/8 bg-panel px-5 py-4 shadow-panel",
         className
       )}
     >
-      <div className="mb-5 flex items-start justify-between gap-4">
+      <div className="mb-4 flex items-start justify-between gap-4 border-b border-white/8 pb-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.25em] text-slate-500">{title}</p>
+          <p className="text-sm font-semibold text-white">{title}</p>
         </div>
         {action}
       </div>
@@ -171,17 +171,17 @@ function MetricStat({
   tone?: "default" | "positive" | "negative";
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.025] p-4">
-      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{label}</p>
+    <div className="rounded-lg border border-white/8 bg-black/20 p-4">
+      <p className="text-xs font-medium text-slate-400">{label}</p>
       <p
         className={cn(
-          "mt-3 text-3xl font-semibold tracking-[-0.03em]",
+          "mt-2 text-2xl font-semibold tracking-[-0.02em]",
           tone === "positive" ? "text-success" : tone === "negative" ? "text-danger" : "text-white"
         )}
       >
         {value}
       </p>
-      {helper ? <p className="mt-2 text-sm text-slate-400">{helper}</p> : null}
+      {helper ? <p className="mt-2 text-sm leading-6 text-slate-500">{helper}</p> : null}
     </div>
   );
 }
@@ -190,7 +190,7 @@ function HealthBandBadge({ band }: { band: "Strong" | "Moderate" | "Weak" }) {
   return (
     <span
       className={cn(
-        "inline-flex rounded-md border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em]",
+        "inline-flex rounded-md border px-2 py-1 text-[11px] font-medium",
         band === "Strong"
           ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
           : band === "Moderate"
@@ -216,18 +216,18 @@ function HealthScoreCard({
   };
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.025] p-4">
+    <div className="rounded-lg border border-white/8 bg-black/20 p-4">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{label}</p>
+        <p className="text-xs font-medium text-slate-400">{label}</p>
         <HealthBandBadge band={detail.band} />
       </div>
-      <p className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-white">{detail.score}/100</p>
-      <p className="mt-2 text-sm leading-6 text-slate-400">{detail.summary}</p>
+      <p className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-white">{detail.score}/100</p>
+      <p className="mt-2 text-sm leading-6 text-slate-500">{detail.summary}</p>
       <details className="mt-4 group">
-        <summary className="cursor-pointer list-none text-xs uppercase tracking-[0.18em] text-slate-500 transition group-open:text-slate-300">
+        <summary className="cursor-pointer list-none text-xs font-medium text-slate-500 transition group-open:text-slate-300">
           Score basis
         </summary>
-        <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
+        <div className="mt-3 space-y-2 border-t border-white/8 pt-3">
           {detail.drivers.map((driver) => (
             <p key={driver} className="text-sm text-slate-300">
               {driver}
@@ -249,8 +249,8 @@ function InfoPill({
   tone?: "default" | "positive" | "negative";
 }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-white/[0.03] px-4 py-2.5">
-      <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">{label}</p>
+    <div className="rounded-md border border-white/8 bg-black/20 px-3 py-2">
+      <p className="text-[11px] font-medium text-slate-500">{label}</p>
       <p
         className={cn(
           "mt-1 text-sm font-medium",
@@ -273,7 +273,7 @@ function ResearchToneChip({
   return (
     <span
       className={cn(
-        "inline-flex rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em]",
+        "inline-flex rounded-md border px-2 py-1 text-[11px] font-medium",
         tone === "positive"
           ? "border-success/30 bg-success/10 text-success"
           : tone === "warning"
@@ -296,10 +296,10 @@ function ResearchInsightCard({
   helper?: string;
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-black/30 p-4">
-      <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">{label}</p>
+    <div className="rounded-lg border border-white/8 bg-black/20 p-4">
+      <p className="text-xs font-medium text-slate-500">{label}</p>
       <p className="mt-2 text-base font-semibold text-white">{value}</p>
-      {helper ? <p className="mt-2 text-sm leading-6 text-slate-400">{helper}</p> : null}
+      {helper ? <p className="mt-2 text-sm leading-6 text-slate-500">{helper}</p> : null}
     </div>
   );
 }
@@ -312,8 +312,8 @@ function ResearchBulletList({
   items: string[];
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-black/30 p-4">
-      <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">{title}</p>
+    <div className="rounded-lg border border-white/8 bg-black/20 p-4">
+      <p className="text-xs font-medium text-slate-500">{title}</p>
       <div className="mt-3 space-y-2">
         {items.length > 0 ? (
           items.map((entry) => (
@@ -438,9 +438,9 @@ function ResearchFitComposition({
   );
 
   return (
-    <div className="rounded-xl border border-white/10 bg-black/30 p-4">
+    <div className="rounded-lg border border-white/8 bg-black/20 p-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Fit Composition</p>
+        <p className="text-xs font-medium text-slate-500">Fit composition</p>
         <p className="text-sm font-semibold text-white">{fitScore}/100</p>
       </div>
       <div className="mt-3 h-12">
@@ -462,8 +462,8 @@ function ResearchFitComposition({
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
         {segments.map((segment) => (
-          <div key={segment.key} className="rounded-lg border border-white/8 bg-white/[0.025] px-3 py-2">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{segment.label}</p>
+          <div key={segment.key} className="rounded-md border border-white/8 bg-white/[0.025] px-3 py-2">
+            <p className="text-[11px] font-medium text-slate-500">{segment.label}</p>
             <div className="mt-2 flex items-center gap-2">
               <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: segment.color }} />
               <span className="text-sm text-white">{segment.value}</span>
@@ -479,8 +479,8 @@ function ResearchQualityStrip({ bundle }: { bundle: ResearchFeatureBundle | null
   const items = qualityScoreItems(bundle);
 
   return (
-    <div className="rounded-xl border border-white/10 bg-black/30 p-4">
-      <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Quality Snapshot</p>
+    <div className="rounded-lg border border-white/8 bg-black/20 p-4">
+      <p className="text-xs font-medium text-slate-500">Quality snapshot</p>
       <div className="mt-4 space-y-3">
         {items.length > 0 ? (
           items.map((item) => (
@@ -512,8 +512,8 @@ function ResearchStatusFlow({ status }: { status: WatchlistItem["status"] | "Fee
   const activeIndex = status === "Feed candidate" ? -1 : steps.indexOf(status as (typeof steps)[number]);
 
   return (
-    <div className="rounded-xl border border-white/10 bg-black/30 p-4">
-      <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Research Flow</p>
+    <div className="rounded-lg border border-white/8 bg-black/20 p-4">
+      <p className="text-xs font-medium text-slate-500">Research flow</p>
       <div className="mt-4 flex items-center gap-2">
         {steps.map((step, index) => {
           const active = activeIndex >= index;
@@ -521,14 +521,14 @@ function ResearchStatusFlow({ status }: { status: WatchlistItem["status"] | "Fee
             <div key={step} className="flex min-w-0 flex-1 items-center gap-2">
               <div
                 className={cn(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold tracking-[0.18em]",
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border text-[10px] font-semibold",
                   active ? "border-white/25 bg-white text-black" : "border-white/10 bg-white/[0.03] text-slate-500"
                 )}
               >
                 {index + 1}
               </div>
               <div className="min-w-0 flex-1">
-                <p className={cn("truncate text-[10px] uppercase tracking-[0.18em]", active ? "text-white" : "text-slate-500")}>
+                <p className={cn("truncate text-[11px] font-medium", active ? "text-white" : "text-slate-500")}>
                   {step}
                 </p>
                 {index < steps.length - 1 ? (
@@ -553,9 +553,9 @@ function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-10 text-center">
-      <h3 className="text-2xl font-semibold text-white">{title}</h3>
-      <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-400">{copy}</p>
+    <div className="rounded-xl border border-dashed border-white/8 bg-black/10 p-8 text-center">
+      <h3 className="text-xl font-semibold text-white">{title}</h3>
+      <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-500">{copy}</p>
       {action ? <div className="mt-6">{action}</div> : null}
     </div>
   );
@@ -571,12 +571,12 @@ function InlineNotice({
   return (
     <div
       className={cn(
-        "rounded-xl border px-4 py-3 text-sm",
+        "rounded-lg border px-4 py-3 text-sm",
         tone === "danger"
           ? "border-danger/30 bg-danger/10 text-danger"
           : tone === "warning"
             ? "border-warning/30 bg-warning/10 text-warning"
-            : "border-white/10 bg-white/[0.03] text-slate-300"
+            : "border-white/8 bg-black/20 text-slate-300"
       )}
     >
       {message}
@@ -3771,7 +3771,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
   const renderHoldings = () => (
     <div className="space-y-6">
-      <Panel title="Holdings Command Strip">
+      <Panel title="Holdings">
         {!selectedPortfolio ? (
           <EmptyState
             title="No portfolio selected"
@@ -4744,7 +4744,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                           type="button"
                           onClick={() => setResearchNotebookSection(section.id)}
                           className={cn(
-                            "rounded-full border px-3 py-1.5 text-xs uppercase tracking-[0.18em] transition",
+                            "rounded-md border px-3 py-1.5 text-xs font-medium transition",
                             researchNotebookSection === section.id
                               ? "border-white/20 bg-white/[0.08] text-white"
                               : "border-white/10 bg-black/20 text-slate-400 hover:text-white"
@@ -4864,7 +4864,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     );
 
     const renderInsightPane = () => (
-      <Panel title="Analysis Rail" className="flex h-full min-h-[34rem] flex-col xl:min-h-0">
+      <Panel title="Analysis" className="flex h-full min-h-[34rem] flex-col xl:min-h-0">
         {researchInsightError ? <div className="mb-3"><InlineNotice message={researchInsightError} tone="warning" /></div> : null}
         {!selectedPortfolio || !selectedResearchTicker ? (
           <EmptyState
@@ -4883,10 +4883,10 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             }
             className="flex min-h-0 flex-1 flex-col"
           >
-            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">{selectedResearchTicker}</p>
+              <div className="rounded-lg border border-white/8 bg-black/20 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                  <p className="text-xs font-medium text-slate-500">{selectedResearchTicker}</p>
                   <p className="mt-2 text-2xl font-semibold text-white">{selectedLabel ?? selectedResearchTicker}</p>
                   <p className="mt-2 text-sm text-slate-400">{selectedSector}</p>
                 </div>
@@ -4922,7 +4922,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 <Tabs.Trigger
                   key={value}
                   value={value}
-                  className="rounded-lg border border-transparent px-3 py-2 text-xs uppercase tracking-[0.18em] text-slate-400 transition data-[state=active]:border-white/12 data-[state=active]:bg-white/[0.08] data-[state=active]:text-white"
+                  className="rounded-md border border-transparent px-3 py-2 text-xs font-medium text-slate-400 transition data-[state=active]:border-white/12 data-[state=active]:bg-white/[0.08] data-[state=active]:text-white"
                 >
                   {label}
                 </Tabs.Trigger>
@@ -4972,8 +4972,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                             : undefined
                         }
                       />
-                      <div className="rounded-xl border border-white/10 bg-black/30 p-4">
-                        <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Portfolio Overlap</p>
+                      <div className="rounded-lg border border-white/8 bg-black/20 p-4">
+                        <p className="text-xs font-medium text-slate-500">Portfolio overlap</p>
                         <div className="mt-3 flex flex-wrap gap-2">
                           {insightBadges.map((badge) => (
                             <ResearchToneChip key={badge.label} label={badge.label} tone={badge.tone} />
@@ -5061,7 +5061,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
     return (
       <div className="space-y-4">
-        <Panel title="Research Command Strip">
+        <Panel title="Research">
           {!selectedPortfolio ? (
             <EmptyState
               title="No portfolio selected"
@@ -5090,7 +5090,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     type="button"
                     onClick={() => setResearchMobileView(view)}
                     className={cn(
-                      "rounded-full border px-3 py-1.5 text-xs uppercase tracking-[0.18em] transition",
+                      "rounded-md border px-3 py-1.5 text-xs font-medium transition",
                       researchMobileView === view
                         ? "border-white/20 bg-white/[0.08] text-white"
                         : "border-white/10 bg-black/20 text-slate-400 hover:text-white"

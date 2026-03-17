@@ -14,10 +14,8 @@ html {
 
 body {
   @apply min-h-screen bg-surface text-slate-100 antialiased;
-  background-image:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.045), transparent 16%),
-    radial-gradient(circle at 85% 0%, rgba(255, 255, 255, 0.025), transparent 18%),
-    linear-gradient(180deg, #010101 0%, #040404 46%, #070707 100%);
+  background:
+    linear-gradient(180deg, #080808 0%, #0b0b0b 100%);
 }
 
 body::before {
@@ -25,9 +23,9 @@ body::before {
   position: fixed;
   inset: 0;
   background-image: theme("backgroundImage.grid");
-  background-size: 36px 36px;
-  opacity: 0.3;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.75), transparent 92%);
+  background-size: 28px 28px;
+  opacity: 0.08;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9), transparent 78%);
   pointer-events: none;
 }
 
@@ -36,9 +34,7 @@ body::after {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 18%),
-    radial-gradient(circle at center, transparent 58%, rgba(0, 0, 0, 0.42) 100%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 12%);
 }
 
 * {
@@ -54,7 +50,6 @@ select {
     background-color 180ms ease,
     border-color 180ms ease,
     color 180ms ease,
-    transform 180ms ease,
     opacity 180ms ease,
     box-shadow 180ms ease;
 }
@@ -70,7 +65,7 @@ select:focus-visible {
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(4px);
   }
 
   to {

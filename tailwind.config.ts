@@ -9,8 +9,8 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        surface: "#050505",
-        panel: "#0a0a0a",
+        surface: "#0a0a0a",
+        panel: "#111111",
         accent: "#ffffff",
         success: "#22c55e",
         warning: "#facc15",
@@ -22,10 +22,10 @@ const config: Config = {
         mono: ["'IBM Plex Mono'", "ui-monospace", "SFMono-Regular", "monospace"]
       },
       boxShadow: {
-        panel: "0 24px 80px rgba(0, 0, 0, 0.35)"
+        panel: "0 8px 24px rgba(0, 0, 0, 0.18)"
       },
       backgroundImage: {
-        grid: "linear-gradient(rgba(255,255,255,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px)"
+        grid: "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)"
       }
     }
   },
