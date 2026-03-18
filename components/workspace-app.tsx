@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState, useTransition, type ChangeEvent } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { Bell, Search } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -480,7 +481,7 @@ function WorkspaceToolbar({
   actions?: ReactNode;
 }) {
   return (
-    <div className="flex h-11 items-center gap-2 border-b border-subtle bg-surface px-3 sm:px-4">
+    <div className="flex h-12 items-center gap-2 border-b border-subtle bg-surface/80 px-3 backdrop-blur-xl sm:px-4">
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-foreground">{title}</p>
         {subtitle ? <p className="truncate text-[10px] text-muted-foreground">{subtitle}</p> : null}
@@ -5885,6 +5886,24 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 </button>
                 <div className="hidden min-w-[210px] max-w-[260px] lg:block">{portfolioSelector}</div>
                 <RangeSelector value={portfolioRange} onChange={setPortfolioRange} />
+                <div className="hidden items-center gap-1 md:flex">
+                  <button
+                    type="button"
+                    className="flex h-9 w-9 items-center justify-center rounded border border-subtle bg-surface text-muted-foreground transition hover:text-foreground hover:border-primary/40 hover:bg-primary/10"
+                  >
+                    <Search className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    className="relative flex h-9 w-9 items-center justify-center rounded border border-subtle bg-surface text-muted-foreground transition hover:text-foreground hover:border-primary/40 hover:bg-primary/10"
+                  >
+                    <Bell className="h-4 w-4" />
+                    <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-destructive" />
+                  </button>
+                  <div className="ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 text-[11px] font-semibold text-primary">
+                    PMP
+                  </div>
+                </div>
               </>
             }
           />
@@ -5950,7 +5969,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 <span className="text-white">
                   <LogoMark />
                 </span>
-                <p className="text-sm font-semibold text-white">Portfolio Risk Engine</p>
+                <p className="text-sm font-semibold text-white">Portfolio Management Platform</p>
               </div>
               <button
                 type="button"

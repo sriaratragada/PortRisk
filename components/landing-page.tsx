@@ -119,7 +119,7 @@ export function LandingPage() {
             <div className="flex h-7 w-7 items-center justify-center rounded bg-primary/20 text-primary">
               <Activity className="h-4 w-4" />
             </div>
-            <span className="text-sm font-semibold tracking-tight">PRCE</span>
+            <span className="text-sm font-semibold tracking-tight">PMP</span>
           </div>
           <nav className="hidden items-center gap-6 text-xs text-muted-foreground md:flex">
             <a href="#features" className="transition-colors hover:text-foreground">
@@ -203,8 +203,8 @@ export function LandingPage() {
             variants={fadeUp}
             className="mb-5 text-4xl font-semibold leading-[1.05] tracking-tight md:text-6xl lg:text-7xl"
           >
-            Portfolio Risk &<br />
-            <span className="text-primary">Compliance Engine</span>
+            Portfolio Management<br />
+            <span className="text-primary">Platform</span>
           </motion.h1>
 
           <motion.p
@@ -344,7 +344,7 @@ export function LandingPage() {
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 text-xs text-muted-foreground md:flex-row">
           <div className="flex items-center gap-2">
             <Activity className="h-3.5 w-3.5 text-primary/60" />
-            <span>Portfolio Risk & Compliance Engine</span>
+            <span>Portfolio Management Platform</span>
           </div>
           <div className="flex gap-6">
             <span>Documentation</span>
@@ -352,7 +352,7 @@ export function LandingPage() {
             <span>Status</span>
             <span>Security</span>
           </div>
-          <span>© 2026 PRCE. All rights reserved.</span>
+          <span>© 2026 PMP. All rights reserved.</span>
         </div>
       </footer>
     </div>
