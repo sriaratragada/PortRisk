@@ -285,11 +285,11 @@ function Panel({
   return (
     <section
       className={cn(
-        "animate-[fadeIn_220ms_ease-out] rounded-lg border border-white/[0.08] bg-panel/90 px-4 py-3 shadow-panel",
+        "animate-[fadeIn_220ms_ease-out] rounded-xl border border-white/8 bg-panel px-5 py-4 shadow-panel",
         className
       )}
     >
-      <div className="mb-3 flex items-start justify-between gap-3 border-b border-white/[0.08] pb-2.5">
+      <div className="mb-4 flex items-start justify-between gap-4 border-b border-white/8 pb-3">
         <div>
           <p className="text-sm font-semibold text-white">{title}</p>
         </div>
@@ -320,11 +320,11 @@ function MetricStat({
   tone?: "default" | "positive" | "negative";
 }) {
   return (
-    <div className="rounded-lg border border-white/8 bg-black/20 p-3">
+    <div className="rounded-lg border border-white/8 bg-black/20 p-4">
       <p className="text-xs font-medium text-slate-400">{label}</p>
       <p
         className={cn(
-          "mt-2 text-xl font-semibold tracking-[-0.02em]",
+          "mt-2 text-2xl font-semibold tracking-[-0.02em]",
           tone === "positive" ? "text-success" : tone === "negative" ? "text-danger" : "text-white"
         )}
       >
@@ -398,11 +398,11 @@ function InfoPill({
   tone?: "default" | "positive" | "negative";
 }) {
   return (
-    <div className="rounded-md border border-white/8 bg-black/20 px-2.5 py-1.5">
-      <p className="text-[10px] font-medium text-slate-500">{label}</p>
+    <div className="rounded-md border border-white/8 bg-black/20 px-3 py-2">
+      <p className="text-[11px] font-medium text-slate-500">{label}</p>
       <p
         className={cn(
-          "mt-0.5 text-sm font-medium",
+          "mt-1 text-sm font-medium",
           tone === "positive" ? "text-success" : tone === "negative" ? "text-danger" : "text-white"
         )}
       >
@@ -488,10 +488,10 @@ function WorkspaceToolbar({
   actions?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-3 border-b border-white/[0.06] px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+    <div className="flex flex-col gap-4 border-b border-white/[0.06] px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
       <div>
-        <h1 className="text-xl font-semibold tracking-[-0.03em] text-white">{title}</h1>
-        {subtitle ? <p className="mt-0.5 text-sm text-slate-400">{subtitle}</p> : null}
+        <h1 className="text-2xl font-semibold tracking-[-0.04em] text-white">{title}</h1>
+        {subtitle ? <p className="mt-1 text-sm text-slate-400">{subtitle}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </div>
@@ -788,8 +788,8 @@ function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-dashed border-white/8 bg-black/10 p-5 text-center">
-      <h3 className="text-lg font-semibold text-white">{title}</h3>
+    <div className="rounded-xl border border-dashed border-white/8 bg-black/10 p-8 text-center">
+      <h3 className="text-xl font-semibold text-white">{title}</h3>
       <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-500">{copy}</p>
       {action ? <div className="mt-6">{action}</div> : null}
     </div>
@@ -3314,7 +3314,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       : null;
 
     return (
-      <div className="space-y-4">
+      <div className="space-y-6">
         <Panel title="Portfolio Summary Strip">
           {!selectedPortfolio ? (
             <EmptyState
@@ -4011,7 +4011,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   };
 
   const renderHoldings = () => (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <Panel title="Holdings status" action={<RangeSelector value={portfolioRange} onChange={setPortfolioRange} />}>
         {!selectedPortfolio ? (
           <EmptyState
@@ -5337,8 +5337,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   };
 
   const renderRisk = () => (
-    <div className="space-y-4">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+    <div className="space-y-6">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <Panel
           title="Risk score"
           action={selectedMetrics ? <TierBadge tier={selectedMetrics.riskTier} /> : <span className="text-xs text-slate-500">No data</span>}
@@ -6085,7 +6085,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   return (
     <div className="min-h-screen bg-surface text-slate-100">
       <div className="relative flex min-h-screen">
-        <aside className="hidden w-64 shrink-0 border-r border-white/[0.06] bg-sidebar px-3 py-3 lg:flex lg:flex-col">
+        <aside className="hidden w-64 shrink-0 border-r border-white/[0.06] bg-sidebar px-4 py-4 lg:flex lg:flex-col">
           <div className="flex items-center gap-3 border-b border-white/[0.06] pb-4">
             <span className="text-white">
               <LogoMark />
@@ -6096,12 +6096,12 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             </div>
           </div>
 
-          <div className="mt-3 space-y-2.5">
+          <div className="mt-4 space-y-3">
             <p className="text-xs font-medium text-slate-500">Portfolio</p>
             {portfolioSummaries.length > 0 ? portfolioSelector : null}
           </div>
 
-          <nav className="mt-4 flex-1 space-y-1.5 overflow-y-auto pr-1">
+          <nav className="mt-6 flex-1 space-y-1.5 overflow-y-auto pr-1">
             {tabs.map((tab) => (
               <SidebarNavItem
                 key={tab.id}
@@ -6174,26 +6174,15 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             </div>
           )}
 
-          <main className="flex-1 overflow-y-auto px-4 py-3 sm:px-6 lg:px-8">
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.div
-                key={activeTab}
-                initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 6 }}
-                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-                exit={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: -4 }}
-                transition={{ duration: 0.18, ease: "easeOut" }}
-                className="min-h-full"
-              >
-                {activeTab === "overview" && renderOverview()}
-                {activeTab === "holdings" && renderHoldings()}
-                {activeTab === "research" && renderResearch()}
-                {activeTab === "risk" && renderRisk()}
-                {activeTab === "stress" && renderStress()}
-                {activeTab === "allocation" && renderAllocation()}
-                {activeTab === "audit" && renderAudit()}
-                {activeTab === "settings" && renderSettings()}
-              </motion.div>
-            </AnimatePresence>
+          <main className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 lg:px-8">
+            {activeTab === "overview" && renderOverview()}
+            {activeTab === "holdings" && renderHoldings()}
+            {activeTab === "research" && renderResearch()}
+            {activeTab === "risk" && renderRisk()}
+            {activeTab === "stress" && renderStress()}
+            {activeTab === "allocation" && renderAllocation()}
+            {activeTab === "audit" && renderAudit()}
+            {activeTab === "settings" && renderSettings()}
           </main>
         </div>
       </div>
