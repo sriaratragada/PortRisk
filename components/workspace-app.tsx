@@ -511,12 +511,12 @@ function ResearchToneChip({
   return (
     <span
       className={cn(
-        "inline-flex rounded-md border px-2 py-1 text-[11px] font-medium",
+        "inline-flex rounded border px-2 py-1 text-[11px] font-medium",
         tone === "positive"
           ? "border-success/30 bg-success/10 text-success"
           : tone === "warning"
             ? "border-warning/30 bg-warning/10 text-warning"
-            : "border-white/10 bg-white/[0.04] text-slate-300"
+            : "border-[#1a2b43] bg-[#0d1c31] text-[#9ab4d3]"
       )}
     >
       {label}
@@ -534,10 +534,10 @@ function ResearchInsightCard({
   helper?: string;
 }) {
   return (
-    <div className="rounded-lg border border-white/8 bg-black/20 p-4">
-      <p className="text-xs font-medium text-slate-500">{label}</p>
-      <p className="mt-2 text-base font-semibold text-white">{value}</p>
-      {helper ? <p className="mt-2 text-sm leading-6 text-slate-500">{helper}</p> : null}
+    <div className="rounded border border-[#1a2b43] bg-[#0a1526] p-3.5">
+      <p className="text-xs font-medium text-[#6e89ab]">{label}</p>
+      <p className="mt-2 text-base font-semibold text-[#d6e8ff]">{value}</p>
+      {helper ? <p className="mt-2 text-sm leading-6 text-[#7387a2]">{helper}</p> : null}
     </div>
   );
 }
@@ -550,18 +550,18 @@ function ResearchBulletList({
   items: string[];
 }) {
   return (
-    <div className="rounded-lg border border-white/8 bg-black/20 p-4">
-      <p className="text-xs font-medium text-slate-500">{title}</p>
+    <div className="rounded border border-[#1a2b43] bg-[#0a1526] p-3.5">
+      <p className="text-xs font-medium text-[#6e89ab]">{title}</p>
       <div className="mt-3 space-y-2">
         {items.length > 0 ? (
           items.map((entry) => (
-            <div key={entry} className="flex items-start gap-2 text-sm leading-6 text-slate-300">
-              <span className="mt-2 h-1.5 w-1.5 rounded-full bg-white/60" />
+            <div key={entry} className="flex items-start gap-2 text-sm leading-6 text-[#c0d4ee]">
+              <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[#42c7ff]" />
               <span>{entry}</span>
             </div>
           ))
         ) : (
-          <p className="text-sm text-slate-500">No detail yet.</p>
+          <p className="text-sm text-[#7387a2]">No detail yet.</p>
         )}
       </div>
     </div>
@@ -676,10 +676,10 @@ function ResearchFitComposition({
   );
 
   return (
-    <div className="rounded-lg border border-white/8 bg-black/20 p-4">
+    <div className="rounded border border-[#1a2b43] bg-[#0a1526] p-3.5">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-medium text-slate-500">Fit composition</p>
-        <p className="text-sm font-semibold text-white">{fitScore}/100</p>
+        <p className="text-xs font-medium text-[#6e89ab]">Fit composition</p>
+        <p className="text-sm font-semibold text-[#d6e8ff]">{fitScore}/100</p>
       </div>
       <div className="mt-3 h-12">
         <ResponsiveContainer width="100%" height="100%">
@@ -700,11 +700,11 @@ function ResearchFitComposition({
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
         {segments.map((segment) => (
-          <div key={segment.key} className="rounded-md border border-white/8 bg-white/[0.025] px-3 py-2">
-            <p className="text-[11px] font-medium text-slate-500">{segment.label}</p>
+          <div key={segment.key} className="rounded border border-[#1a2b43] bg-[#0d1c31] px-3 py-2">
+            <p className="text-[11px] font-medium text-[#6e89ab]">{segment.label}</p>
             <div className="mt-2 flex items-center gap-2">
               <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: segment.color }} />
-              <span className="text-sm text-white">{segment.value}</span>
+              <span className="text-sm text-[#d6e8ff]">{segment.value}</span>
             </div>
           </div>
         ))}
@@ -713,23 +713,55 @@ function ResearchFitComposition({
   );
 }
 
+function ResearchMiniFitStrip({
+  fitScore,
+  diversificationImpact,
+  concentrationImpact,
+  dataConfidence
+}: {
+  fitScore: number;
+  diversificationImpact?: string;
+  concentrationImpact?: string;
+  dataConfidence?: "HIGH" | "MEDIUM" | "LOW";
+}) {
+  const segments = computeFitComposition({
+    fitScore,
+    diversificationImpact,
+    concentrationImpact,
+    dataConfidence
+  });
+  const total = segments.reduce((sum, segment) => sum + segment.value, 0) || 1;
+
+  return (
+    <div className="mt-2 flex h-1.5 w-full overflow-hidden rounded-full bg-[#122742]">
+      {segments.map((segment) => (
+        <span
+          key={segment.key}
+          className="h-full"
+          style={{ width: `${(segment.value / total) * 100}%`, backgroundColor: segment.color }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function ResearchQualityStrip({ bundle }: { bundle: ResearchFeatureBundle | null }) {
   const items = qualityScoreItems(bundle);
 
   return (
-    <div className="rounded-lg border border-white/8 bg-black/20 p-4">
-      <p className="text-xs font-medium text-slate-500">Quality snapshot</p>
+    <div className="rounded border border-[#1a2b43] bg-[#0a1526] p-3.5">
+      <p className="text-xs font-medium text-[#6e89ab]">Quality snapshot</p>
       <div className="mt-4 space-y-3">
         {items.length > 0 ? (
           items.map((item) => (
             <div key={item.label}>
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm text-slate-300">{item.label}</p>
-                <p className="text-sm font-semibold text-white">{item.score}/100</p>
+                <p className="text-sm text-[#c0d4ee]">{item.label}</p>
+                <p className="text-sm font-semibold text-[#d6e8ff]">{item.score}/100</p>
               </div>
-              <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/8">
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#10253d]">
                 <motion.div
-                  className="h-full rounded-full bg-gradient-to-r from-sky-400 via-teal-300 to-white"
+                  className="h-full rounded-full bg-gradient-to-r from-[#42c7ff] via-[#5fd3ff] to-[#c4edff]"
                   initial={{ width: 0 }}
                   animate={{ width: `${item.score}%` }}
                   transition={{ duration: 0.45, ease: "easeOut" }}
@@ -738,7 +770,7 @@ function ResearchQualityStrip({ bundle }: { bundle: ResearchFeatureBundle | null
             </div>
           ))
         ) : (
-          <p className="text-sm text-slate-500">Quality metrics will appear once Yahoo fundamentals are available.</p>
+          <p className="text-sm text-[#7387a2]">Quality metrics will appear once Yahoo fundamentals are available.</p>
         )}
       </div>
     </div>
@@ -750,8 +782,8 @@ function ResearchStatusFlow({ status }: { status: WatchlistItem["status"] | "Fee
   const activeIndex = status === "Feed candidate" ? -1 : steps.indexOf(status as (typeof steps)[number]);
 
   return (
-    <div className="rounded-lg border border-white/8 bg-black/20 p-4">
-      <p className="text-xs font-medium text-slate-500">Research flow</p>
+    <div className="rounded border border-[#1a2b43] bg-[#0a1526] p-3.5">
+      <p className="text-xs font-medium text-[#6e89ab]">Research flow</p>
       <div className="mt-4 flex items-center gap-2">
         {steps.map((step, index) => {
           const active = activeIndex >= index;
@@ -760,17 +792,17 @@ function ResearchStatusFlow({ status }: { status: WatchlistItem["status"] | "Fee
               <div
                 className={cn(
                   "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border text-[10px] font-semibold",
-                  active ? "border-white/25 bg-white text-black" : "border-white/10 bg-white/[0.03] text-slate-500"
+                  active ? "border-[#2a476b] bg-[#42c7ff] text-[#04111f]" : "border-[#1a2b43] bg-[#0d1c31] text-[#6e89ab]"
                 )}
               >
                 {index + 1}
               </div>
               <div className="min-w-0 flex-1">
-                <p className={cn("truncate text-[11px] font-medium", active ? "text-white" : "text-slate-500")}>
+                <p className={cn("truncate text-[11px] font-medium", active ? "text-[#d6e8ff]" : "text-[#6e89ab]")}>
                   {step}
                 </p>
                 {index < steps.length - 1 ? (
-                  <div className={cn("mt-1 h-px w-full", activeIndex > index ? "bg-white/40" : "bg-white/10")} />
+                  <div className={cn("mt-1 h-px w-full", activeIndex > index ? "bg-[#2f577f]" : "bg-[#1a2b43]")} />
                 ) : null}
               </div>
             </div>
@@ -4113,7 +4145,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     const renderFeedPane = () => (
       <Panel
         title="Idea Feed"
-        className="flex h-full min-h-[34rem] flex-col xl:min-h-0"
+        className="flex h-full min-h-0 flex-col"
         action={
           selectedPortfolio ? (
             <button
@@ -4145,7 +4177,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           <div className="flex min-h-0 flex-1 flex-col gap-4">
             <div className="space-y-3">
               <div className="relative">
-                <label className="mb-2 block text-xs uppercase tracking-[0.2em] text-slate-500">
+                <label className="mb-2 block text-xs text-[#6e89ab]">
                   Manual Yahoo search
                 </label>
                 {researchSearchError ? <div className="mb-2"><InlineNotice message={researchSearchError} tone="warning" /></div> : null}
@@ -4159,12 +4191,12 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     setResearchSearchError(null);
                   }}
                   placeholder="Search ideas by ticker or company..."
-                  className="w-full rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+                  className="h-11 w-full rounded-md border border-[#1a2b43] bg-[#0a1526] px-4 text-sm text-[#d6e8ff] outline-none transition focus:border-[#2a476b] focus:shadow-[0_0_0_1px_rgba(66,199,255,0.3)]"
                 />
                 {researchSearchTerm.trim() && !selectedResearchSecurity ? (
-                  <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-xl border border-white/10 bg-panel/95 shadow-panel backdrop-blur-xl">
+                  <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-md border border-[#1a2b43] bg-[#0a1526] shadow-panel">
                     {researchSearchLoading ? (
-                      <div className="px-4 py-3 text-sm text-slate-400">Searching Yahoo Finance...</div>
+                      <div className="px-4 py-3 text-sm text-[#7387a2]">Searching Yahoo Finance...</div>
                     ) : researchSearchResults.length > 0 ? (
                       <div className="max-h-72 overflow-y-auto py-2">
                         {researchSearchResults.map((result) => (
@@ -4175,21 +4207,21 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                               setActiveResearchAnalysisTab("fit");
                               void handleSelectResearchSearchResult(result);
                             }}
-                            className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition hover:bg-white/[0.04]"
+                            className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition hover:bg-[#10253d]"
                           >
                             <div>
-                              <p className="text-sm font-semibold text-white">{result.symbol}</p>
-                              <p className="mt-1 text-sm text-slate-400">{result.companyName}</p>
+                              <p className="text-sm font-semibold text-[#d6e8ff]">{result.symbol}</p>
+                              <p className="mt-1 text-sm text-[#7387a2]">{result.companyName}</p>
                             </div>
                             <div className="text-right">
-                              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{result.quoteType}</p>
-                              <p className="mt-1 text-sm text-slate-400">{result.exchange}</p>
+                              <p className="text-xs text-[#6e89ab]">{result.quoteType}</p>
+                              <p className="mt-1 text-sm text-[#7387a2]">{result.exchange}</p>
                             </div>
                           </button>
                         ))}
                       </div>
                     ) : (
-                      <div className="px-4 py-3 text-sm text-slate-400">No listed Yahoo matches found.</div>
+                      <div className="px-4 py-3 text-sm text-[#7387a2]">No listed Yahoo matches found.</div>
                     )}
                   </div>
                 ) : null}
@@ -4197,7 +4229,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
               <div className="grid gap-3 md:grid-cols-[1fr_1fr]">
                 <label className="space-y-2">
-                  <span className="block text-[10px] uppercase tracking-[0.2em] text-slate-500">Source</span>
+                  <span className="block text-[10px] text-[#6e89ab]">Source</span>
                   <ShellSelect
                     value={researchSourceFilter}
                     onChange={(event) =>
@@ -4215,7 +4247,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   </ShellSelect>
                 </label>
                 <label className="space-y-2">
-                  <span className="block text-[10px] uppercase tracking-[0.2em] text-slate-500">Sector</span>
+                  <span className="block text-[10px] text-[#6e89ab]">Sector</span>
                   <ShellSelect
                     value={researchSectorFilter}
                     onChange={(event) => setResearchSectorFilter(event.target.value)}
@@ -4236,17 +4268,17 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   layout
                   initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="rounded-xl border border-white/10 bg-white/[0.03] p-4"
+                  className="rounded-md border border-[#1a2b43] bg-[#0a1526] p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Selected idea</p>
-                      <p className="mt-2 text-lg font-semibold text-white">{researchPreview.symbol}</p>
-                      <p className="mt-1 text-sm text-slate-400">{researchPreview.companyName}</p>
+                      <p className="text-[10px] text-[#6e89ab]">Selected idea</p>
+                      <p className="mt-2 text-lg font-semibold text-[#d6e8ff]">{researchPreview.symbol}</p>
+                      <p className="mt-1 text-sm text-[#7387a2]">{researchPreview.companyName}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Current</p>
-                      <p className="mt-2 text-lg font-semibold text-white">
+                      <p className="text-[10px] text-[#6e89ab]">Current</p>
+                      <p className="mt-2 text-lg font-semibold text-[#d6e8ff]">
                         {formatCurrency(researchPreview.currentPrice ?? null)}
                       </p>
                     </div>
@@ -4266,7 +4298,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                           sourceLabel: "Manual search"
                         })
                       }
-                      className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-zinc-200"
+                      className="rounded-md bg-[#42c7ff] px-4 py-2 text-sm font-semibold text-[#04111f] transition hover:bg-[#74d7ff]"
                     >
                       Save to Watchlist
                     </button>
@@ -4277,7 +4309,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
             <div className="min-h-0 flex-1 overflow-y-auto pr-1">
               {researchFeedLoading ? (
-                <div className="rounded-xl border border-white/10 bg-black/35 p-4 text-sm text-slate-400">
+                <div className="rounded-md border border-[#1a2b43] bg-[#0a1526] p-4 text-sm text-[#7387a2]">
                   Building Yahoo candidate feed...
                 </div>
               ) : filteredResearchCandidates.length === 0 ? (
@@ -4286,7 +4318,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   copy="Use manual Yahoo search or refresh the feed to source related, screener, and trending candidates for this portfolio."
                 />
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {(["related", "screener", "trending"] as const).map((sourceType) => {
                     const rows = filteredResearchCandidates.filter((candidate) => candidate.sourceType === sourceType);
                     if (rows.length === 0) {
@@ -4301,14 +4333,14 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                         className="space-y-2"
                       >
                         <div className="flex items-center justify-between gap-3">
-                          <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                          <p className="text-[10px] text-[#6e89ab]">
                             {sourceType === "related"
                               ? "Related ideas"
                               : sourceType === "screener"
                                 ? "Benchmark-aware screens"
                                 : "Trending names"}
                           </p>
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Ranked by fit</p>
+                          <p className="text-[10px] text-[#7387a2]">Ranked by fit</p>
                         </div>
                         <div className="space-y-2">
                           {rows.map((candidate, index) => (
@@ -4319,7 +4351,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                               initial={prefersReducedMotion ? false : { opacity: 0, y: 10 }}
                               animate={{ opacity: 1, y: 0 }}
                               transition={{ duration: 0.18, delay: prefersReducedMotion ? 0 : index * 0.03 }}
-                              whileHover={prefersReducedMotion ? undefined : { y: -2, scale: 1.005 }}
+                              whileHover={prefersReducedMotion ? undefined : { y: -1 }}
                               onClick={() => {
                                 setActiveResearchAnalysisTab("fit");
                                 setSelectedResearchTicker(candidate.ticker);
@@ -4328,35 +4360,33 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                                 setResearchMobileView("insight");
                               }}
                               className={cn(
-                                "w-full rounded-xl border px-4 py-3 text-left transition",
+                                "w-full rounded-md border px-3 py-2.5 text-left transition",
                                 selectedResearchTicker === candidate.ticker
-                                  ? "border-white/25 bg-white/[0.055] shadow-[0_0_0_1px_rgba(255,255,255,0.04)]"
-                                  : "border-white/10 bg-black/35 hover:border-white/20"
+                                  ? "border-[#2a476b] bg-[#0d1c31]"
+                                  : "border-[#1a2b43] bg-[#0a1526] hover:border-[#2a476b] hover:bg-[#10253d]"
                               )}
                             >
                               <div className="flex items-start justify-between gap-4">
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2">
-                                    <p className="text-sm font-semibold text-white">{candidate.ticker}</p>
+                                    <p className="text-sm font-semibold text-[#d6e8ff]">{candidate.ticker}</p>
                                     <ResearchToneChip label={candidate.sourceLabel} />
                                     <ResearchToneChip label={candidate.sector} />
                                   </div>
-                                  <p className="mt-1 truncate text-sm text-slate-400">{candidate.companyName}</p>
-                                  <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-300">
+                                  <p className="mt-1 truncate text-sm text-[#7387a2]">{candidate.companyName}</p>
+                                  <p className="mt-1 line-clamp-1 text-sm text-[#9ab4d3]">
                                     {candidate.aiSummary ?? candidate.deterministicSummary}
                                   </p>
-                                  <div className="mt-3">
-                                    <ResearchFitComposition
-                                      fitScore={candidate.fitScore}
-                                      diversificationImpact={candidate.diversificationImpact}
-                                      concentrationImpact={candidate.concentrationImpact}
-                                      dataConfidence={candidate.dataConfidence}
-                                    />
-                                  </div>
+                                  <ResearchMiniFitStrip
+                                    fitScore={candidate.fitScore}
+                                    diversificationImpact={candidate.diversificationImpact}
+                                    concentrationImpact={candidate.concentrationImpact}
+                                    dataConfidence={candidate.dataConfidence}
+                                  />
                                 </div>
                                 <div className="w-24 shrink-0 text-right">
                                   <motion.p
-                                    className="text-xl font-semibold text-white"
+                                    className="text-lg font-semibold text-[#d6e8ff]"
                                     key={`${candidate.ticker}:${candidate.fitScore}`}
                                     initial={prefersReducedMotion ? false : { opacity: 0.6, scale: 0.92 }}
                                     animate={{ opacity: 1, scale: 1 }}
@@ -4364,9 +4394,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                                   >
                                     {candidate.fitScore}
                                   </motion.p>
-                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Fit score</p>
-                                  <p className="mt-3 text-xs text-slate-400">{formatCurrency(candidate.currentPrice)}</p>
-                                  <p className="mt-1 text-xs text-slate-500">{candidate.benchmarkContext}</p>
+                                  <p className="text-[10px] text-[#6e89ab]">Fit score</p>
+                                  <p className="mt-2 text-xs text-[#9ab4d3]">{formatCurrency(candidate.currentPrice)}</p>
+                                  <p className="mt-1 text-xs text-[#7387a2]">{candidate.benchmarkContext}</p>
                                   <button
                                     type="button"
                                     onClick={(event) => {
@@ -4378,7 +4408,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                                       });
                                     }}
                                     disabled={activeWatchlistTickerSet.has(candidate.ticker.toUpperCase())}
-                                    className="mt-3 rounded-md border border-white/12 px-3 py-1.5 text-xs text-zinc-200 transition hover:border-white/25 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="mt-2 rounded border border-[#2a476b] px-3 py-1.5 text-xs text-[#d6e8ff] transition hover:bg-[#10253d] disabled:cursor-not-allowed disabled:opacity-50"
                                   >
                                     {activeWatchlistTickerSet.has(candidate.ticker.toUpperCase())
                                       ? "Saved"
@@ -4401,18 +4431,18 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     );
 
     const renderNotebookPane = () => (
-      <Panel title="Queue / Notebook" className="flex h-full min-h-[34rem] flex-col xl:min-h-0">
+      <Panel title="Queue / Notebook" className="flex h-full min-h-0 flex-col">
         {!selectedPortfolio ? (
           <EmptyState
             title="No research queue"
             copy="Select a portfolio to persist thesis notes, catalysts, risks, and conviction for candidate names."
           />
         ) : (
-          <div className="flex min-h-0 flex-1 flex-col gap-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-slate-400">Saved ideas, ranked for actionability and promotion.</p>
+            <div className="flex min-h-0 flex-1 flex-col gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-[#7387a2]">Saved ideas ranked for actionability and promotion.</p>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Queue sort</span>
+                <span className="text-[10px] text-[#6e89ab]">Queue sort</span>
                 <ShellSelect
                   value={researchSort}
                   onChange={(event) =>
@@ -4435,7 +4465,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             ) : (
               <>
                 <ResearchStatusFlow status={selectedWatchlistItem?.status ?? "Feed candidate"} />
-                <div className="min-h-0 max-h-56 overflow-y-auto rounded-xl border border-white/10 bg-black/20 p-2">
+                <div className="min-h-0 max-h-52 overflow-y-auto rounded-md border border-[#1a2b43] bg-[#0a1526] p-2">
                   <div className="space-y-2">
                     {sortedWatchlist.map((item, index) => (
                       <motion.button
@@ -4454,22 +4484,22 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                           setResearchMobileView("notebook");
                         }}
                         className={cn(
-                          "flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-3 text-left transition",
+                          "flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2.5 text-left transition",
                           selectedResearchItemId === item.id
-                            ? "border-white/25 bg-white/[0.05]"
-                            : "border-white/10 bg-black/35 hover:border-white/20"
+                            ? "border-[#2a476b] bg-[#0d1c31]"
+                            : "border-[#1a2b43] bg-[#0a1526] hover:border-[#2a476b] hover:bg-[#10253d]"
                         )}
                       >
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <p className="text-sm font-semibold text-white">{item.ticker}</p>
+                            <p className="text-sm font-semibold text-[#d6e8ff]">{item.ticker}</p>
                             <ResearchToneChip label={item.status} />
                           </div>
-                          <p className="mt-1 truncate text-sm text-slate-400">{item.companyName}</p>
+                          <p className="mt-1 truncate text-sm text-[#7387a2]">{item.companyName}</p>
                         </div>
                         <div className="shrink-0 text-right">
-                          <p className="text-sm text-white">{item.conviction}/5</p>
-                          <p className="mt-1 text-xs text-slate-500">
+                          <p className="text-sm text-[#d6e8ff]">{item.conviction}/5</p>
+                          <p className="mt-1 text-xs text-[#6e89ab]">
                             {item.targetPrice != null ? formatCurrency(item.targetPrice) : "Target open"}
                           </p>
                         </div>
@@ -4484,11 +4514,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     copy="Pick a saved research name to edit thesis notes, conviction, status, and promotion readiness."
                   />
                 ) : (
-                  <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                  <div className="flex min-h-0 flex-1 flex-col rounded-md border border-[#1a2b43] bg-[#0a1526] p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="text-lg font-semibold text-white">{selectedWatchlistItem.ticker}</p>
-                        <p className="mt-1 text-sm text-slate-400">{selectedWatchlistItem.companyName}</p>
+                        <p className="text-lg font-semibold text-[#d6e8ff]">{selectedWatchlistItem.ticker}</p>
+                        <p className="mt-1 text-sm text-[#7387a2]">{selectedWatchlistItem.companyName}</p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           <ResearchToneChip label={selectedWatchlistItem.sourceLabel} />
                           <ResearchToneChip label={selectedWatchlistItem.sector} />
@@ -4500,7 +4530,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
                     <div className="mt-4 grid gap-3 sm:grid-cols-3">
                       <label className="block space-y-2">
-                        <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Status</span>
+                        <span className="text-[10px] text-[#6e89ab]">Status</span>
                         <ShellSelect
                           value={watchlistDraft.status}
                           onChange={(event) =>
@@ -4519,7 +4549,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                         </ShellSelect>
                       </label>
                       <label className="block space-y-2">
-                        <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Conviction</span>
+                        <span className="text-[10px] text-[#6e89ab]">Conviction</span>
                         <input
                           value={watchlistDraft.conviction}
                           onChange={(event) =>
@@ -4531,11 +4561,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                           type="number"
                           min="1"
                           max="5"
-                          className="w-full rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white outline-none"
+                          className="w-full rounded-md border border-[#1a2b43] bg-[#0d1c31] px-3 py-2 text-sm text-[#d6e8ff] outline-none focus:border-[#2a476b]"
                         />
                       </label>
                       <label className="block space-y-2">
-                        <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Target price</span>
+                        <span className="text-[10px] text-[#6e89ab]">Target price</span>
                         <input
                           value={watchlistDraft.targetPrice}
                           onChange={(event) =>
@@ -4547,12 +4577,12 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                           type="number"
                           min="0"
                           step="any"
-                          className="w-full rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white outline-none"
+                          className="w-full rounded-md border border-[#1a2b43] bg-[#0d1c31] px-3 py-2 text-sm text-[#d6e8ff] outline-none focus:border-[#2a476b]"
                         />
                       </label>
                     </div>
 
-                    <div className="mt-4 flex flex-wrap gap-2 border-b border-white/10 pb-3">
+                    <div className="mt-4 flex flex-wrap gap-2 border-b border-[#1a2b43] pb-3">
                       {notebookSections.map((section) => (
                         <button
                           key={section.id}
@@ -4561,8 +4591,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                           className={cn(
                             "rounded-md border px-3 py-1.5 text-xs font-medium transition",
                             researchNotebookSection === section.id
-                              ? "border-white/20 bg-white/[0.08] text-white"
-                              : "border-white/10 bg-black/20 text-slate-400 hover:text-white"
+                              ? "border-[#2a476b] bg-[#10253d] text-[#d6e8ff]"
+                              : "border-[#1a2b43] bg-[#0d1c31] text-[#7387a2] hover:text-[#d6e8ff]"
                           )}
                         >
                           {section.label}
@@ -4573,46 +4603,46 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
                       {researchNotebookSection === "thesis" ? (
                         <label className="block space-y-2">
-                          <span className="text-sm text-slate-300">Thesis</span>
+                          <span className="text-sm text-[#9ab4d3]">Thesis</span>
                           <textarea
                             value={watchlistDraft.thesis}
                             onChange={(event) =>
                               setWatchlistDraft((current) => ({ ...current, thesis: event.target.value }))
                             }
                             rows={10}
-                            className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none"
+                            className="w-full rounded-md border border-[#1a2b43] bg-[#0d1c31] px-4 py-3 text-sm text-[#d6e8ff] outline-none focus:border-[#2a476b]"
                           />
                         </label>
                       ) : null}
                       {researchNotebookSection === "catalysts" ? (
                         <label className="block space-y-2">
-                          <span className="text-sm text-slate-300">Catalysts</span>
+                          <span className="text-sm text-[#9ab4d3]">Catalysts</span>
                           <textarea
                             value={watchlistDraft.catalysts}
                             onChange={(event) =>
                               setWatchlistDraft((current) => ({ ...current, catalysts: event.target.value }))
                             }
                             rows={10}
-                            className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none"
+                            className="w-full rounded-md border border-[#1a2b43] bg-[#0d1c31] px-4 py-3 text-sm text-[#d6e8ff] outline-none focus:border-[#2a476b]"
                           />
                         </label>
                       ) : null}
                       {researchNotebookSection === "risks" ? (
                         <label className="block space-y-2">
-                          <span className="text-sm text-slate-300">Risks</span>
+                          <span className="text-sm text-[#9ab4d3]">Risks</span>
                           <textarea
                             value={watchlistDraft.risks}
                             onChange={(event) =>
                               setWatchlistDraft((current) => ({ ...current, risks: event.target.value }))
                             }
                             rows={10}
-                            className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none"
+                            className="w-full rounded-md border border-[#1a2b43] bg-[#0d1c31] px-4 py-3 text-sm text-[#d6e8ff] outline-none focus:border-[#2a476b]"
                           />
                         </label>
                       ) : null}
                       {researchNotebookSection === "valuation" ? (
                         <label className="block space-y-2">
-                          <span className="text-sm text-slate-300">Valuation notes</span>
+                          <span className="text-sm text-[#9ab4d3]">Valuation notes</span>
                           <textarea
                             value={watchlistDraft.valuationNotes}
                             onChange={(event) =>
@@ -4622,27 +4652,27 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                               }))
                             }
                             rows={10}
-                            className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none"
+                            className="w-full rounded-md border border-[#1a2b43] bg-[#0d1c31] px-4 py-3 text-sm text-[#d6e8ff] outline-none focus:border-[#2a476b]"
                           />
                         </label>
                       ) : null}
                       {researchNotebookSection === "notes" ? (
                         <label className="block space-y-2">
-                          <span className="text-sm text-slate-300">General notes</span>
+                          <span className="text-sm text-[#9ab4d3]">General notes</span>
                           <textarea
                             value={watchlistDraft.notes}
                             onChange={(event) =>
                               setWatchlistDraft((current) => ({ ...current, notes: event.target.value }))
                             }
                             rows={10}
-                            className="w-full rounded-xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none"
+                            className="w-full rounded-md border border-[#1a2b43] bg-[#0d1c31] px-4 py-3 text-sm text-[#d6e8ff] outline-none focus:border-[#2a476b]"
                           />
                         </label>
                       ) : null}
                     </div>
 
-                    <div className="sticky bottom-0 mt-4 flex items-center justify-between gap-3 border-t border-white/10 bg-panel/95 pt-4 backdrop-blur">
-                      <p className="text-sm text-slate-400">
+                    <div className="sticky bottom-0 mt-4 flex items-center justify-between gap-3 border-t border-[#1a2b43] bg-[#0a1526] pt-4">
+                      <p className="text-sm text-[#7387a2]">
                         Latest {formatCurrency(researchPriceMap.get(selectedWatchlistItem.ticker.toUpperCase()))}
                       </p>
                       <div className="flex gap-2">
@@ -4656,14 +4686,14 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                         <button
                           type="button"
                           onClick={() => void promoteWatchlistItem(selectedWatchlistItem)}
-                          className="rounded-md border border-white/12 px-4 py-2 text-sm text-white transition hover:bg-white/[0.05]"
+                          className="rounded-md border border-[#2a476b] px-4 py-2 text-sm text-[#d6e8ff] transition hover:bg-[#10253d]"
                         >
                           Promote
                         </button>
                         <button
                           type="button"
                           onClick={() => void saveWatchlistDraft()}
-                          className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-zinc-200"
+                          className="rounded-md bg-[#42c7ff] px-4 py-2 text-sm font-semibold text-[#04111f] transition hover:bg-[#74d7ff]"
                         >
                           Save Notebook
                         </button>
@@ -4679,7 +4709,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     );
 
     const renderInsightPane = () => (
-      <Panel title="Analysis" className="flex h-full min-h-[34rem] flex-col xl:min-h-0">
+      <Panel title="Analysis" className="flex h-full min-h-0 flex-col">
         {researchInsightError ? <div className="mb-3"><InlineNotice message={researchInsightError} tone="warning" /></div> : null}
         {!selectedPortfolio || !selectedResearchTicker ? (
           <EmptyState
@@ -4687,7 +4717,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             copy="Pick a feed candidate or watchlist item to see AI-assisted memo output and deterministic portfolio-fit context."
           />
         ) : researchInsightLoading ? (
-          <div className="rounded-xl border border-white/10 bg-black/35 p-5 text-sm text-slate-400">
+          <div className="rounded-md border border-[#1a2b43] bg-[#0a1526] p-5 text-sm text-[#7387a2]">
             Building research memo and portfolio-fit summary...
           </div>
         ) : (
@@ -4698,12 +4728,12 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             }
             className="flex min-h-0 flex-1 flex-col"
           >
-              <div className="rounded-lg border border-white/8 bg-black/20 p-4">
+              <div className="rounded-md border border-[#1a2b43] bg-[#0a1526] p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                  <p className="text-xs font-medium text-slate-500">{selectedResearchTicker}</p>
-                  <p className="mt-2 text-2xl font-semibold text-white">{selectedLabel ?? selectedResearchTicker}</p>
-                  <p className="mt-2 text-sm text-slate-400">{selectedSector}</p>
+                  <p className="text-xs font-medium text-[#6e89ab]">{selectedResearchTicker}</p>
+                  <p className="mt-2 text-2xl font-semibold text-[#d6e8ff]">{selectedLabel ?? selectedResearchTicker}</p>
+                  <p className="mt-2 text-sm text-[#7387a2]">{selectedSector}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {insightBadges.map((badge) => (
@@ -4727,7 +4757,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               </div>
             </div>
 
-            <Tabs.List className="sticky top-0 z-10 mt-4 grid grid-cols-4 gap-2 rounded-xl border border-white/10 bg-black/35 p-2">
+            <Tabs.List className="sticky top-0 z-10 mt-4 grid grid-cols-4 gap-2 rounded-md border border-[#1a2b43] bg-[#0a1526] p-2">
               {[
                 ["fit", "Fit"],
                 ["ai", "AI"],
@@ -4737,7 +4767,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 <Tabs.Trigger
                   key={value}
                   value={value}
-                  className="rounded-md border border-transparent px-3 py-2 text-xs font-medium text-slate-400 transition data-[state=active]:border-white/12 data-[state=active]:bg-white/[0.08] data-[state=active]:text-white"
+                  className="rounded-md border border-transparent px-3 py-2 text-xs font-medium text-[#7387a2] transition data-[state=active]:border-[#2a476b] data-[state=active]:bg-[#10253d] data-[state=active]:text-[#d6e8ff]"
                 >
                   {label}
                 </Tabs.Trigger>
@@ -4787,8 +4817,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                             : undefined
                         }
                       />
-                      <div className="rounded-lg border border-white/8 bg-black/20 p-4">
-                        <p className="text-xs font-medium text-slate-500">Portfolio overlap</p>
+                      <div className="rounded-md border border-[#1a2b43] bg-[#0a1526] p-4">
+                        <p className="text-xs font-medium text-[#6e89ab]">Portfolio overlap</p>
                         <div className="mt-3 flex flex-wrap gap-2">
                           {insightBadges.map((badge) => (
                             <ResearchToneChip key={badge.label} label={badge.label} tone={badge.tone} />
@@ -4875,15 +4905,15 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     );
 
     return (
-      <div className="space-y-4">
-        <Panel title="Research">
+      <div className="flex h-[calc(100vh-9.5rem)] min-h-0 flex-col gap-3">
+        <Panel title="Research" className="shrink-0">
           {!selectedPortfolio ? (
             <EmptyState
               title="No portfolio selected"
               copy="Select a portfolio to source ideas, build a watchlist, and promote research names into holdings."
             />
           ) : (
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <div className="grid gap-3 lg:grid-cols-6 xl:flex-1">
                 <InfoPill label="Portfolio" value={selectedPortfolio.name} />
                 <InfoPill label="Benchmark" value={selectedPortfolio.benchmark} />
@@ -4907,8 +4937,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     className={cn(
                       "rounded-md border px-3 py-1.5 text-xs font-medium transition",
                       researchMobileView === view
-                        ? "border-white/20 bg-white/[0.08] text-white"
-                        : "border-white/10 bg-black/20 text-slate-400 hover:text-white"
+                        ? "border-[#2a476b] bg-[#10253d] text-[#d6e8ff]"
+                        : "border-[#1a2b43] bg-[#0d1c31] text-[#7387a2] hover:text-[#d6e8ff]"
                     )}
                   >
                     {view === "feed" ? "Idea Feed" : view === "notebook" ? "Notebook" : "Analysis"}
@@ -4919,7 +4949,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           )}
         </Panel>
 
-        <div className="hidden xl:block">
+        <div className="hidden min-h-0 flex-1 xl:block">
           <ResizablePanelGroup
             orientation="horizontal"
             defaultLayout={researchPanelLayout}
@@ -4929,12 +4959,12 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 window.localStorage.setItem("research-workstation-panels", JSON.stringify(layout));
               }
             }}
-            className="h-[calc(100vh-15rem)] min-h-[46rem] gap-4"
+            className="h-full min-h-0 gap-3"
           >
             <ResizablePanel id="researchFeed" defaultSize={researchPanelLayout.researchFeed} minSize={24}>
               {renderFeedPane()}
             </ResizablePanel>
-            <ResizablePanelResizeHandle className="mx-1 w-1 rounded-full bg-white/10 transition hover:bg-white/20" />
+            <ResizablePanelResizeHandle className="mx-1 w-1 rounded-full bg-[#1a2b43] transition hover:bg-[#2a476b]" />
             <ResizablePanel
               id="researchNotebook"
               defaultSize={researchPanelLayout.researchNotebook}
@@ -4942,7 +4972,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             >
               {renderNotebookPane()}
             </ResizablePanel>
-            <ResizablePanelResizeHandle className="mx-1 w-1 rounded-full bg-white/10 transition hover:bg-white/20" />
+            <ResizablePanelResizeHandle className="mx-1 w-1 rounded-full bg-[#1a2b43] transition hover:bg-[#2a476b]" />
             <ResizablePanel
               id="researchInsight"
               defaultSize={researchPanelLayout.researchInsight}
@@ -4953,7 +4983,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           </ResizablePanelGroup>
         </div>
 
-        <div className="space-y-4 xl:hidden">
+        <div className="space-y-3 overflow-y-auto pr-1 xl:hidden">
           {researchMobileView === "feed" ? renderFeedPane() : null}
           {researchMobileView === "notebook" ? renderNotebookPane() : null}
           {researchMobileView === "insight" ? renderInsightPane() : null}
