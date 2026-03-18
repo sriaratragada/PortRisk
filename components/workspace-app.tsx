@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState, useTransition } from "react";
+import { FormEvent, useEffect, useMemo, useState, useTransition, type ChangeEvent } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
@@ -221,6 +221,14 @@ function CloseIcon({ className }: IconProps) {
     <IconBase className={className}>
       <path d="m6 6 12 12" />
       <path d="M18 6 6 18" />
+    </IconBase>
+  );
+}
+
+function ChevronDownIcon({ className }: IconProps) {
+  return (
+    <IconBase className={className}>
+      <path d="m6 9 6 6 6-6" />
     </IconBase>
   );
 }
@@ -931,22 +939,57 @@ function RangeSelector({
   onChange: (range: ChartRange) => void;
 }) {
   return (
-    <div className="inline-flex rounded-md border border-white/10 bg-black/60 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+    <div className="inline-flex h-10 items-center rounded-md border border-[#1a2b43] bg-[#0a1526] p-1">
       {chartRanges.map((range) => (
         <button
           key={range}
           type="button"
           onClick={() => onChange(range)}
           className={cn(
-            "rounded-sm px-3 py-1.5 text-xs font-medium transition duration-200",
+            "rounded-md px-3 py-1.5 text-xs font-medium transition",
             value === range
-              ? "bg-white text-black shadow-[0_10px_30px_rgba(255,255,255,0.14)]"
-              : "text-zinc-500 hover:text-white"
+              ? "bg-[#0e304f] text-[#42c7ff]"
+              : "text-[#7387a2] hover:bg-[#10253d] hover:text-[#d6e8ff]"
           )}
         >
           {range}
         </button>
       ))}
+    </div>
+  );
+}
+
+function ShellSelect({
+  value,
+  onChange,
+  children,
+  className,
+  disabled
+}: {
+  value: string;
+  onChange: (event: ChangeEvent<HTMLSelectElement>) => void;
+  children: ReactNode;
+  className?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        className={cn(
+          "h-12 w-full appearance-none rounded-md border border-[#1a2b43] bg-[#0a1526] pl-4 pr-11 text-sm text-[#d6e8ff] outline-none transition",
+          "focus:border-[#2a476b] focus:shadow-[0_0_0_1px_rgba(66,199,255,0.3)]",
+          "disabled:cursor-not-allowed disabled:opacity-60",
+          className
+        )}
+      >
+        {children}
+      </select>
+      <span className="pointer-events-none absolute inset-y-0 right-0 flex w-10 items-center justify-center border-l border-[#1a2b43] text-[#6e89ab]">
+        <ChevronDownIcon className="h-3.5 w-3.5" />
+      </span>
     </div>
   );
 }
@@ -3282,8 +3325,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   }
 
   const portfolioSelector = (
-    <select
-      className="rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35 focus:bg-black/65"
+    <ShellSelect
       value={selectedPortfolioId}
       onChange={(event) => {
         const nextId = event.target.value;
@@ -3301,7 +3343,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           {portfolio.name}
         </option>
       ))}
-    </select>
+    </ShellSelect>
   );
 
   const renderOverview = () => {
@@ -3906,17 +3948,17 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
                 <label className="block space-y-2">
                   <span className="text-sm text-slate-300">Asset class</span>
-                  <select
+                  <ShellSelect
                     value={positionAssetClass}
                     onChange={(event) =>
                       setPositionAssetClass(event.target.value as "equities" | "bonds" | "commodities")
                     }
-                    className="w-full rounded-lg border border-white/[0.08] bg-[#0d1014] px-4 py-3 text-sm text-white outline-none focus:border-white/[0.16]"
+                    className="h-[46px]"
                   >
                     <option value="equities">Equities</option>
                     <option value="bonds">Bonds</option>
                     <option value="commodities">Commodities</option>
-                  </select>
+                  </ShellSelect>
                 </label>
 
                 <div className="flex gap-3">
@@ -4156,28 +4198,28 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               <div className="grid gap-3 md:grid-cols-[1fr_1fr]">
                 <label className="space-y-2">
                   <span className="block text-[10px] uppercase tracking-[0.2em] text-slate-500">Source</span>
-                  <select
+                  <ShellSelect
                     value={researchSourceFilter}
                     onChange={(event) =>
                       setResearchSourceFilter(
                         event.target.value as "all" | "manual" | "related" | "screener" | "trending"
                       )
                     }
-                    className="w-full rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white outline-none"
+                    className="h-[42px] text-xs"
                   >
                     <option value="all">All sources</option>
                     <option value="related">Related</option>
                     <option value="screener">Screens</option>
                     <option value="trending">Trending</option>
                     <option value="manual">Manual</option>
-                  </select>
+                  </ShellSelect>
                 </label>
                 <label className="space-y-2">
                   <span className="block text-[10px] uppercase tracking-[0.2em] text-slate-500">Sector</span>
-                  <select
+                  <ShellSelect
                     value={researchSectorFilter}
                     onChange={(event) => setResearchSectorFilter(event.target.value)}
-                    className="w-full rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white outline-none"
+                    className="h-[42px] text-xs"
                   >
                     <option value="all">All sectors</option>
                     {researchSectorOptions.map((sector) => (
@@ -4185,7 +4227,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                         {sector}
                       </option>
                     ))}
-                  </select>
+                  </ShellSelect>
                 </label>
               </div>
 
@@ -4371,17 +4413,17 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               <p className="text-sm text-slate-400">Saved ideas, ranked for actionability and promotion.</p>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Queue sort</span>
-                <select
+                <ShellSelect
                   value={researchSort}
                   onChange={(event) =>
                     setResearchSort(event.target.value as "updated" | "conviction" | "marketCap")
                   }
-                  className="rounded-md border border-white/10 bg-black/50 px-3 py-2 text-sm text-white outline-none"
+                  className="h-[40px] min-w-[9.5rem] text-xs"
                 >
                   <option value="updated">Updated</option>
                   <option value="conviction">Conviction</option>
                   <option value="marketCap">Market cap</option>
-                </select>
+                </ShellSelect>
               </div>
             </div>
 
@@ -4459,7 +4501,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     <div className="mt-4 grid gap-3 sm:grid-cols-3">
                       <label className="block space-y-2">
                         <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Status</span>
-                        <select
+                        <ShellSelect
                           value={watchlistDraft.status}
                           onChange={(event) =>
                             setWatchlistDraft((current) => ({
@@ -4467,14 +4509,14 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                               status: event.target.value as WatchlistItem["status"]
                             }))
                           }
-                          className="w-full rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white outline-none"
+                          className="h-[40px] text-xs"
                         >
                           <option value="NEW">NEW</option>
                           <option value="RESEARCHING">RESEARCHING</option>
                           <option value="READY">READY</option>
                           <option value="PASSED">PASSED</option>
                           <option value="PROMOTED">PROMOTED</option>
-                        </select>
+                        </ShellSelect>
                       </label>
                       <label className="block space-y-2">
                         <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Conviction</span>
@@ -5209,10 +5251,10 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         <Panel title="Stress Scenarios" action={<span className="text-xs text-muted-foreground">Scenario impact matrix</span>}>
           <div className="mb-3 grid gap-3 xl:grid-cols-[1fr_auto]">
             <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-              <select
-                className="rounded border border-subtle bg-surface px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/35"
+              <ShellSelect
                 value={stressScenario}
                 onChange={(event) => setStressScenario(event.target.value)}
+                className="h-[42px] text-xs"
               >
                 {Object.keys(STRESS_SCENARIOS)
                   .concat("Custom")
@@ -5221,7 +5263,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       {scenario}
                     </option>
                   ))}
-              </select>
+              </ShellSelect>
               <button
                 onClick={runStressScenario}
                 className="rounded bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
@@ -5534,10 +5576,10 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           </div>
 
           <div className="mb-3 grid gap-3 md:grid-cols-4">
-            <select
+            <ShellSelect
               value={auditActionType}
               onChange={(event) => setAuditActionType(event.target.value)}
-              className="rounded border border-subtle bg-surface px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/35"
+              className="h-[42px] text-xs"
             >
               <option value="">All actions</option>
               <option value="POSITION_ADDED">Position Added</option>
@@ -5546,7 +5588,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               <option value="RISK_SCORED">Risk Scored</option>
               <option value="STRESS_TEST_RUN">Stress Test Run</option>
               <option value="ALLOCATION_COMMITTED">Allocation Committed</option>
-            </select>
+            </ShellSelect>
             <input
               type="date"
               value={auditFrom}
