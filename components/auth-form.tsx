@@ -14,7 +14,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [pending, setPending] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const nextUrl = searchParams.get("next") ?? "/";
+  const nextUrl = searchParams.get("next") ?? "/app";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -52,7 +52,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     }
 
     if (data.session) {
-      router.replace("/");
+      router.replace("/app");
       router.refresh();
       return;
     }

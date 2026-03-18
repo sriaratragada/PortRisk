@@ -439,13 +439,11 @@ function InlineMetric({
 function SidebarNavItem({
   active,
   label,
-  caption,
   icon: Icon,
   onClick
 }: {
   active: boolean;
   label: string;
-  caption: string;
   icon: (props: IconProps) => JSX.Element;
   onClick: () => void;
 }) {
@@ -454,25 +452,22 @@ function SidebarNavItem({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-start gap-3 rounded-lg border px-3 py-3 text-left transition",
+        "group relative flex h-10 w-10 items-center justify-center rounded border transition",
         active
-          ? "border-white/[0.12] bg-white/[0.06] text-white"
-          : "border-transparent text-slate-400 hover:border-white/[0.06] hover:bg-white/[0.03] hover:text-white"
+          ? "border-primary/35 bg-primary/12 text-primary"
+          : "border-transparent text-muted-foreground hover:border-border hover:bg-secondary hover:text-foreground"
       )}
     >
-      <span
-        className={cn(
-          "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border",
-          active
-            ? "border-white/[0.12] bg-white/[0.08] text-white"
-            : "border-white/[0.06] bg-white/[0.03] text-slate-500"
-        )}
-      >
-        <Icon className="h-4 w-4" />
-      </span>
-      <span className="min-w-0">
-        <span className="block text-sm font-medium">{label}</span>
-        <span className="mt-1 block truncate text-xs text-slate-500">{caption}</span>
+      <Icon className="h-4 w-4" />
+      {active ? (
+        <motion.span
+          layoutId="sidebar-active-indicator"
+          className="absolute -left-1 top-2.5 h-5 w-0.5 rounded-full bg-primary"
+          transition={{ type: "spring", stiffness: 380, damping: 30 }}
+        />
+      ) : null}
+      <span className="pointer-events-none absolute left-full top-1/2 z-30 ml-2 -translate-y-1/2 rounded bg-card px-2 py-1 text-[10px] text-foreground opacity-0 shadow-panel transition-opacity group-hover:opacity-100">
+        {label}
       </span>
     </button>
   );
@@ -488,12 +483,12 @@ function WorkspaceToolbar({
   actions?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-4 border-b border-white/[0.06] px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-[-0.04em] text-white">{title}</h1>
-        {subtitle ? <p className="mt-1 text-sm text-slate-400">{subtitle}</p> : null}
+    <div className="flex h-11 items-center gap-2 border-b border-subtle bg-surface px-3 sm:px-4">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium text-foreground">{title}</p>
+        {subtitle ? <p className="truncate text-[10px] text-muted-foreground">{subtitle}</p> : null}
       </div>
-      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+      {actions ? <div className="ml-auto flex items-center gap-2">{actions}</div> : null}
     </div>
   );
 }
@@ -6083,78 +6078,47 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   );
 
   return (
-    <div className="min-h-screen bg-surface text-slate-100">
-      <div className="relative flex min-h-screen">
-        <aside className="hidden w-64 shrink-0 border-r border-white/[0.06] bg-sidebar px-4 py-4 lg:flex lg:flex-col">
-          <div className="flex items-center gap-3 border-b border-white/[0.06] pb-4">
-            <span className="text-white">
-              <LogoMark />
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-white">Portfolio Risk Engine</p>
-              <p className="mt-0.5 truncate text-xs text-slate-500">{initialData.user.email}</p>
-            </div>
+    <div className="h-screen overflow-hidden bg-background text-foreground">
+      <div className="flex h-full">
+        <aside className="hidden w-16 shrink-0 flex-col items-center gap-1 border-r border-subtle bg-surface py-3 lg:flex">
+          <div className="mb-3 flex h-8 w-8 items-center justify-center rounded bg-primary/20 text-primary">
+            <LogoMark className="h-5 w-5" />
           </div>
-
-          <div className="mt-4 space-y-3">
-            <p className="text-xs font-medium text-slate-500">Portfolio</p>
-            {portfolioSummaries.length > 0 ? portfolioSelector : null}
-          </div>
-
-          <nav className="mt-6 flex-1 space-y-1.5 overflow-y-auto pr-1">
-            {tabs.map((tab) => (
-              <SidebarNavItem
-                key={tab.id}
-                active={activeTab === tab.id}
-                label={tab.shortLabel}
-                caption={tab.caption}
-                icon={tab.icon}
-                onClick={() => setActiveTab(tab.id)}
-              />
-            ))}
-          </nav>
-
-          <div className="space-y-3 border-t border-white/[0.06] pt-4">
-            <button
-              type="button"
-              onClick={() => setActiveTab("holdings")}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-zinc-200"
-            >
-              <PlusIcon className="h-4 w-4" />
-              Add Position
-            </button>
-            <div className="rounded-lg border border-white/[0.06] bg-muted/60 px-3 py-2.5">
-              <p className="text-[11px] text-slate-500">Selected sleeve</p>
-              <p className="mt-1 text-sm font-medium text-white">{selectedPortfolio?.name ?? "None"}</p>
-              <p className="mt-1 text-xs text-slate-500">
-                {selectedPortfolio ? `${selectedPortfolio.positions.length} positions` : "Create or select a portfolio"}
-              </p>
-            </div>
-          </div>
+          {tabs.map((tab) => (
+            <SidebarNavItem
+              key={tab.id}
+              active={activeTab === tab.id}
+              label={tab.shortLabel}
+              icon={tab.icon}
+              onClick={() => setActiveTab(tab.id)}
+            />
+          ))}
+          <button
+            type="button"
+            onClick={() => setActiveTab("holdings")}
+            className="mt-auto flex h-10 w-10 items-center justify-center rounded border border-subtle text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+            title="Add position"
+          >
+            <PlusIcon className="h-4 w-4" />
+          </button>
         </aside>
 
-        <div className="flex min-h-screen flex-1 flex-col bg-surface">
+        <div className="flex min-w-0 flex-1 flex-col">
           <WorkspaceToolbar
             title={activeTabMeta.label}
-            subtitle={activeTabMeta.caption}
+            subtitle={selectedPortfolio?.name ?? activeTabMeta.caption}
             actions={
               <>
                 <button
                   type="button"
                   onClick={() => setMobileNavOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-white/[0.08] px-3 py-2 text-sm text-slate-300 transition hover:border-white/[0.14] hover:text-white lg:hidden"
+                  className="inline-flex h-8 items-center gap-1 rounded border border-subtle px-2 text-xs text-muted-foreground transition hover:text-foreground lg:hidden"
                 >
-                  <MenuIcon className="h-4 w-4" />
+                  <MenuIcon className="h-3.5 w-3.5" />
                   Menu
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("holdings")}
-                  className="hidden items-center gap-2 rounded-lg border border-white/[0.08] px-3 py-2 text-sm text-slate-300 transition hover:border-white/[0.14] hover:text-white sm:inline-flex"
-                >
-                  <PlusIcon className="h-4 w-4" />
-                  Add Position
-                </button>
+                <div className="hidden min-w-[210px] max-w-[260px] lg:block">{portfolioSelector}</div>
+                <RangeSelector value={portfolioRange} onChange={setPortfolioRange} />
               </>
             }
           />
@@ -6162,10 +6126,10 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           {(statusMessage || errorMessage || portfolioLoading || isPending) && (
             <div
               className={cn(
-                "mx-4 mt-4 rounded-lg border px-4 py-3 text-sm sm:mx-6 lg:mx-8",
+                "mx-3 mt-2 rounded border px-3 py-2 text-xs",
                 errorMessage
                   ? "border-danger/30 bg-danger/10 text-danger"
-                  : "border-white/[0.08] bg-muted/60 text-zinc-100"
+                  : "border-subtle bg-surface text-foreground"
               )}
             >
               {errorMessage ??
@@ -6174,16 +6138,36 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             </div>
           )}
 
-          <main className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 lg:px-8">
-            {activeTab === "overview" && renderOverview()}
-            {activeTab === "holdings" && renderHoldings()}
-            {activeTab === "research" && renderResearch()}
-            {activeTab === "risk" && renderRisk()}
-            {activeTab === "stress" && renderStress()}
-            {activeTab === "allocation" && renderAllocation()}
-            {activeTab === "audit" && renderAudit()}
-            {activeTab === "settings" && renderSettings()}
+          <main className="min-h-0 flex-1 overflow-auto p-3">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={activeTab}
+                initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 6 }}
+                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                exit={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
+                transition={{ duration: 0.2 }}
+              >
+                {activeTab === "overview" && renderOverview()}
+                {activeTab === "holdings" && renderHoldings()}
+                {activeTab === "research" && renderResearch()}
+                {activeTab === "risk" && renderRisk()}
+                {activeTab === "stress" && renderStress()}
+                {activeTab === "allocation" && renderAllocation()}
+                {activeTab === "audit" && renderAudit()}
+                {activeTab === "settings" && renderSettings()}
+              </motion.div>
+            </AnimatePresence>
           </main>
+
+          <footer className="flex h-6 shrink-0 items-center gap-3 border-t border-subtle bg-surface px-4 text-[9px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-positive animate-pulse-glow" />
+              System online
+            </span>
+            <span>Tab: {activeTabMeta.shortLabel}</span>
+            <span>{selectedPortfolio ? `${selectedPortfolio.positions.length} positions` : "No portfolio"}</span>
+            <span className="ml-auto font-mono-data">as-of {new Date().toISOString().slice(0, 19)}Z</span>
+          </footer>
         </div>
       </div>
 
@@ -6220,7 +6204,6 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   key={tab.id}
                   active={activeTab === tab.id}
                   label={tab.shortLabel}
-                  caption={tab.caption}
                   icon={tab.icon}
                   onClick={() => setActiveTab(tab.id)}
                 />

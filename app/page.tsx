@@ -1,15 +1,7 @@
-import { WorkspaceApp } from "@/components/workspace-app";
-import { requireServerUser } from "@/lib/auth";
-import { getWorkspaceData } from "@/lib/workspace-data";
+import { LandingPage } from "@/components/landing-page";
 
-export const dynamic = "force-dynamic";
+export const dynamic = "force-static";
 
 export default async function HomePage() {
-  const user = await requireServerUser();
-  const data = await getWorkspaceData({
-    id: user.id,
-    email: user.email ?? ""
-  });
-
-  return <WorkspaceApp initialData={data} />;
+  return <LandingPage />;
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseMiddlewareClient } from "@/lib/supabase";
 
 const authPages = new Set(["/login", "/signup"]);
+const publicPages = new Set(["/", "/login", "/signup"]);
 
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next();
@@ -13,8 +14,9 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isApiRoute = pathname.startsWith("/api");
   const isAuthPage = authPages.has(pathname);
+  const isPublicPage = publicPages.has(pathname);
 
-  if (!session && !isApiRoute && !isAuthPage) {
+  if (!session && !isApiRoute && !isPublicPage) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("next", pathname);
@@ -23,7 +25,7 @@ export async function middleware(request: NextRequest) {
 
   if (session && isAuthPage) {
     const appUrl = request.nextUrl.clone();
-    appUrl.pathname = "/";
+    appUrl.pathname = "/app";
     return NextResponse.redirect(appUrl);
   }
 
