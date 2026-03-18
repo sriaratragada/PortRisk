@@ -5838,9 +5838,15 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   );
 
   return (
-    <div className="h-screen overflow-hidden bg-background text-foreground">
-      <div className="flex h-full">
-        <aside className="hidden w-16 shrink-0 flex-col items-center gap-1 border-r border-subtle bg-surface py-3 lg:flex">
+    <div className="relative h-screen overflow-hidden bg-background text-foreground">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute inset-0 grid-pattern opacity-20" />
+        <div className="absolute -top-24 -right-12 h-[520px] w-[520px] rounded-full bg-primary/12 blur-[140px]" />
+        <div className="absolute top-1/3 -left-32 h-[520px] w-[520px] rounded-full bg-positive/10 blur-[140px]" />
+        <div className="absolute -bottom-28 right-1/4 h-[460px] w-[460px] rounded-full bg-destructive/12 blur-[120px]" />
+      </div>
+      <div className="relative z-10 flex h-full">
+        <aside className="hidden w-16 shrink-0 flex-col items-center gap-1 border-r border-subtle bg-surface/80 py-3 backdrop-blur-xl lg:flex">
           <div className="mb-3 flex h-8 w-8 items-center justify-center rounded bg-primary/20 text-primary">
             <LogoMark className="h-5 w-5" />
           </div>
@@ -5919,7 +5925,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             </AnimatePresence>
           </main>
 
-          <footer className="flex h-6 shrink-0 items-center gap-3 border-t border-subtle bg-surface px-4 text-[9px] text-muted-foreground">
+          <footer className="flex h-6 shrink-0 items-center gap-3 border-t border-subtle bg-surface/80 px-4 text-[9px] text-muted-foreground backdrop-blur-xl">
             <span className="inline-flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full bg-positive animate-pulse-glow" />
               System online

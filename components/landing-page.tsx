@@ -1,239 +1,360 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useRef } from "react";
+import { motion, type Variants } from "framer-motion";
 import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import {
   Activity,
   ArrowRight,
   BarChart3,
+  ChevronRight,
   FileCheck,
   GitBranch,
   Lock,
-  Shield,
-  Sparkles
+  Shield
 } from "lucide-react";
+import { AnimatedCounter } from "@/components/landing/animated-counter";
+import { FeatureCard } from "@/components/landing/feature-card";
+import { MockDashboard } from "@/components/landing/mock-dashboard";
 
-type CounterProps = {
-  value: number;
-  suffix?: string;
-  prefix?: string;
-  label: string;
+gsap.registerPlugin(ScrollTrigger);
+
+const stagger: Variants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.12 } }
 };
 
-function AnimatedCounter({ value, suffix = "", prefix = "", label }: CounterProps) {
-  const rounded = useMemo(() => value.toLocaleString("en-US"), [value]);
-  return (
-    <div className="panel p-3 text-left">
-      <p className="font-mono-data text-lg font-semibold text-foreground">
-        {prefix}
-        {rounded}
-        {suffix}
-      </p>
-      <p className="mt-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
-    </div>
-  );
-}
+const fadeUp: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } }
+};
 
 const features = [
   {
     icon: Shield,
     title: "Deterministic Risk Scoring",
-    description: "Reproducible multi-factor scoring with stable, auditable risk outputs."
+    description: "Multi-factor scoring with reproducible, auditable outputs for every holding."
   },
   {
     icon: BarChart3,
     title: "Benchmark Attribution",
-    description: "Portfolio-versus-benchmark return decomposition with contribution detail."
+    description: "Brinson-style attribution with realtime benchmark-relative performance context."
   },
   {
     icon: FileCheck,
     title: "Audit-Grade Compliance",
-    description: "Immutable event trail for holdings changes, risk decisions, and controls."
+    description: "Immutable audit logging with RLS, append-only writes, and evidence snapshots."
   },
   {
     icon: GitBranch,
-    title: "Research-to-Holding Workflow",
-    description: "Move ideas from feed to watchlist to confirmed positions in one workspace."
+    title: "Research-to-Holding",
+    description: "From idea to watchlist to confirmed positions without leaving the workspace."
   }
 ];
 
+const trustItems = [
+  { icon: Lock, label: "RLS Everywhere" },
+  { icon: Activity, label: "Deterministic Analytics" },
+  { icon: Shield, label: "Audit-Ready Trail" }
+];
+
 export function LandingPage() {
-  const heroRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const heroImageRef = useRef<HTMLDivElement>(null);
+  const orb1Ref = useRef<HTMLDivElement>(null);
+  const orb2Ref = useRef<HTMLDivElement>(null);
+  const orb3Ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!heroRef.current) return;
-    const nodes = heroRef.current.querySelectorAll(".hero-node");
+    if (!containerRef.current) return;
     const ctx = gsap.context(() => {
-      gsap.fromTo(
-        nodes,
-        { opacity: 0, scale: 0.2 },
-        { opacity: 0.7, scale: 1, duration: 0.8, stagger: 0.06, ease: "power2.out" }
-      );
-      gsap.to(nodes, {
-        y: "random(-9, 9)",
-        x: "random(-7, 7)",
-        duration: 3.2,
-        ease: "sine.inOut",
-        repeat: -1,
-        yoyo: true,
-        stagger: 0.22
+      if (heroImageRef.current) {
+        gsap.to(heroImageRef.current, {
+          yPercent: 25,
+          ease: "none",
+          scrollTrigger: {
+            trigger: containerRef.current,
+            start: "top top",
+            end: "bottom top",
+            scrub: 0.5
+          }
+        });
+      }
+
+      const orbs = [orb1Ref.current, orb2Ref.current, orb3Ref.current];
+      orbs.forEach((orb, i) => {
+        if (!orb) return;
+        gsap.to(orb, {
+          x: "random(-40, 40)",
+          y: "random(-30, 30)",
+          duration: 6 + i * 2,
+          ease: "sine.inOut",
+          repeat: -1,
+          yoyo: true
+        });
+        gsap.to(orb, {
+          yPercent: 30 + i * 20,
+          xPercent: (i % 2 === 0 ? 1 : -1) * 15,
+          ease: "none",
+          scrollTrigger: {
+            trigger: containerRef.current,
+            start: "top top",
+            end: "bottom top",
+            scrub: 1 + i * 0.3
+          }
+        });
       });
-    }, heroRef);
+    }, containerRef);
 
     return () => ctx.revert();
   }, []);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="fixed inset-x-0 top-0 z-50 border-b border-subtle bg-background/80 backdrop-blur-lg">
-        <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between px-4">
+    <div ref={containerRef} className="min-h-screen overflow-x-hidden bg-background">
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-border/50 bg-background/70 backdrop-blur-xl">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
           <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded bg-primary/20 text-primary">
+            <div className="flex h-7 w-7 items-center justify-center rounded bg-primary/20 text-primary">
               <Activity className="h-4 w-4" />
-            </span>
-            <span className="text-sm font-semibold tracking-tight">Portfolio Risk & Compliance Engine</span>
+            </div>
+            <span className="text-sm font-semibold tracking-tight">PRCE</span>
           </div>
+          <nav className="hidden items-center gap-6 text-xs text-muted-foreground md:flex">
+            <a href="#features" className="transition-colors hover:text-foreground">
+              Features
+            </a>
+            <a href="#preview" className="transition-colors hover:text-foreground">
+              Platform
+            </a>
+            <a href="#trust" className="transition-colors hover:text-foreground">
+              Security
+            </a>
+          </nav>
           <div className="flex items-center gap-2">
-            <Link href="/login" className="rounded px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">
+            <Link href="/login" className="text-xs font-semibold text-muted-foreground hover:text-foreground">
               Sign In
             </Link>
             <Link
               href="/signup"
-              className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition hover:opacity-90"
+              className="inline-flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition hover:border-primary/60 hover:bg-primary/15"
             >
               Create Account
+              <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
         </div>
       </header>
 
-      <section className="relative overflow-hidden pb-10 pt-24">
-        <div className="absolute inset-0 grid-pattern opacity-40" />
-        <div ref={heroRef} className="pointer-events-none absolute inset-0">
-          {Array.from({ length: 14 }).map((_, index) => (
-            <span
-              key={index}
-              className="hero-node absolute h-1.5 w-1.5 rounded-full bg-primary/45"
-              style={{
-                top: `${10 + Math.random() * 80}%`,
-                left: `${8 + Math.random() * 84}%`
-              }}
-            />
-          ))}
-          <div className="absolute left-[18%] top-[16%] h-72 w-72 rounded-full bg-primary/10 blur-[96px]" />
-          <div className="absolute bottom-[14%] right-[18%] h-64 w-64 rounded-full bg-danger/10 blur-[94px]" />
-        </div>
+      <section className="relative flex min-h-screen items-center justify-center overflow-hidden pt-14">
+        <div
+          ref={heroImageRef}
+          className="absolute inset-0 -top-20 -bottom-20"
+          style={{
+            backgroundImage: "url(/hero-bg.jpg)",
+            backgroundSize: "cover",
+            backgroundPosition: "center 40%"
+          }}
+        />
+        <div className="absolute inset-0 bg-background/60" />
+        <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-transparent to-background" />
+
+        <div
+          ref={orb1Ref}
+          className="absolute left-[20%] top-[15%] h-[500px] w-[500px] rounded-full opacity-30"
+          style={{
+            background: "radial-gradient(circle, hsl(var(--primary) / 0.4) 0%, transparent 70%)",
+            filter: "blur(80px)"
+          }}
+        />
+        <div
+          ref={orb2Ref}
+          className="absolute right-[10%] top-[50%] h-[400px] w-[400px] rounded-full opacity-20"
+          style={{
+            background: "radial-gradient(circle, hsl(30 90% 55% / 0.5) 0%, transparent 70%)",
+            filter: "blur(100px)"
+          }}
+        />
+        <div
+          ref={orb3Ref}
+          className="absolute bottom-[10%] left-[40%] h-[600px] w-[600px] rounded-full opacity-15"
+          style={{
+            background: "radial-gradient(circle, hsl(var(--primary) / 0.3) 0%, transparent 70%)",
+            filter: "blur(120px)"
+          }}
+        />
+        <div className="absolute inset-0 grid-pattern opacity-20" />
 
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="relative mx-auto flex w-full max-w-7xl flex-col gap-10 px-4"
+          className="relative z-10 mx-auto max-w-5xl px-4 text-center"
+          variants={stagger}
+          initial="hidden"
+          animate="visible"
         >
-          <div className="max-w-4xl">
-            <span className="inline-flex items-center gap-1 rounded border border-primary/25 bg-primary/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-primary">
-              <Sparkles className="h-3 w-3" />
+          <motion.div variants={fadeUp} className="mb-4">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary backdrop-blur-sm">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse-glow" />
               Enterprise Risk Infrastructure
             </span>
-            <h1 className="mt-4 text-4xl font-semibold tracking-tight md:text-6xl">
-              Portfolio Risk and Compliance
-              <span className="block text-primary">for institutional operators</span>
-            </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground md:text-base">
-              Deterministic risk analytics, benchmark attribution, and audit logging combined in a
-              dense workspace built for daily portfolio decisions.
+          </motion.div>
+
+          <motion.h1
+            variants={fadeUp}
+            className="mb-5 text-4xl font-semibold leading-[1.05] tracking-tight md:text-6xl lg:text-7xl"
+          >
+            Portfolio Risk &<br />
+            <span className="text-primary">Compliance Engine</span>
+          </motion.h1>
+
+          <motion.p
+            variants={fadeUp}
+            className="mx-auto mb-8 max-w-xl text-base leading-relaxed text-muted-foreground md:text-lg"
+          >
+            Deterministic analytics, audit-grade logging, and research-to-holding workflows for
+            institutional operators.
+          </motion.p>
+
+          <motion.div variants={fadeUp} className="flex items-center justify-center gap-3">
+            <Link
+              href="/signup"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-xl shadow-primary/35 transition hover:-translate-y-0.5 hover:shadow-primary/45"
+            >
+              Create Account
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-2 rounded-lg border border-primary/40 px-4 py-2 text-sm font-semibold text-primary transition hover:border-primary/60 hover:bg-primary/10"
+            >
+              Sign In
+            </Link>
+          </motion.div>
+
+          <motion.div variants={fadeUp} className="mx-auto mt-14 grid max-w-md grid-cols-3 gap-6">
+            <AnimatedCounter value={2.4} suffix="T" label="Assets Monitored" prefix="$" />
+            <AnimatedCounter value={99.97} suffix="%" label="Uptime SLA" />
+            <AnimatedCounter value={12} suffix="ms" label="Calc Latency" />
+          </motion.div>
+        </motion.div>
+
+        <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background to-transparent" />
+      </section>
+
+      <section id="features" className="relative py-20 px-4">
+        <motion.div
+          className="mx-auto max-w-6xl"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-100px" }}
+          variants={stagger}
+        >
+          <motion.div variants={fadeUp} className="mb-12 text-center">
+            <h2 className="mb-3 text-2xl font-semibold tracking-tight md:text-3xl">
+              Institutional-Grade Analytics
+            </h2>
+            <p className="mx-auto max-w-lg text-sm text-muted-foreground">
+              Every computation is deterministic, every action is logged, every insight is
+              attributable.
             </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link
-                href="/signup"
-                className="inline-flex items-center gap-1 rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
-              >
-                Create Account
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-              <Link
-                href="/app"
-                className="inline-flex items-center gap-1 rounded border border-subtle bg-surface px-4 py-2 text-sm text-foreground transition hover:border-primary/40"
-              >
-                Open Workspace
-              </Link>
-            </div>
-          </div>
+          </motion.div>
 
-          <div className="grid gap-3 md:grid-cols-3">
-            <AnimatedCounter value={2400000000000} prefix="$" label="Assets tracked" />
-            <AnimatedCounter value={99.97} suffix="%" label="Service uptime" />
-            <AnimatedCounter value={12} suffix="ms" label="Risk recompute latency" />
-          </div>
-
-          <div className="panel p-4">
-            <div className="grid grid-cols-12 gap-3">
-              <div className="col-span-12 lg:col-span-8">
-                <div className="panel-bright p-4">
-                  <p className="text-xs text-muted-foreground">Workspace preview</p>
-                  <div className="mt-3 grid gap-3 md:grid-cols-3">
-                    {["Performance", "Risk", "Attribution"].map((item, idx) => (
-                      <div key={item} className="panel p-3">
-                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{item}</p>
-                        <div className="mt-3 h-16 overflow-hidden rounded bg-secondary/70">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${62 + idx * 12}%` }}
-                            transition={{ duration: 0.8, delay: idx * 0.12 }}
-                            className="h-full bg-primary/35"
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className="col-span-12 lg:col-span-4">
-                <div className="panel-bright h-full p-4">
-                  <p className="text-xs font-medium">Trust signals</p>
-                  <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-                    <p className="flex items-center gap-2">
-                      <Lock className="h-4 w-4 text-primary" />
-                      Audit-ready event history
-                    </p>
-                    <p className="flex items-center gap-2">
-                      <Shield className="h-4 w-4 text-primary" />
-                      Deterministic computation paths
-                    </p>
-                    <p className="flex items-center gap-2">
-                      <BarChart3 className="h-4 w-4 text-primary" />
-                      Benchmark-aware diagnostics
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+            {features.map((f, i) => (
+              <motion.div key={f.title} variants={fadeUp}>
+                <FeatureCard icon={f.icon} title={f.title} description={f.description} index={i} />
+              </motion.div>
+            ))}
           </div>
         </motion.div>
       </section>
 
-      <section className="mx-auto w-full max-w-7xl px-4 pb-12">
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-          {features.map((feature, index) => (
-            <motion.article
-              key={feature.title}
-              initial={{ opacity: 0, y: 10 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-60px" }}
-              transition={{ duration: 0.25, delay: index * 0.06 }}
-              className="panel p-4"
+      <section id="preview" className="py-20 px-4">
+        <motion.div
+          className="mx-auto max-w-6xl"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-100px" }}
+          variants={stagger}
+        >
+          <motion.div variants={fadeUp} className="mb-10 text-center">
+            <h2 className="mb-3 text-2xl font-semibold tracking-tight md:text-3xl">The Workstation</h2>
+            <p className="mx-auto max-w-lg text-sm text-muted-foreground">
+              Dense, information-rich workspace with holdings, research, risk, stress, allocation,
+              and audit at a glance.
+            </p>
+          </motion.div>
+          <motion.div variants={fadeUp}>
+            <MockDashboard />
+          </motion.div>
+        </motion.div>
+      </section>
+
+      <section id="trust" className="border-t border-border py-16 px-4">
+        <div className="mx-auto flex max-w-4xl flex-col items-center justify-center gap-8 md:flex-row">
+          {trustItems.map((item) => (
+            <motion.div
+              key={item.label}
+              className="flex items-center gap-2.5 text-sm text-muted-foreground"
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
             >
-              <span className="flex h-8 w-8 items-center justify-center rounded bg-secondary text-primary">
-                <feature.icon className="h-4 w-4" />
-              </span>
-              <h2 className="mt-3 text-sm font-semibold">{feature.title}</h2>
-              <p className="mt-2 text-sm text-muted-foreground">{feature.description}</p>
-            </motion.article>
+              <item.icon className="h-4 w-4 text-primary/60" />
+              <span>{item.label}</span>
+            </motion.div>
           ))}
         </div>
       </section>
+
+      <section className="py-20 px-4">
+        <motion.div
+          className="mx-auto max-w-2xl text-center"
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+        >
+          <h2 className="mb-3 text-2xl font-semibold tracking-tight md:text-3xl">
+            Ready to upgrade your risk infrastructure?
+          </h2>
+          <p className="mb-6 text-sm text-muted-foreground">
+            Deploy in minutes. Supabase auth + RLS, Prisma schema, Yahoo Finance sourcing, and Upstash
+            rate limits are already wired.
+          </p>
+          <div className="flex justify-center gap-3">
+            <Link
+              href="/signup"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-xl shadow-primary/35 transition hover:-translate-y-0.5 hover:shadow-primary/45"
+            >
+              Get Started <ChevronRight className="h-4 w-4" />
+            </Link>
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-2 rounded-lg border border-primary/40 px-4 py-2 text-sm font-semibold text-primary transition hover:border-primary/60 hover:bg-primary/10"
+            >
+              Sign In
+            </Link>
+          </div>
+        </motion.div>
+      </section>
+
+      <footer className="border-t border-border py-8 px-4">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 text-xs text-muted-foreground md:flex-row">
+          <div className="flex items-center gap-2">
+            <Activity className="h-3.5 w-3.5 text-primary/60" />
+            <span>Portfolio Risk & Compliance Engine</span>
+          </div>
+          <div className="flex gap-6">
+            <span>Documentation</span>
+            <span>API</span>
+            <span>Status</span>
+            <span>Security</span>
+          </div>
+          <span>© 2026 PRCE. All rights reserved.</span>
+        </div>
+      </footer>
     </div>
   );
 }

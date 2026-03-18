@@ -38,9 +38,9 @@ const config: Config = {
         danger: "hsl(var(--destructive) / <alpha-value>)"
       },
       fontFamily: {
-        sans: ["'IBM Plex Sans'", "ui-sans-serif", "system-ui", "sans-serif"],
-        mono: ["'IBM Plex Mono'", "ui-monospace", "SFMono-Regular", "monospace"],
-        data: ["'IBM Plex Mono'", "ui-monospace", "SFMono-Regular", "monospace"]
+        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
+        data: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"]
       },
       boxShadow: {
         panel: "0 10px 24px rgba(0, 0, 0, 0.24)",

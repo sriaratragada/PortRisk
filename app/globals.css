@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -26,7 +26,7 @@
   --border: 217 20% 18%;
   --input: 217 20% 18%;
   --ring: 199 89% 60%;
-  --radius: 0.45rem;
+  --radius: 0.3rem;
   --sidebar-background: 222 47% 3%;
   --sidebar-foreground: 215 16% 57%;
   --sidebar-primary: 199 89% 60%;
