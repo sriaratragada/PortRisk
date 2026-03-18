@@ -21,11 +21,6 @@ import {
   YAxis
 } from "recharts";
 import {
-  Group as ResizablePanelGroup,
-  Panel as ResizablePanel,
-  Separator as ResizablePanelResizeHandle
-} from "react-resizable-panels";
-import {
   BENCHMARK_PRESETS,
   defaultBenchmarkForPortfolio,
   normalizeBenchmarkSymbol,
@@ -74,12 +69,6 @@ type PortfolioCardStats = {
   portfolioValue: number | null;
   dailyPnl: number | null;
   topWeight: number | null;
-};
-
-type ResearchPanelLayout = {
-  researchFeed: number;
-  researchNotebook: number;
-  researchInsight: number;
 };
 
 type IconProps = {
@@ -1166,11 +1155,6 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const [activeResearchAnalysisTab, setActiveResearchAnalysisTab] = useState<
     "fit" | "ai" | "quality" | "diligence"
   >("fit");
-  const [researchPanelLayout, setResearchPanelLayout] = useState<ResearchPanelLayout>({
-    researchFeed: 32,
-    researchNotebook: 36,
-    researchInsight: 32
-  });
   const [researchSourceFilter, setResearchSourceFilter] = useState<
     "all" | "manual" | "related" | "screener" | "trending"
   >("all");
@@ -1285,29 +1269,6 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   function updateWatchlistSnapshot(items: WatchlistItem[]) {
     setWatchlistItems(items);
   }
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    try {
-      const raw = window.localStorage.getItem("research-workstation-panels");
-      if (!raw) {
-        return;
-      }
-      const parsed = JSON.parse(raw) as unknown;
-      if (
-        parsed &&
-        typeof parsed === "object" &&
-        typeof (parsed as ResearchPanelLayout).researchFeed === "number" &&
-        typeof (parsed as ResearchPanelLayout).researchNotebook === "number" &&
-        typeof (parsed as ResearchPanelLayout).researchInsight === "number"
-      ) {
-        setResearchPanelLayout(parsed as ResearchPanelLayout);
-      }
-    } catch {}
-  }, []);
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -3404,6 +3365,43 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     const topSector = riskReport?.sectorConcentration[0] ?? null;
     const topHoldingRows = sortedHoldings.slice(0, 6);
     const topBenchmarkLabel = selectedPortfolio?.benchmark ?? benchmarkAnalytics?.benchmark ?? "S&P 500";
+    const downsideVolatility = riskReport?.returnDiagnostics.downsideVolatility ?? null;
+    const sortinoRatio =
+      selectedMetrics && downsideVolatility != null && downsideVolatility > 0
+        ? selectedMetrics.annualizedReturn / downsideVolatility
+        : null;
+    const betaRatio = benchmarkAnalytics?.beta ?? riskReport?.returnDiagnostics.betaToBenchmark ?? null;
+    const maxDrawdown = selectedMetrics?.maxDrawdown != null ? -Math.abs(selectedMetrics.maxDrawdown) : null;
+    const healthMatrixCards = [
+      {
+        key: "sharpe",
+        label: "SHARPE",
+        value: selectedMetrics?.sharpe ?? null,
+        display: selectedMetrics?.sharpe != null ? selectedMetrics.sharpe.toFixed(2) : "N/A",
+        tone: "positive" as const
+      },
+      {
+        key: "sortino",
+        label: "SORTINO",
+        value: sortinoRatio,
+        display: sortinoRatio != null && Number.isFinite(sortinoRatio) ? sortinoRatio.toFixed(2) : "N/A",
+        tone: "positive" as const
+      },
+      {
+        key: "maxdd",
+        label: "MAXDD",
+        value: maxDrawdown,
+        display: maxDrawdown != null && Number.isFinite(maxDrawdown) ? `${(maxDrawdown * 100).toFixed(1)}%` : "N/A",
+        tone: "warning" as const
+      },
+      {
+        key: "beta",
+        label: "BETA",
+        value: betaRatio,
+        display: betaRatio != null && Number.isFinite(betaRatio) ? betaRatio.toFixed(2) : "N/A",
+        tone: "positive" as const
+      }
+    ];
 
     return (
       <div className="space-y-3">
@@ -3588,12 +3586,29 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   )}
                 </Panel>
                 <Panel title="Health Matrix">
-                  {riskReport ? (
-                    <div className="grid grid-cols-2 gap-2">
-                      <InfoPill label="Conc." value={`${riskReport.qualityScores.concentration}/100`} />
-                      <InfoPill label="Liquidity" value={`${riskReport.qualityScores.liquidity}/100`} />
-                      <InfoPill label="Balance" value={`${riskReport.qualityScores.balanceSheet}/100`} />
-                      <InfoPill label="Downside" value={`${riskReport.qualityScores.downsideRisk}/100`} />
+                  {selectedMetrics ? (
+                    <div className="rounded-md border border-[#1a2b43] bg-[#0a1526] p-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        {healthMatrixCards.map((card) => (
+                          <div
+                            key={card.key}
+                            className={cn(
+                              "rounded-md border px-4 py-3",
+                              card.tone === "warning" ? "border-[#6a5a23]" : "border-[#1b5c58]"
+                            )}
+                          >
+                            <p
+                              className={cn(
+                                "font-mono-data text-3xl",
+                                card.tone === "warning" ? "text-[#f4d23c]" : "text-[#34d3b2]"
+                              )}
+                            >
+                              {card.display}
+                            </p>
+                            <p className="mt-1 text-xs tracking-[0.16em] text-[#6e89ab]">{card.label}</p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">Health diagnostics loading.</p>
@@ -4949,38 +4964,10 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           )}
         </Panel>
 
-        <div className="hidden min-h-0 flex-1 xl:block">
-          <ResizablePanelGroup
-            orientation="horizontal"
-            defaultLayout={researchPanelLayout}
-            onLayoutChanged={(layout) => {
-              setResearchPanelLayout(layout as ResearchPanelLayout);
-              if (typeof window !== "undefined") {
-                window.localStorage.setItem("research-workstation-panels", JSON.stringify(layout));
-              }
-            }}
-            className="h-full min-h-0 gap-3"
-          >
-            <ResizablePanel id="researchFeed" defaultSize={researchPanelLayout.researchFeed} minSize={24}>
-              {renderFeedPane()}
-            </ResizablePanel>
-            <ResizablePanelResizeHandle className="mx-1 w-1 rounded-full bg-[#1a2b43] transition hover:bg-[#2a476b]" />
-            <ResizablePanel
-              id="researchNotebook"
-              defaultSize={researchPanelLayout.researchNotebook}
-              minSize={28}
-            >
-              {renderNotebookPane()}
-            </ResizablePanel>
-            <ResizablePanelResizeHandle className="mx-1 w-1 rounded-full bg-[#1a2b43] transition hover:bg-[#2a476b]" />
-            <ResizablePanel
-              id="researchInsight"
-              defaultSize={researchPanelLayout.researchInsight}
-              minSize={24}
-            >
-              {renderInsightPane()}
-            </ResizablePanel>
-          </ResizablePanelGroup>
+        <div className="hidden min-h-0 flex-1 xl:grid xl:grid-rows-3 xl:gap-3">
+          <div className="min-h-0">{renderFeedPane()}</div>
+          <div className="min-h-0">{renderNotebookPane()}</div>
+          <div className="min-h-0">{renderInsightPane()}</div>
         </div>
 
         <div className="space-y-3 overflow-y-auto pr-1 xl:hidden">
