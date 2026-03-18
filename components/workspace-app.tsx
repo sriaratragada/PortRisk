@@ -1127,6 +1127,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const [auditRows, setAuditRows] = useState<AuditEntryView[]>(
     initialData.selectedPortfolio?.auditLog ?? []
   );
+  const [auditSearch, setAuditSearch] = useState("");
   const [auditActionType, setAuditActionType] = useState("");
   const [auditFrom, setAuditFrom] = useState("");
   const [auditTo, setAuditTo] = useState("");
@@ -3307,705 +3308,252 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     const selectedTopHolding = selectedPortfolio
       ? topConcentration(selectedPortfolio.holdings)
       : null;
+    const chartData = selectedPortfolio
+      ? benchmarkAnalytics?.chartSeries?.length
+        ? benchmarkAnalytics.chartSeries.map((point, index) => ({
+            ...point,
+            label: `D${index + 1}`
+          }))
+        : (() => {
+            const series = selectedPortfolio.valueHistory;
+            if (series.length < 2) return [];
+            const base = series[0]?.value ?? 0;
+            return series.map((point, index) => ({
+              date: point.date,
+              label: `D${index + 1}`,
+              portfolioIndex: base > 0 ? (point.value / base) * 100 : 100,
+              benchmarkIndex: Number.NaN
+            }));
+          })()
+      : [];
+    const biggestResearchNote = watchlistItems[0] ?? null;
+    const topSector = riskReport?.sectorConcentration[0] ?? null;
+    const topHoldingRows = sortedHoldings.slice(0, 6);
+    const topBenchmarkLabel = selectedPortfolio?.benchmark ?? benchmarkAnalytics?.benchmark ?? "S&P 500";
 
     return (
-      <div className="space-y-6">
-        <Panel title="Portfolio Summary Strip">
-          {!selectedPortfolio ? (
-            <EmptyState
-              title="Create your first strategy sleeve"
-                copy="Build separate growth, income, balanced, defensive, or speculative sleeves and track each strategy with its own risk state."
-              action={
-                <form
-                  onSubmit={createPortfolio}
-                  className="mx-auto flex max-w-md flex-col gap-3 sm:flex-row"
-                >
-                  <input
-                    value={createPortfolioName}
-                    onChange={(event) => setCreatePortfolioName(event.target.value)}
-                      placeholder="Growth"
-                    className="flex-1 rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
-                  />
-                    <button className="rounded-md bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
-                      Create Portfolio
-                    </button>
-                </form>
-              }
-            />
-          ) : (
-            <div className="grid gap-3 lg:grid-cols-7">
-              <InfoPill label="Portfolio" value={selectedPortfolio.name} />
-              <InfoPill
-                label="Value"
-                value={selectedMetrics ? formatCurrency(selectedMetrics.portfolioValue) : "N/A"}
-              />
-              <InfoPill
-                label="Day Change"
-                value={`${formatCurrency(dailyPnl)} • ${formatPercent(dailyPnlPercent)}`}
-                tone={dailyPnl >= 0 ? "positive" : "negative"}
-              />
-              <InfoPill
-                label={labelForRange(portfolioRange)}
-                value={`${formatCurrency(portfolioRangePerformance.absolute)} • ${formatPercent(
-                  portfolioRangePerformance.percent
-                )}`}
-                tone={portfolioRangePerformance.absolute >= 0 ? "positive" : "negative"}
-              />
-              <InfoPill label="Risk Tier" value={selectedMetrics?.riskTier ?? "Unscored"} />
-              <InfoPill label="Benchmark" value={selectedPortfolio.benchmark} />
-              <InfoPill label="Positions" value={`${selectedPortfolio.positions.length}`} />
-            </div>
-          )}
-        </Panel>
-
-        <div className="grid gap-6 xl:grid-cols-[1.45fr_0.55fr]">
-          <Panel
-            title="Portfolio Command"
+      <div className="space-y-3">
+        {!selectedPortfolio ? (
+          <EmptyState
+            title="Create your first strategy sleeve"
+            copy="Build separate growth, income, balanced, defensive, or speculative sleeves and track each strategy with its own risk state."
             action={
-              selectedMetrics ? (
-                <TierBadge tier={selectedMetrics.riskTier} />
-              ) : (
-                <span className="text-xs text-slate-500">
-                  {selectedPortfolio?.positions.length ? "Pricing unavailable" : "Unfunded"}
-                </span>
-              )
-            }
-          >
-            {!selectedPortfolio ? (
-              <EmptyState
-                title="No active portfolio selected"
-                copy="Use the selector above or create a sleeve to populate the dashboard."
-              />
-            ) : (
-              <div className="space-y-6">
-                <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-                  <div className="max-w-3xl">
-                  <p className="text-sm uppercase tracking-[0.22em] text-slate-500">
-                    {selectedPortfolio.name} • Benchmark {selectedPortfolio.benchmark}
-                  </p>
-                  <div className="mt-4 flex flex-wrap items-end gap-3">
-                    <h2 className="text-5xl font-semibold tracking-[-0.05em] text-white">
-                      {selectedMetrics
-                        ? formatCurrency(selectedMetrics.portfolioValue)
-                        : selectedPortfolio.positions.length > 0
-                          ? "Pricing unavailable"
-                          : "Awaiting positions"}
-                    </h2>
-                    {selectedMetrics ? (
-                      <div
-                        className={cn(
-                          "rounded-lg px-3.5 py-1.5 text-sm font-medium",
-                          dailyPnl >= 0 ? "bg-success/15 text-success" : "bg-danger/15 text-danger"
-                        )}
-                      >
-                        {formatCurrency(dailyPnl)} / {formatPercent(dailyPnlPercent)}
-                      </div>
-                    ) : null}
-                  </div>
-                  <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-400">
-                    {selectedMetrics?.summary ??
-                      (selectedPortfolio.positions.length > 0
-                        ? "Positions are saved, but live pricing or risk hydration is currently unavailable."
-                        : "This sleeve has no positions yet. Add holdings to start live valuation and risk scoring.")}
-                  </p>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <InfoPill label="Positions" value={`${selectedPortfolio.positions.length}`} />
-                    <InfoPill label="Updated" value={formatCompactDate(selectedPortfolio.updatedAt)} />
-                    <InfoPill
-                      label="Top Weight"
-                      value={
-                        selectedTopHolding
-                          ? `${selectedTopHolding.ticker} ${formatPercent(selectedTopHolding.weight)}`
-                          : "N/A"
-                      }
-                    />
-                    <InfoPill
-                      label="Top Sector"
-                      value={
-                        riskReport?.sectorConcentration[0]
-                          ? `${riskReport.sectorConcentration[0].sector} ${formatPercent(riskReport.sectorConcentration[0].weight)}`
-                          : riskReportLoading
-                            ? "Loading"
-                            : getDefaultSector()
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-4">
-                  <MetricStat
-                    label="Sharpe Ratio"
-                    value={selectedMetrics ? selectedMetrics.sharpe.toFixed(2) : "N/A"}
-                  />
-                  <MetricStat
-                    label="VaR (95%)"
-                    value={selectedMetrics ? formatPercent(selectedMetrics.var95) : "N/A"}
-                  />
-                  <MetricStat
-                    label="Max Drawdown"
-                    value={selectedMetrics ? formatPercent(selectedMetrics.maxDrawdown) : "N/A"}
-                  />
-                  <MetricStat
-                    label="Annual Volatility"
-                    value={
-                      selectedMetrics
-                        ? formatPercent(selectedMetrics.annualizedVolatility)
-                        : "N/A"
-                    }
-                  />
-                </div>
-              </div>
-            )}
-          </Panel>
-
-          <Panel title="Execution Stack" action={<span className="text-xs text-slate-500">At a glance</span>}>
-            <div className="space-y-3">
-              <div className="grid gap-3">
-                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Top mover</p>
-                  <p className="mt-2 text-lg font-semibold text-white">{biggestGainer?.ticker ?? "N/A"}</p>
-                  <p className="mt-1 text-sm text-slate-400">
-                    {biggestGainer ? `${formatCurrency(biggestGainer.dailyPnl)} today` : "No positive movers yet"}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Lagging name</p>
-                  <p className="mt-2 text-lg font-semibold text-white">{biggestLoser?.ticker ?? "N/A"}</p>
-                  <p className="mt-1 text-sm text-slate-400">
-                    {biggestLoser ? `${formatCurrency(biggestLoser.dailyPnl)} today` : "No negative movers yet"}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Portfolio templates</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {portfolioTemplates.map((template) => (
-                      <button
-                        key={template.name}
-                        type="button"
-                        onClick={() => setCreatePortfolioName(template.name)}
-                        className="rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.04]"
-                      >
-                        {template.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <form onSubmit={createPortfolio} className="space-y-3">
+              <form onSubmit={createPortfolio} className="mx-auto flex max-w-md flex-col gap-3 sm:flex-row">
                 <input
                   value={createPortfolioName}
                   onChange={(event) => setCreatePortfolioName(event.target.value)}
-                  placeholder="Balanced"
-                  className="w-full rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+                  placeholder="Growth"
+                  className="flex-1 rounded border border-subtle bg-surface px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/40"
                 />
-                <button className="w-full rounded-md bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200">
-                  Create New Portfolio
+                <button className="rounded bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:opacity-90">
+                  Create Portfolio
                 </button>
               </form>
-            </div>
-          </Panel>
-        </div>
-
-        <Panel title="Portfolio Comparison Strip">
-          {portfolioSummaries.length === 0 ? (
-            <EmptyState
-              title="No portfolios yet"
-              copy="Create sleeves for growth, income, balanced, defensive, or speculative strategies and compare them here."
-            />
-          ) : (
-            <div className="grid gap-4 lg:grid-cols-4">
-              {portfolioSummaries.map((portfolio) => {
-                const stats = portfolioCardStats[portfolio.id];
-                return (
-                  <button
-                    key={portfolio.id}
-                    onClick={() => void loadPortfolio(portfolio.id)}
-                    className={cn(
-                      "rounded-xl border p-5 text-left transition duration-200 hover:-translate-y-0.5",
-                      selectedPortfolioId === portfolio.id
-                        ? "border-white/30 bg-white/[0.05]"
-                        : "border-white/10 bg-black/30 hover:border-white/20"
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-white">{portfolio.name}</p>
-                        <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-500">
-                          {portfolio.positionCount} positions
-                        </p>
+            }
+          />
+        ) : (
+          <>
+            <div className="grid grid-cols-12 gap-3">
+              <Panel
+                title="Portfolio Performance"
+                className="col-span-12 lg:col-span-8"
+                action={<span className="text-[10px] text-muted-foreground">{portfolioRange} • vs {topBenchmarkLabel}</span>}
+              >
+                {benchmarkAnalyticsError ? <div className="mb-3"><InlineNotice message={benchmarkAnalyticsError} tone="warning" /></div> : null}
+                {chartData.length < 2 ? (
+                  <EmptyState
+                    title="Performance chart unavailable"
+                    copy="Add holdings and wait for range history to load to render portfolio and benchmark series."
+                  />
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm text-muted-foreground">{selectedPortfolio.name}</p>
+                      <div className="flex items-center gap-2">
+                        <span className={cn("font-mono-data text-sm", dailyPnl >= 0 ? "text-positive" : "text-risk")}>
+                          {formatCurrency(dailyPnl)}
+                        </span>
+                        <span className={cn("text-xs", dailyPnlPercent >= 0 ? "text-positive" : "text-risk")}>
+                          {formatPercent(dailyPnlPercent)}
+                        </span>
                       </div>
-                      {portfolio.latestRiskTier ? (
-                        <TierBadge tier={portfolio.latestRiskTier as RiskTier} />
-                      ) : (
-                        <span className="text-xs text-slate-500">Unscored</span>
-                      )}
                     </div>
-                    <div className="mt-5 space-y-2 text-sm">
-                      <p className="text-slate-400">
-                        Value:{" "}
-                        <span className="font-medium text-white">
-                          {stats?.portfolioValue != null
-                            ? formatCurrency(stats.portfolioValue)
-                            : "Load to price"}
-                        </span>
-                      </p>
-                      <p
-                        className={cn(
-                          "text-slate-400",
-                          (stats?.dailyPnl ?? 0) >= 0 ? "text-success" : "text-danger"
-                        )}
-                      >
-                        Daily:{" "}
-                        <span className="font-medium">
-                          {stats?.dailyPnl != null
-                            ? formatCurrency(stats.dailyPnl)
-                            : "Load to price"}
-                        </span>
-                      </p>
-                      <p className="text-slate-400">
-                        Top concentration:{" "}
-                        <span className="font-medium text-white">
-                          {stats?.topWeight != null ? formatPercent(stats.topWeight) : "N/A"}
-                        </span>
-                      </p>
+                    <div className={cn("h-[22rem] transition-opacity duration-200", historyLoading && "opacity-70")}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={chartData}>
+                          <CartesianGrid stroke="hsl(var(--border) / 0.35)" vertical={false} />
+                          <XAxis dataKey="label" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={16} />
+                          <YAxis
+                            tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                            tickLine={false}
+                            axisLine={false}
+                            width={36}
+                            tickFormatter={(value) => Math.round(value).toString()}
+                          />
+                          <Tooltip
+                            wrapperStyle={{ outline: "none" }}
+                            content={({ active, payload }) => {
+                              if (!active || !payload || payload.length === 0) {
+                                return null;
+                              }
+                              const portfolioValue = payload.find((point) => point.dataKey === "portfolioIndex")?.value;
+                              const benchmarkValue = payload.find((point) => point.dataKey === "benchmarkIndex")?.value;
+                              return (
+                                <div className="rounded border border-subtle bg-card px-3 py-2 text-xs shadow-panel">
+                                  <p className="font-mono-data text-foreground">Portfolio {typeof portfolioValue === "number" ? portfolioValue.toFixed(2) : "N/A"}</p>
+                                  <p className="font-mono-data text-muted-foreground">
+                                    {topBenchmarkLabel} {typeof benchmarkValue === "number" ? benchmarkValue.toFixed(2) : "N/A"}
+                                  </p>
+                                </div>
+                              );
+                            }}
+                          />
+                          <Area type="monotone" dataKey="portfolioIndex" stroke="none" fill="hsl(var(--primary) / 0.12)" />
+                          <Line type="monotone" dataKey="benchmarkIndex" stroke="hsl(var(--muted-foreground) / 0.9)" strokeWidth={1.6} dot={false} strokeDasharray="4 4" connectNulls />
+                          <Line type="monotone" dataKey="portfolioIndex" stroke="hsl(var(--primary))" strokeWidth={2.4} dot={false} connectNulls />
+                        </LineChart>
+                      </ResponsiveContainer>
                     </div>
-                  </button>
-                );
-              })}
+                    <div className="flex items-center gap-5 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-2"><span className="h-0.5 w-5 bg-primary" />Portfolio</span>
+                      <span className="inline-flex items-center gap-2"><span className="h-0.5 w-5 border-b border-dashed border-muted-foreground" />{topBenchmarkLabel}</span>
+                    </div>
+                  </div>
+                )}
+              </Panel>
+
+              <div className="col-span-12 grid grid-cols-2 gap-3 lg:col-span-4 lg:grid-cols-1">
+                <div className="panel p-3">
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">vs {topBenchmarkLabel}</p>
+                  <p className={cn("mt-2 font-mono-data text-3xl font-semibold", (benchmarkAnalytics?.excessReturn ?? 0) >= 0 ? "text-positive" : "text-risk")}>
+                    {formatPercent(benchmarkAnalytics?.excessReturn ?? portfolioRangePerformance.percent)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">{labelForRange(portfolioRange)} alpha</p>
+                </div>
+                <div className="panel p-3">
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Risk tier</p>
+                  <p className="mt-2 text-3xl font-semibold text-foreground">{selectedMetrics?.riskTier ?? "Unscored"}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">VaR {selectedMetrics ? formatCurrency(selectedMetrics.var95Amount) : "N/A"} (95%)</p>
+                </div>
+                <div className="panel p-3">
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Top concentration</p>
+                  <p className="mt-2 text-3xl font-semibold text-foreground">{formatPercent(topThreeConcentration)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Top 3 holdings</p>
+                </div>
+                <div className="panel p-3">
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Biggest mover</p>
+                  <p className="mt-2 text-3xl font-semibold text-foreground">{biggestLoser?.ticker ?? biggestGainer?.ticker ?? "N/A"}</p>
+                  <p className={cn("mt-1 text-xs", ((biggestLoser?.dailyPnl ?? biggestGainer?.dailyPnl ?? 0) >= 0) ? "text-positive" : "text-risk")}>
+                    {formatCurrency(biggestLoser?.dailyPnl ?? biggestGainer?.dailyPnl ?? null)}
+                  </p>
+                </div>
+              </div>
             </div>
-          )}
-        </Panel>
 
-        <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          <Panel
-            title="Portfolio Performance"
-            action={
-              <div className="flex items-center gap-3">
-                <RangeSelector value={portfolioRange} onChange={setPortfolioRange} />
-                <button
-                  onClick={() => void rerunRiskScore(true)}
-                  className="text-sm text-zinc-300 transition hover:text-white"
-                >
-                  Re-run Risk
-                </button>
-              </div>
-            }
-          >
-            {!selectedPortfolio || selectedPortfolio.valueHistory.length === 0 ? (
-              <EmptyState
-                title="No performance curve yet"
-                copy="Add holdings to populate a trailing portfolio value history."
-              />
-            ) : (
-              <div className="rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.035] to-transparent p-4">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Value curve</p>
-                    <p className="mt-2 text-lg font-medium text-white">
-                      {selectedPortfolio.name} over {portfolioRange}
-                    </p>
+            <div className="grid grid-cols-12 gap-3">
+              <Panel title="Top Holdings" className="col-span-12 lg:col-span-5">
+                {topHoldingRows.length === 0 ? (
+                  <EmptyState title="No holdings yet" copy="Add positions to populate the holdings blotter." />
+                ) : (
+                  <div className="overflow-hidden rounded border border-subtle">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-surface-bright text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-2 font-medium">Ticker</th>
+                          <th className="px-3 py-2 font-medium text-right">Weight</th>
+                          <th className="px-3 py-2 font-medium text-right">Day P&L</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {topHoldingRows.map((holding) => (
+                          <tr key={holding.ticker} className="hover:bg-secondary/30">
+                            <td className="px-3 py-2">
+                              <button
+                                type="button"
+                                onClick={() => void openHoldingDetail(holding.ticker)}
+                                className="font-mono-data text-foreground hover:text-primary"
+                              >
+                                {holding.ticker}
+                              </button>
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono-data">{formatPercent(holding.weight)}</td>
+                            <td className={cn("px-3 py-2 text-right font-mono-data", (holding.dailyPnl ?? 0) >= 0 ? "text-positive" : "text-risk")}>
+                              {formatCurrency(holding.dailyPnl)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="flex gap-2">
-                    <InfoPill
-                      label="Current"
-                      value={
-                        selectedRangePortfolioValue > 0
-                          ? formatCurrency(selectedRangePortfolioValue)
-                          : "N/A"
-                      }
-                    />
-                    <InfoPill
-                      label="Day Move"
-                      value={formatCurrency(dailyPnl)}
-                      tone={dailyPnl >= 0 ? "positive" : "negative"}
-                    />
-                  </div>
-                </div>
-                <div className={cn("h-80 transition-opacity duration-200", historyLoading && "opacity-70")}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={selectedPortfolio.valueHistory}>
-                    <CartesianGrid stroke="rgba(148,163,184,0.14)" vertical={false} />
-                    <XAxis
-                      dataKey="label"
-                      tick={{ fill: "#94a3b8", fontSize: 12 }}
-                      minTickGap={22}
-                    />
-                    <YAxis
-                      tickFormatter={(value) => `$${Math.round(value / 1000)}k`}
-                      tick={{ fill: "#94a3b8", fontSize: 12 }}
-                    />
-                    <Tooltip
-                      cursor={{
-                        stroke: "rgba(255,255,255,0.28)",
-                        strokeWidth: 1,
-                        fill: "rgba(255,255,255,0.02)"
-                      }}
-                      wrapperStyle={{ outline: "none" }}
-                      content={<ChartTooltip formatter={formatCurrency} />}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="drawdown"
-                      fill="rgba(239,68,68,0.12)"
-                      stroke="rgba(239,68,68,0.2)"
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="peak"
-                      stroke="rgba(255,255,255,0.22)"
-                      dot={false}
-                      strokeWidth={1.2}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="value"
-                      stroke="#fafafa"
-                      dot={false}
-                      strokeWidth={2.5}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              </div>
-            )}
-          </Panel>
+                )}
+              </Panel>
 
-          <Panel title="Concentration Watch">
-            {!selectedPortfolio || selectedPortfolio.holdings.length === 0 ? (
-              <EmptyState
-                title="No concentration data"
-                copy="Add holdings to surface sector and single-name concentration warnings."
-              />
-            ) : (
-              <div className="space-y-4">
-                <div className="rounded-xl border border-white/10 bg-black/35 p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                    Largest Position
-                  </p>
-                  <p className="mt-3 text-xl font-semibold text-white">
-                    {selectedTopHolding?.ticker ?? "N/A"}
-                  </p>
-                  <p className="mt-2 text-sm text-slate-400">
-                    {selectedTopHolding
-                      ? `${formatPercent(selectedTopHolding.weight)} of portfolio value`
-                      : "No holdings yet"}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-black/35 p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                    Primary Sector
-                  </p>
-                  <p className="mt-3 text-xl font-semibold text-white">
-                    {riskReport?.sectorConcentration[0]?.sector ??
-                      (riskReportLoading ? "Loading" : getDefaultSector())}
-                  </p>
-                  <p className="mt-2 text-sm text-slate-400">
-                    {riskReport?.sectorConcentration[0]
-                      ? `${formatPercent(riskReport.sectorConcentration[0].weight)} portfolio weight`
-                      : riskReportLoading
-                        ? "Sector analysis is loading."
-                        : "Sector data unavailable for the current holdings."}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-black/35 p-4">
-                  <p className="text-sm leading-7 text-slate-300">
-                    {riskReport?.summary ??
-                      "The risk narrative will summarize concentration, market regime, and balance-sheet resilience here."}
-                  </p>
-                </div>
-              </div>
-            )}
-          </Panel>
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-          <Panel title="Portfolio vs Benchmark">
-            {benchmarkAnalyticsError ? (
-              <div className="mb-4">
-                <InlineNotice message={benchmarkAnalyticsError} tone="warning" />
-              </div>
-            ) : null}
-            {!selectedPortfolio ? (
-              <EmptyState
-                title="No benchmark comparison yet"
-                copy="Select a portfolio to compare selected-range performance against its benchmark."
-              />
-            ) : !benchmarkAnalytics ? (
-              <EmptyState
-                title="Benchmark comparison loading"
-                copy="Selected-range portfolio and benchmark analytics appear here once Yahoo history resolves."
-              />
-            ) : (
-              <div className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-5">
-                  <InfoPill
-                    label="Portfolio"
-                    value={formatPercent(benchmarkAnalytics.portfolioReturn)}
-                    tone={(benchmarkAnalytics.portfolioReturn ?? 0) >= 0 ? "positive" : "negative"}
-                  />
-                  <InfoPill
-                    label={benchmarkAnalytics.benchmark}
-                    value={formatPercent(benchmarkAnalytics.benchmarkReturn)}
-                    tone={(benchmarkAnalytics.benchmarkReturn ?? 0) >= 0 ? "positive" : "negative"}
-                  />
-                  <InfoPill
-                    label="Excess Return"
-                    value={formatPercent(benchmarkAnalytics.excessReturn)}
-                    tone={(benchmarkAnalytics.excessReturn ?? 0) >= 0 ? "positive" : "negative"}
-                  />
-                  <InfoPill
-                    label="Correlation"
-                    value={
-                      benchmarkAnalytics.correlation != null
-                        ? benchmarkAnalytics.correlation.toFixed(2)
-                        : "N/A"
-                    }
-                  />
-                  <InfoPill
-                    label="Beta"
-                    value={
-                      benchmarkAnalytics.beta != null ? benchmarkAnalytics.beta.toFixed(2) : "N/A"
-                    }
-                  />
-                </div>
-                <div className="rounded-xl border border-white/10 bg-black/35 p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Relative stance</p>
-                  <div className="mt-3 space-y-2">
-                    {benchmarkAnalytics.relativeNotes.map((note) => (
-                      <p key={note} className="text-sm text-slate-300">
-                        {note}
-                      </p>
-                    ))}
+              <Panel title="Risk Drivers" className="col-span-12 lg:col-span-4">
+                <div className="space-y-3">
+                  <MetricStat label="Sharpe" value={selectedMetrics ? selectedMetrics.sharpe.toFixed(2) : "N/A"} />
+                  <MetricStat label="Max Drawdown" value={selectedMetrics ? formatPercent(selectedMetrics.maxDrawdown) : "N/A"} />
+                  <MetricStat label="Annual Volatility" value={selectedMetrics ? formatPercent(selectedMetrics.annualizedVolatility) : "N/A"} />
+                  <div className="panel-bright p-3">
+                    <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Top sector</p>
+                    <p className="mt-2 text-sm font-medium text-foreground">{topSector?.sector ?? getDefaultSector()}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{topSector ? formatPercent(topSector.weight) : "Unavailable"}</p>
                   </div>
                 </div>
-              </div>
-            )}
-          </Panel>
+              </Panel>
 
-          <Panel title="Top Drivers">
-            {!benchmarkAnalytics ? (
-              <EmptyState
-                title="Attribution loading"
-                copy="Holding and sector contribution drivers populate from the active selected range."
-              />
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Top holding contributor</p>
-                  <p className="mt-2 text-lg font-semibold text-white">
-                    {topPositiveHoldingContributor?.ticker ?? "N/A"}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-400">
-                    {topPositiveHoldingContributor
-                      ? `${formatPercent(topPositiveHoldingContributor.contribution)} contribution`
-                      : "No positive holding contribution yet"}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Top holding detractor</p>
-                  <p className="mt-2 text-lg font-semibold text-white">
-                    {topNegativeHoldingContributor?.ticker ?? "N/A"}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-400">
-                    {topNegativeHoldingContributor
-                      ? `${formatPercent(topNegativeHoldingContributor.contribution)} contribution`
-                      : "No negative holding contribution yet"}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Top sector contributor</p>
-                  <p className="mt-2 text-lg font-semibold text-white">
-                    {topPositiveSectorContributor?.sector ?? "N/A"}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-400">
-                    {topPositiveSectorContributor
-                      ? `${formatPercent(topPositiveSectorContributor.contribution)} contribution`
-                      : "No positive sector contribution yet"}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Top sector detractor</p>
-                  <p className="mt-2 text-lg font-semibold text-white">
-                    {topNegativeSectorContributor?.sector ?? "N/A"}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-400">
-                    {topNegativeSectorContributor
-                      ? `${formatPercent(topNegativeSectorContributor.contribution)} contribution`
-                      : "No negative sector contribution yet"}
-                  </p>
-                </div>
-              </div>
-            )}
-          </Panel>
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-          <Panel
-            title="Portfolio Health Matrix"
-            action={
-              riskReport ? (
-                <span className="text-xs text-slate-500">
-                  Data confidence {riskReport.dataConfidence.overall}
-                </span>
-              ) : null
-            }
-          >
-            {!riskReport ? (
-              <EmptyState
-                title="Health scores are loading"
-                copy="Quality, downside, and concentration diagnostics appear once the deterministic report is available."
-              />
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <HealthScoreCard label="Concentration" detail={riskReport.qualityScoreDetails.concentration} />
-                <HealthScoreCard label="Liquidity" detail={riskReport.qualityScoreDetails.liquidity} />
-                <HealthScoreCard label="Balance Sheet" detail={riskReport.qualityScoreDetails.balanceSheet} />
-                <HealthScoreCard label="Profitability" detail={riskReport.qualityScoreDetails.profitability} />
-                <HealthScoreCard label="Growth" detail={riskReport.qualityScoreDetails.growth} />
-                <HealthScoreCard label="Downside" detail={riskReport.qualityScoreDetails.downsideRisk} />
-              </div>
-            )}
-          </Panel>
-
-          <Panel
-            title="AI Copilot Summary"
-            action={
-              <div className="flex items-center gap-3">
-                {riskInsightLoading ? <span className="text-xs text-slate-500">Refreshing AI</span> : null}
-                <button
-                  onClick={() => void refreshRiskInsight()}
-                  className="text-sm text-zinc-300 transition hover:text-white"
-                >
-                  Refresh AI
-                </button>
-              </div>
-            }
-          >
-            {riskInsightError ? <div className="mb-4"><InlineNotice message={riskInsightError} tone="warning" /></div> : null}
-            {!riskInsight ? (
-              <EmptyState
-                title="AI copilot unavailable"
-                copy="Deterministic risk is still active. AI interpretation appears here when the insight pipeline succeeds."
-              />
-            ) : (
-              <div className="space-y-5">
-                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Executive diagnosis</p>
-                    <span className="text-xs text-slate-500">
-                      {riskInsight.source} • {riskInsight.dataConfidence}
-                    </span>
-                  </div>
-                  <p className="text-sm leading-7 text-slate-300">{riskInsight.summary}</p>
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-xl border border-white/10 bg-black/35 p-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Key Drivers</p>
-                    <div className="mt-3 space-y-2">
-                      {riskInsight.drivers.map((item) => (
-                        <p key={item} className="text-sm text-slate-300">{item}</p>
-                      ))}
+              <div className="col-span-12 space-y-3 lg:col-span-3">
+                <Panel title="Research">
+                  {biggestResearchNote ? (
+                    <div className="space-y-2">
+                      <p className="font-mono-data text-sm font-semibold text-primary">{biggestResearchNote.ticker}</p>
+                      <p className="text-xs text-muted-foreground">{biggestResearchNote.sourceLabel}</p>
+                      <p className="line-clamp-3 text-sm text-foreground">{biggestResearchNote.thesis || biggestResearchNote.notes || "Notebook entry saved for this security."}</p>
                     </div>
-                  </div>
-                  <div className="rounded-xl border border-white/10 bg-black/35 p-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Recommended Action</p>
-                    <div className="mt-3 space-y-2">
-                      {riskInsight.recommendedActions.map((item) => (
-                        <p key={item} className="text-sm text-slate-300">{item}</p>
-                      ))}
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No watchlist notes yet.</p>
+                  )}
+                </Panel>
+                <Panel title="Health Matrix">
+                  {riskReport ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      <InfoPill label="Conc." value={`${riskReport.qualityScores.concentration}/100`} />
+                      <InfoPill label="Liquidity" value={`${riskReport.qualityScores.liquidity}/100`} />
+                      <InfoPill label="Balance" value={`${riskReport.qualityScores.balanceSheet}/100`} />
+                      <InfoPill label="Downside" value={`${riskReport.qualityScores.downsideRisk}/100`} />
                     </div>
-                  </div>
-                </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Health diagnostics loading.</p>
+                  )}
+                </Panel>
               </div>
-            )}
-          </Panel>
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-          <Panel title="What Changed">
-            {!riskReport ? (
-              <EmptyState
-                title="Change diagnostics unavailable"
-                copy="The portfolio delta and regime-change logic appears once the deterministic report is computed."
-              />
-            ) : (
-              <div className="space-y-4">
-                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Change Summary</p>
-                  <p className="mt-3 text-sm leading-7 text-slate-300">{riskReport.changeDiagnostics.summary}</p>
-                </div>
-                <div className="grid gap-3 md:grid-cols-3">
-                  <InfoPill
-                    label="Sharpe Delta"
-                    value={riskReport.changeDiagnostics.sharpeDelta != null ? riskReport.changeDiagnostics.sharpeDelta.toFixed(2) : "Baseline"}
-                    tone={(riskReport.changeDiagnostics.sharpeDelta ?? 0) >= 0 ? "positive" : "negative"}
-                  />
-                  <InfoPill
-                    label="VaR Delta"
-                    value={riskReport.changeDiagnostics.varDelta != null ? formatPercent(riskReport.changeDiagnostics.varDelta) : "Baseline"}
-                    tone={(riskReport.changeDiagnostics.varDelta ?? 0) <= 0 ? "positive" : "negative"}
-                  />
-                  <InfoPill
-                    label="Trigger"
-                    value={riskReport.changeDiagnostics.trigger.replace("_", " ")}
-                  />
-                </div>
-              </div>
-            )}
-          </Panel>
-
-          <Panel title="Exposure Snapshot">
-            {!riskReport ? (
-              <EmptyState
-                title="Exposure snapshot unavailable"
-                copy="Sector, industry, and benchmark-relative exposure load after the report pipeline completes."
-              />
-            ) : (
-              <div className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-3">
-                  <InfoPill label="Sectors" value={`${riskReport.exposureDiagnostics.sectorCount}`} />
-                  <InfoPill label="Industries" value={`${riskReport.exposureDiagnostics.industryCount}`} />
-                  <InfoPill
-                    label={`Excess vs ${selectedPortfolio?.benchmark ?? riskReport.benchmarkComparison.benchmark}`}
-                    value={formatPercent(benchmarkAnalytics?.excessReturn ?? riskReport.benchmarkComparison.excessReturn)}
-                    tone={(benchmarkAnalytics?.excessReturn ?? riskReport.benchmarkComparison.excessReturn) >= 0 ? "positive" : "negative"}
-                  />
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="rounded-xl border border-white/10 bg-black/35 p-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Top Industries</p>
-                    <div className="mt-3 space-y-2">
-                      {riskReport.industryConcentration.slice(0, 3).map((industry) => (
-                        <div key={industry.industry} className="flex items-center justify-between text-sm">
-                          <span className="text-slate-300">{industry.industry}</span>
-                          <span className="text-white">{formatPercent(industry.weight)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-white/10 bg-black/35 p-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Watchlist Alerts</p>
-                    <div className="mt-3 space-y-2">
-                      {(riskInsight?.alerts ?? []).length > 0 ? (
-                        riskInsight!.alerts.map((alert) => (
-                          <p key={alert.message} className="text-sm text-slate-300">{alert.message}</p>
-                        ))
-                      ) : (
-                        <p className="text-sm text-slate-400">No AI alerts available yet.</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </Panel>
-        </div>
+            </div>
+          </>
+        )}
       </div>
     );
   };
 
-  const renderHoldings = () => (
+  const renderHoldings = () => {
+    const holdingsChartData = selectedPortfolio
+      ? benchmarkAnalytics?.chartSeries?.length
+        ? benchmarkAnalytics.chartSeries.map((point, index) => ({
+            ...point,
+            label: `D${index + 1}`
+          }))
+        : (() => {
+            const series = selectedPortfolio.valueHistory;
+            if (series.length < 2) return [];
+            const base = series[0]?.value ?? 0;
+            return series.map((point, index) => ({
+              date: point.date,
+              label: `D${index + 1}`,
+              portfolioIndex: base > 0 ? (point.value / base) * 100 : 100,
+              benchmarkIndex: Number.NaN
+            }));
+          })()
+      : [];
+
+    return (
     <div className="space-y-6">
       <Panel title="Holdings status" action={<RangeSelector value={portfolioRange} onChange={setPortfolioRange} />}>
         {!selectedPortfolio ? (
@@ -4051,6 +3599,46 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               value={biggestLoser ? `${biggestLoser.ticker} ${formatCurrency(biggestLoser.dailyPnl)}` : "N/A"}
               tone={(biggestLoser?.dailyPnl ?? 0) < 0 ? "negative" : "default"}
             />
+          </div>
+        )}
+      </Panel>
+
+      <Panel title="Portfolio Performance" action={<span className="text-[10px] text-muted-foreground">{portfolioRange} • vs {selectedPortfolio?.benchmark ?? "Benchmark"}</span>}>
+        {!selectedPortfolio || holdingsChartData.length < 2 ? (
+          <EmptyState
+            title="Performance chart unavailable"
+            copy="Add holdings and wait for benchmark analytics to load this comparison chart."
+          />
+        ) : (
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={holdingsChartData}>
+                <CartesianGrid stroke="hsl(var(--border) / 0.35)" vertical={false} />
+                <XAxis dataKey="label" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={16} />
+                <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} tickLine={false} axisLine={false} width={36} />
+                <Tooltip
+                  wrapperStyle={{ outline: "none" }}
+                  content={({ active, payload }) => {
+                    if (!active || !payload || payload.length === 0) {
+                      return null;
+                    }
+                    const portfolioValue = payload.find((point) => point.dataKey === "portfolioIndex")?.value;
+                    const benchmarkValue = payload.find((point) => point.dataKey === "benchmarkIndex")?.value;
+                    return (
+                      <div className="rounded border border-subtle bg-card px-3 py-2 text-xs shadow-panel">
+                        <p className="font-mono-data text-foreground">Portfolio {typeof portfolioValue === "number" ? portfolioValue.toFixed(2) : "N/A"}</p>
+                        <p className="font-mono-data text-muted-foreground">
+                          {selectedPortfolio.benchmark} {typeof benchmarkValue === "number" ? benchmarkValue.toFixed(2) : "N/A"}
+                        </p>
+                      </div>
+                    );
+                  }}
+                />
+                <Area type="monotone" dataKey="portfolioIndex" stroke="none" fill="hsl(var(--primary) / 0.12)" />
+                <Line type="monotone" dataKey="benchmarkIndex" stroke="hsl(var(--muted-foreground) / 0.9)" strokeWidth={1.5} strokeDasharray="4 4" dot={false} connectNulls />
+                <Line type="monotone" dataKey="portfolioIndex" stroke="hsl(var(--primary))" strokeWidth={2.3} dot={false} connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         )}
       </Panel>
@@ -4409,6 +3997,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       </div>
     </div>
   );
+  };
 
   const renderResearch = () => {
     const selectedLabel =
@@ -5331,354 +4920,333 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     );
   };
 
-  const renderRisk = () => (
-    <div className="space-y-6">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <Panel
-          title="Risk score"
-          action={selectedMetrics ? <TierBadge tier={selectedMetrics.riskTier} /> : <span className="text-xs text-slate-500">No data</span>}
-        >
-          {riskError ? <div className="mb-4"><InlineNotice message={riskError} tone="warning" /></div> : null}
-          {!selectedMetrics ? (
+  const renderRisk = () => {
+    const now = Date.now();
+    const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+    const thisWeekEvents = auditRows.filter((entry) => Date.parse(entry.timestamp) >= weekAgo).length;
+    const activeNotes = watchlistItems.filter((item) =>
+      [item.thesis, item.catalysts, item.risks, item.notes].some((value) => value?.trim())
+    ).length;
+    const drawdownCurve = selectedMetrics
+      ? [
+          { horizon: "3M", probability: selectedMetrics.drawdownProb3m },
+          { horizon: "6M", probability: selectedMetrics.drawdownProb6m },
+          { horizon: "12M", probability: selectedMetrics.drawdownProb12m }
+        ]
+      : [];
+
+    const alertFeed = [
+      ...(riskReport?.vulnerabilities ?? []).map((vulnerability, index) => ({
+        id: `vuln:${index}`,
+        type: "Risk Alert",
+        status: "Active",
+        conviction: "High",
+        title: vulnerability,
+        body: riskReport?.summary ?? "Deterministic model flagged an elevated downside signal.",
+        owner: "Risk Engine",
+        timestamp: selectedPortfolio?.updatedAt ?? new Date().toISOString(),
+        action: vulnerability.toLowerCase().includes("concentration") ? "Reduce" : "Review"
+      })),
+      ...(riskReport?.balanceSheetSignals ?? []).slice(0, 4).map((signal, index) => ({
+        id: `balance:${index}:${signal.ticker}`,
+        type: signal.signal.toLowerCase().includes("earnings") ? "Earnings" : "Macro",
+        status: signal.severity === "HIGH" ? "Under Review" : "Active",
+        conviction: signal.severity === "HIGH" ? "High" : signal.severity === "WATCH" ? "Medium" : "Low",
+        title: `${signal.ticker} ${signal.signal}`,
+        body: `${signal.companyName} shows a ${signal.severity.toLowerCase()} balance-sheet signal in deterministic diagnostics.`,
+        owner: signal.companyName,
+        timestamp: selectedPortfolio?.updatedAt ?? new Date().toISOString(),
+        action: signal.severity === "HIGH" ? "Hedge" : "Monitor"
+      })),
+      ...(riskInsight?.recommendedActions ?? []).slice(0, 3).map((action, index) => ({
+        id: `ai:${index}`,
+        type: "Macro",
+        status: "Active",
+        conviction: "Medium",
+        title: action,
+        body: riskInsight?.summary ?? "AI interpretation generated this action from deterministic inputs.",
+        owner: riskInsight?.model ?? "AI Copilot",
+        timestamp: selectedPortfolio?.updatedAt ?? new Date().toISOString(),
+        action: "Review"
+      }))
+    ].slice(0, 8);
+
+    const pendingActions = alertFeed.filter((item) => item.action !== "Monitor").length;
+    const riskAlerts = alertFeed.length;
+
+    const typeStyles: Record<string, string> = {
+      "Risk Alert": "border-risk/30 bg-risk/10 text-risk",
+      Macro: "border-primary/30 bg-primary/10 text-primary",
+      Earnings: "border-warning/30 bg-warning/10 text-warning"
+    };
+    const statusStyles: Record<string, string> = {
+      Active: "border-positive/30 bg-positive/10 text-positive",
+      "Under Review": "border-warning/30 bg-warning/10 text-warning"
+    };
+    const convictionStyles: Record<string, string> = {
+      High: "text-foreground",
+      Medium: "text-muted-foreground",
+      Low: "text-muted-foreground"
+    };
+
+    return (
+      <div className="space-y-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="panel p-4">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Active Notes</p>
+            <p className="mt-2 font-mono-data text-4xl text-foreground">{activeNotes}</p>
+          </div>
+          <div className="panel p-4">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Risk Alerts</p>
+            <p className="mt-2 font-mono-data text-4xl text-foreground">{riskAlerts}</p>
+          </div>
+          <div className="panel p-4">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Pending Actions</p>
+            <p className="mt-2 font-mono-data text-4xl text-foreground">{pendingActions}</p>
+          </div>
+          <div className="panel p-4">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">This Week</p>
+            <p className="mt-2 font-mono-data text-4xl text-foreground">{thisWeekEvents}</p>
+          </div>
+        </div>
+
+        <Panel title="Risk Feed" action={<span className="text-xs text-muted-foreground">Deterministic + AI interpretation</span>}>
+          {riskError ? <div className="mb-3"><InlineNotice message={riskError} tone="warning" /></div> : null}
+          {riskInsightError ? <div className="mb-3"><InlineNotice message={riskInsightError} tone="warning" /></div> : null}
+          {alertFeed.length === 0 ? (
             <EmptyState
-              title="No risk metrics yet"
-              copy="Add positions to calculate risk-adjusted performance and downside metrics."
+              title="No active alerts"
+              copy="Risk feed cards will appear as soon as deterministic risk diagnostics complete."
             />
           ) : (
-            <div className="space-y-5">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <MetricStat label="Sharpe ratio" value={selectedMetrics.sharpe.toFixed(2)} helper="Annualized excess return per unit of volatility." />
-                <MetricStat label="Maximum drawdown" value={formatPercent(selectedMetrics.maxDrawdown)} helper="Peak-to-trough loss over the trailing year." />
-                <MetricStat label="VaR (95%)" value={`${formatPercent(selectedMetrics.var95)} / ${formatCurrency(selectedMetrics.var95Amount)}`} helper="Parametric one-day value at risk." />
-                <MetricStat label="Annual volatility" value={formatPercent(selectedMetrics.annualizedVolatility)} />
-              </div>
-              <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
-                <div className="mb-4 grid gap-3 sm:grid-cols-2">
-                  <InfoPill label="Portfolio value" value={formatCurrency(selectedMetrics.portfolioValue)} />
-                  <InfoPill label="Annual return" value={formatPercent(selectedMetrics.annualizedReturn)} />
-                </div>
-                <p className="text-sm leading-7 text-slate-300">{selectedMetrics.summary}</p>
-              </div>
-              <button
-                onClick={() => void rerunRiskScore(true)}
-                className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
-              >
-                Re-run risk score
-              </button>
-            </div>
-          )}
-        </Panel>
-
-        <Panel title="Drawdown probability term structure">
-          {!selectedMetrics ? (
-            <EmptyState
-              title="Awaiting portfolio data"
-              copy="Risk charts appear once positions have market history."
-            />
-          ) : (
-            <div className="rounded-xl border border-white/[0.06] bg-[#0f1216] p-4">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium text-white">Forward drawdown risk</p>
-                  <p className="mt-1 text-sm text-slate-400">Monte Carlo term structure</p>
-                </div>
-                <InfoPill label="Tier" value={selectedMetrics.riskTier} />
-              </div>
-              <div className="h-96">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={[
-                      { horizon: "3M", probability: selectedMetrics.drawdownProb3m },
-                      { horizon: "6M", probability: selectedMetrics.drawdownProb6m },
-                      { horizon: "12M", probability: selectedMetrics.drawdownProb12m }
-                    ]}
-                  >
-                    <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-                    <XAxis dataKey="horizon" tick={{ fill: "#6b7280", fontSize: 12 }} />
-                    <YAxis tickFormatter={(value) => `${Math.round(value * 100)}%`} tick={{ fill: "#6b7280", fontSize: 12 }} />
-                    <Tooltip content={<ChartTooltip formatter={formatPercent} />} />
-                    <Area type="monotone" dataKey="probability" stroke="#fafafa" fill="rgba(255,255,255,0.08)" strokeWidth={2} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-        </Panel>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)]">
-        <Panel
-          title="Risk brief"
-          action={riskReportLoading ? <span className="text-xs text-slate-500">Loading report</span> : null}
-        >
-          {riskError && !riskReport ? <div className="mb-4"><InlineNotice message={riskError} tone="warning" /></div> : null}
-          {!selectedPortfolio || selectedPortfolio.holdings.length === 0 ? (
-            <EmptyState
-              title="No holdings to analyze"
-              copy="Add holdings to generate sector, market regime, and balance-sheet commentary."
-            />
-          ) : riskReport ? (
-            <div className="space-y-4">
-              <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
-                <p className="text-sm leading-7 text-slate-300">{riskReport.summary}</p>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
-                  <p className="text-sm font-medium text-white">Market regime</p>
-                  <p className="mt-3 text-lg font-semibold text-white">{riskReport.marketContext.trend}</p>
-                  <p className="mt-2 text-sm text-slate-400">
-                    {riskReport.marketContext.benchmark} trailing return {formatPercent(riskReport.marketContext.trailingReturn)} with volatility {formatPercent(riskReport.marketContext.volatility)}.
-                  </p>
-                </div>
-                <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
-                  <p className="text-sm font-medium text-white">Top single name</p>
-                  <p className="mt-3 text-lg font-semibold text-white">{riskReport.singleNameConcentration[0]?.ticker ?? "N/A"}</p>
-                  <p className="mt-2 text-sm text-slate-400">
-                    {riskReport.singleNameConcentration[0]
-                      ? `${formatPercent(riskReport.singleNameConcentration[0].weight)} weight`
-                      : "No concentration data yet."}
-                  </p>
-                </div>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-3">
-                  <p className="text-sm font-medium text-white">Vulnerabilities</p>
-                  {riskReport.vulnerabilities.length > 0 ? (
-                    riskReport.vulnerabilities.map((item) => (
-                      <div key={item} className="rounded-lg border border-danger/25 bg-danger/10 px-4 py-3 text-sm text-danger">
-                        {item}
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-400">No major vulnerabilities flagged.</p>
-                  )}
-                </div>
-                <div className="space-y-3">
-                  <p className="text-sm font-medium text-white">Resilience factors</p>
-                  {riskReport.resilienceFactors.length > 0 ? (
-                    riskReport.resilienceFactors.map((item) => (
-                      <div key={item} className="rounded-lg border border-success/25 bg-success/10 px-4 py-3 text-sm text-success">
-                        {item}
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-400">No standout resilience factors detected yet.</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <EmptyState
-              title="Risk report is loading"
-              copy="The engine is pulling sector, broad-market, and balance-sheet context."
-            />
-          )}
-        </Panel>
-
-        <div className="space-y-6">
-          <Panel title="Benchmark relative">
-            {benchmarkAnalyticsError ? <div className="mb-4"><InlineNotice message={benchmarkAnalyticsError} tone="warning" /></div> : null}
-            {!riskReport || !selectedPortfolio ? (
-              <EmptyState
-                title="No regime diagnostics yet"
-                copy="Benchmark-relative statistics appear once the deterministic report has loaded."
-              />
-            ) : (
-              <div className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-3">
-                  <InfoPill label="Benchmark" value={selectedPortfolio.benchmark} />
-                  <InfoPill label="Trend" value={riskReport.marketContext.trend} />
-                  <InfoPill label="Benchmark vol" value={formatPercent(riskReport.marketContext.volatility)} />
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <MetricStat
-                    label={`Correlation to ${selectedPortfolio.benchmark}`}
-                    value={
-                      benchmarkAnalytics?.correlation != null
-                        ? benchmarkAnalytics.correlation.toFixed(2)
-                        : riskReport.returnDiagnostics.correlationToBenchmark.toFixed(2)
-                    }
-                  />
-                  <MetricStat
-                    label={`Beta to ${selectedPortfolio.benchmark}`}
-                    value={
-                      benchmarkAnalytics?.beta != null
-                        ? benchmarkAnalytics.beta.toFixed(2)
-                        : riskReport.returnDiagnostics.betaToBenchmark.toFixed(2)
-                    }
-                  />
-                  <MetricStat label="Excess return" value={formatPercent(benchmarkAnalytics?.excessReturn ?? riskReport.benchmarkComparison.excessReturn)} />
-                  <MetricStat label="Current drawdown" value={formatPercent(riskReport.returnDiagnostics.currentDrawdown)} />
-                </div>
-                <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
-                  <p className="text-sm font-medium text-white">Benchmark-relative notes</p>
-                  <div className="mt-3 space-y-2">
-                    {(benchmarkAnalytics?.relativeNotes ?? [
-                      "Benchmark-relative notes are unavailable until the selected-range comparison loads."
-                    ]).map((note) => (
-                      <p key={note} className="text-sm text-slate-300">
-                        {note}
-                      </p>
-                    ))}
+            <div className="space-y-2">
+              {alertFeed.map((item) => (
+                <div key={item.id} className="rounded-lg border border-subtle bg-surface-bright p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={cn("rounded px-2 py-0.5 text-xs font-medium", typeStyles[item.type] ?? typeStyles.Macro)}>
+                      {item.type}
+                    </span>
+                    <span className={cn("rounded px-2 py-0.5 text-xs font-medium", statusStyles[item.status] ?? statusStyles.Active)}>
+                      {item.status}
+                    </span>
+                    <span className={cn("text-xs", convictionStyles[item.conviction] ?? "text-muted-foreground")}>
+                      Conviction: {item.conviction}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-2xl font-semibold tracking-[-0.01em] text-foreground">{item.title}</p>
+                  <p className="mt-2 text-sm text-muted-foreground">{item.body}</p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                    <span>{item.owner}</span>
+                    <span>·</span>
+                    <span>{new Date(item.timestamp).toISOString().slice(0, 10)}</span>
+                    <span>·</span>
+                    <span className="text-foreground">Action: {item.action}</span>
                   </div>
                 </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+          <Panel
+            title="Benchmark Relative"
+            action={selectedMetrics ? <TierBadge tier={selectedMetrics.riskTier} /> : <span className="text-xs text-muted-foreground">No score</span>}
+          >
+            {benchmarkAnalyticsError ? <div className="mb-3"><InlineNotice message={benchmarkAnalyticsError} tone="warning" /></div> : null}
+            {!selectedPortfolio || !selectedMetrics ? (
+              <EmptyState
+                title="Benchmark diagnostics unavailable"
+                copy="Add holdings and load benchmark analytics to populate relative risk diagnostics."
+              />
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                <InfoPill label="Benchmark" value={selectedPortfolio.benchmark} />
+                <InfoPill
+                  label="Excess return"
+                  value={formatPercent(benchmarkAnalytics?.excessReturn ?? riskReport?.benchmarkComparison.excessReturn)}
+                  tone={(benchmarkAnalytics?.excessReturn ?? 0) >= 0 ? "positive" : "negative"}
+                />
+                <InfoPill
+                  label="Correlation"
+                  value={
+                    benchmarkAnalytics?.correlation != null
+                      ? benchmarkAnalytics.correlation.toFixed(2)
+                      : riskReport?.returnDiagnostics.correlationToBenchmark.toFixed(2) ?? "N/A"
+                  }
+                />
+                <InfoPill
+                  label="Beta"
+                  value={
+                    benchmarkAnalytics?.beta != null
+                      ? benchmarkAnalytics.beta.toFixed(2)
+                      : riskReport?.returnDiagnostics.betaToBenchmark.toFixed(2) ?? "N/A"
+                  }
+                />
+                <InfoPill label="VaR (95%)" value={formatCurrency(selectedMetrics.var95Amount)} />
+                <InfoPill label="Max drawdown" value={formatPercent(selectedMetrics.maxDrawdown)} tone="negative" />
               </div>
             )}
           </Panel>
 
-          <Panel title="Contributors and quality">
-            {!riskReport ? (
+          <Panel
+            title="Drawdown Term Structure"
+            action={
+              <button
+                onClick={() => void rerunRiskScore(true)}
+                className="rounded border border-subtle px-3 py-1.5 text-xs text-foreground transition hover:bg-secondary"
+              >
+                Re-run
+              </button>
+            }
+          >
+            {!selectedMetrics || drawdownCurve.length < 1 ? (
               <EmptyState
-                title="No contributor model yet"
-                copy="The engine will rank the holdings contributing most to concentration and realized risk."
+                title="No drawdown model yet"
+                copy="Run risk scoring to generate forward probability diagnostics."
               />
             ) : (
-              <div className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  <HealthScoreCard label="Liquidity" detail={riskReport.qualityScoreDetails.liquidity} />
-                  <HealthScoreCard label="Balance Sheet" detail={riskReport.qualityScoreDetails.balanceSheet} />
-                  <HealthScoreCard label="Profitability" detail={riskReport.qualityScoreDetails.profitability} />
-                  <HealthScoreCard label="Growth" detail={riskReport.qualityScoreDetails.growth} />
-                  <HealthScoreCard label="Concentration" detail={riskReport.qualityScoreDetails.concentration} />
-                  <HealthScoreCard label="Downside risk" detail={riskReport.qualityScoreDetails.downsideRisk} />
+              <div className="space-y-3">
+                <div className="h-48 rounded border border-subtle bg-surface-bright p-3">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={drawdownCurve}>
+                      <CartesianGrid stroke="hsl(var(--border) / 0.35)" vertical={false} />
+                      <XAxis dataKey="horizon" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} tickLine={false} axisLine={false} />
+                      <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(value) => `${Math.round(value * 100)}%`} />
+                      <Tooltip content={<ChartTooltip formatter={formatPercent} />} />
+                      <Area type="monotone" dataKey="probability" stroke="hsl(var(--primary))" fill="hsl(var(--primary) / 0.12)" strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
                 </div>
-                <div className="space-y-3">
-                  {riskReport.topRiskContributors.map((entry) => (
-                    <div key={entry.ticker} className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="font-medium text-white">{entry.ticker}</p>
-                          <p className="mt-1 text-sm text-slate-400">{entry.companyName}</p>
-                        </div>
-                        <span className="text-sm text-white">{formatPercent(entry.contribution)}</span>
-                      </div>
-                      <p className="mt-2 text-sm text-slate-300">{entry.reason}</p>
-                    </div>
-                  ))}
-                </div>
+                <p className="text-sm text-muted-foreground">
+                  {riskReportLoading
+                    ? "Refreshing deterministic risk brief..."
+                    : selectedMetrics.summary}
+                </p>
               </div>
             )}
           </Panel>
         </div>
       </div>
+    );
+  };
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <Panel title="Exposure map">
-          {!riskReport ? (
-            <EmptyState
-              title="No report data yet"
-              copy="Run or refresh risk scoring to populate concentration and company-level signals."
-            />
-          ) : (
-            <div className="grid gap-5 md:grid-cols-2">
-              <div>
-                <p className="text-sm font-medium text-white">Sector concentration</p>
-                <div className="mt-4 space-y-3">
-                  {riskReport.sectorConcentration.slice(0, 5).map((sector) => (
-                    <div key={sector.sector}>
-                      <div className="mb-2 flex items-center justify-between text-sm">
-                        <span className="text-white">{sector.sector}</span>
-                        <span className="text-slate-400">{formatPercent(sector.weight)}</span>
-                      </div>
-                      <div className="h-2 rounded-full bg-white/[0.06]">
-                        <div className="h-2 rounded-full bg-white" style={{ width: `${Math.min(sector.weight * 100, 100)}%` }} />
-                      </div>
-                    </div>
+  const renderStress = () => {
+    const derivedRows = Object.entries(STRESS_SCENARIOS).map(([name, shocks]) => {
+      const impact = shocks.equities * 0.65 + shocks.bonds * 0.25 + shocks.commodities * 0.1;
+      return {
+        scenario: name,
+        impact,
+        recoveryMonths: Math.max(2, Math.round(Math.abs(impact) * 38)),
+        probability:
+          Math.abs(impact) >= 0.25
+            ? "Tail"
+            : Math.abs(impact) >= 0.12
+              ? "Elevated"
+              : "Moderate"
+      };
+    });
+    const historyRows = (selectedPortfolio?.stressTests ?? []).map((entry) => ({
+      scenario: entry.scenarioName,
+      impact:
+        selectedMetrics?.portfolioValue && selectedMetrics.portfolioValue > 0
+          ? entry.projectedValue / selectedMetrics.portfolioValue - 1
+          : 0,
+      recoveryMonths: Math.max(1, Math.round(entry.recoveryDays / 30)),
+      probability: entry.recoveryDays > 270 ? "Tail" : entry.recoveryDays > 150 ? "Elevated" : "Moderate"
+    }));
+    const scenarioRows = [...historyRows, ...derivedRows].reduce<Array<{
+      scenario: string;
+      impact: number;
+      recoveryMonths: number;
+      probability: string;
+    }>>((acc, row) => {
+      if (acc.some((item) => item.scenario === row.scenario)) {
+        return acc;
+      }
+      acc.push(row);
+      return acc;
+    }, []);
+    const worstCase = scenarioRows.slice().sort((left, right) => left.impact - right.impact)[0] ?? null;
+    const mostLikely = scenarioRows.find((row) => row.probability === "Moderate") ?? scenarioRows[0] ?? null;
+    const maxHistoricalDrawdown = selectedMetrics?.maxDrawdown ?? 0;
+    const probabilityStyles: Record<string, string> = {
+      Tail: "bg-danger/10 text-danger",
+      Elevated: "bg-warning/10 text-warning",
+      Moderate: "bg-primary/10 text-primary",
+      Low: "bg-positive/10 text-positive"
+    };
+
+    return (
+      <div className="space-y-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="panel p-4">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Worst Case Loss</p>
+            <p className="mt-2 font-mono-data text-4xl text-risk">
+              {worstCase ? formatCurrency((selectedMetrics?.portfolioValue ?? 0) * worstCase.impact) : "N/A"}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">{worstCase?.scenario ?? "No scenario"}</p>
+          </div>
+          <div className="panel p-4">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Most Likely Stress</p>
+            <p className="mt-2 font-mono-data text-4xl text-risk">
+              {mostLikely ? formatCurrency((selectedMetrics?.portfolioValue ?? 0) * mostLikely.impact) : "N/A"}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">{mostLikely?.scenario ?? "No scenario"}</p>
+          </div>
+          <div className="panel p-4">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Max Historical DD</p>
+            <p className="mt-2 font-mono-data text-4xl text-risk">{formatPercent(maxHistoricalDrawdown)}</p>
+            <p className="mt-1 text-sm text-muted-foreground">Current portfolio profile</p>
+          </div>
+          <div className="panel p-4">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Scenarios Run</p>
+            <p className="mt-2 font-mono-data text-4xl text-foreground">{selectedPortfolio?.stressTests.length ?? 0}</p>
+            <p className="mt-1 text-sm text-muted-foreground">Monte Carlo + deterministic set</p>
+          </div>
+        </div>
+
+        <Panel title="Stress Scenarios" action={<span className="text-xs text-muted-foreground">Scenario impact matrix</span>}>
+          <div className="mb-3 grid gap-3 xl:grid-cols-[1fr_auto]">
+            <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+              <select
+                className="rounded border border-subtle bg-surface px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/35"
+                value={stressScenario}
+                onChange={(event) => setStressScenario(event.target.value)}
+              >
+                {Object.keys(STRESS_SCENARIOS)
+                  .concat("Custom")
+                  .map((scenario) => (
+                    <option key={scenario} value={scenario}>
+                      {scenario}
+                    </option>
                   ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-white">Top holdings</p>
-                <div className="mt-4 space-y-3">
-                  {riskReport.singleNameConcentration.slice(0, 5).map((holding) => (
-                    <div key={holding.ticker} className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-muted/60 px-4 py-3">
-                      <div>
-                        <p className="font-medium text-white">{holding.ticker}</p>
-                        <p className="text-sm text-slate-400">{holding.companyName}</p>
-                      </div>
-                      <span className="text-sm text-slate-300">{formatPercent(holding.weight)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              </select>
+              <button
+                onClick={runStressScenario}
+                className="rounded bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
+              >
+                Run Scenario
+              </button>
             </div>
-          )}
-        </Panel>
-
-        <Panel
-          title="AI analyst notes"
-          action={
             <button
-              onClick={() => void refreshRiskInsight()}
-              className="rounded-lg border border-white/[0.08] px-3 py-2 text-sm text-slate-300 transition hover:border-white/[0.14] hover:text-white"
+              type="button"
+              onClick={() => {
+                setStressScenario("Custom");
+              }}
+              className="rounded border border-subtle px-4 py-2 text-sm text-foreground transition hover:bg-secondary"
             >
-              Refresh AI
+              Custom Stress
             </button>
-          }
-        >
-          {riskInsightError ? <div className="mb-4"><InlineNotice message={riskInsightError} tone="warning" /></div> : null}
-          {!riskInsight ? (
-            <EmptyState
-              title="AI notes unavailable"
-              copy="The deterministic model is still active. AI interpretation appears here when the copilot pipeline succeeds."
-            />
-          ) : (
-            <div className="space-y-4">
-              <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <p className="text-sm font-medium text-white">AI interpretation</p>
-                  <span className="text-xs text-slate-500">{riskInsight.source} • {riskInsight.model}</span>
-                </div>
-                <p className="text-sm leading-7 text-slate-300">{riskInsight.summary}</p>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
-                  <p className="text-sm font-medium text-white">Resilience factors</p>
-                  <div className="mt-3 space-y-2">
-                    {riskInsight.resilienceFactors.map((item) => (
-                      <p key={item} className="text-sm text-slate-300">{item}</p>
-                    ))}
-                  </div>
-                </div>
-                <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
-                  <p className="text-sm font-medium text-white">Recommended actions</p>
-                  <div className="mt-3 space-y-2">
-                    {riskInsight.recommendedActions.map((item) => (
-                      <p key={item} className="text-sm text-slate-300">{item}</p>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </Panel>
-      </div>
-    </div>
-  );
+          </div>
 
-  const renderStress = () => (
-    <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-      <Panel title="Scenario Runner">
-        <div className="space-y-4">
-          {stressError ? <InlineNotice message={stressError} tone="warning" /> : null}
-          <select
-            className="w-full rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
-            value={stressScenario}
-            onChange={(event) => setStressScenario(event.target.value)}
-          >
-            {Object.keys(STRESS_SCENARIOS)
-              .concat("Custom")
-              .map((scenario) => (
-                <option key={scenario} value={scenario}>
-                  {scenario}
-                </option>
-              ))}
-          </select>
-          {stressScenario === "Custom" && (
-            <div className="grid gap-3 sm:grid-cols-3">
+          {stressError ? <div className="mb-3"><InlineNotice message={stressError} tone="warning" /></div> : null}
+
+          {stressScenario === "Custom" ? (
+            <div className="mb-3 grid gap-3 sm:grid-cols-3">
               {(["equities", "bonds", "commodities"] as const).map((asset) => (
-                <label key={asset} className="block space-y-2">
-                  <span className="text-sm capitalize text-slate-300">{asset}</span>
+                <label key={asset} className="space-y-2">
+                  <span className="block text-xs capitalize text-muted-foreground">{asset}</span>
                   <input
                     type="number"
                     step="0.01"
@@ -5689,71 +5257,51 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                         [asset]: Number(event.target.value)
                       }))
                     }
-                    className="w-full rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
+                    className="w-full rounded border border-subtle bg-surface px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/35"
                   />
                 </label>
               ))}
             </div>
-          )}
-          <button
-            onClick={runStressScenario}
-            className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
-          >
-            Run Stress Test
-          </button>
-          {stressResult ? (
-            <div className="rounded-3xl border border-slate-800 bg-slate-950/30 p-4 text-sm">
-              <p className="font-medium text-white">{String(stressResult.scenarioName)}</p>
-              <p className="mt-3 text-slate-300">
-                Projected value: {formatCurrency(Number(stressResult.projectedValue ?? 0))}
-              </p>
-              <p className="mt-2 text-slate-300">
-                New tier: {String(stressResult.newRiskTier ?? "N/A")}
-              </p>
-              <p className="mt-2 text-slate-300">
-                Recovery estimate: {Number(stressResult.recoveryDays ?? 0)} days
-              </p>
-              <p className="mt-3 text-slate-400">{String(stressResult.summary ?? "")}</p>
-            </div>
           ) : null}
-        </div>
-      </Panel>
 
-      <Panel title="Recent Stress History">
-        {!selectedPortfolio || selectedPortfolio.stressTests.length === 0 ? (
-          <EmptyState
-            title="No stress runs yet"
-            copy="Run a historical or custom scenario to populate this history."
-          />
-        ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-hidden rounded border border-subtle">
             <table className="min-w-full text-left text-sm">
-              <thead className="text-xs uppercase tracking-[0.2em] text-slate-500">
+              <thead className="bg-surface-bright text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                 <tr>
-                  <th className="pb-3">Scenario</th>
-                  <th className="pb-3">Run At</th>
-                  <th className="pb-3">Projected Value</th>
-                  <th className="pb-3">Risk Tier</th>
-                  <th className="pb-3">Recovery</th>
+                  <th className="px-4 py-3 font-medium">Scenario</th>
+                  <th className="px-4 py-3 text-right font-medium">Portfolio Impact</th>
+                  <th className="px-4 py-3 text-right font-medium">Recovery Est.</th>
+                  <th className="px-4 py-3 text-right font-medium">Probability</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800">
-                {selectedPortfolio.stressTests.map((entry) => (
-                  <tr key={entry.id}>
-                    <td className="py-4 text-white">{entry.scenarioName}</td>
-                    <td className="py-4">{new Date(entry.runAt).toLocaleString()}</td>
-                    <td className="py-4">{formatCurrency(entry.projectedValue)}</td>
-                    <td className="py-4">{entry.newRiskTier}</td>
-                    <td className="py-4">{entry.recoveryDays} days</td>
+              <tbody className="divide-y divide-border">
+                {scenarioRows.map((row) => (
+                  <tr key={row.scenario} className="hover:bg-secondary/30">
+                    <td className="px-4 py-3 text-foreground">{row.scenario}</td>
+                    <td className="px-4 py-3 text-right font-mono-data text-risk">{formatPercent(row.impact)}</td>
+                    <td className="px-4 py-3 text-right font-mono-data text-muted-foreground">{row.recoveryMonths} months</td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={cn("inline-flex rounded px-2 py-0.5 text-xs font-medium", probabilityStyles[row.probability] ?? probabilityStyles.Moderate)}>
+                        {row.probability}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        )}
-      </Panel>
-    </div>
-  );
+
+          {stressResult ? (
+            <div className="mt-3 rounded border border-subtle bg-surface-bright p-3 text-sm">
+              <p className="font-medium text-foreground">{String(stressResult.scenarioName)}</p>
+              <p className="mt-1 text-muted-foreground">Projected value: {formatCurrency(Number(stressResult.projectedValue ?? 0))}</p>
+              <p className="mt-1 text-muted-foreground">New tier: {String(stressResult.newRiskTier ?? "N/A")} • Recovery {Number(stressResult.recoveryDays ?? 0)} days</p>
+            </div>
+          ) : null}
+        </Panel>
+      </div>
+    );
+  };
 
   const renderAllocation = () => (
     <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -5832,86 +5380,259 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     </div>
   );
 
-  const renderAudit = () => (
-    <div className="space-y-6">
-      <Panel title="Filters">
-        {auditError ? <div className="mb-4"><InlineNotice message={auditError} tone="warning" /></div> : null}
-        <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr_auto]">
-          <select
-            value={auditActionType}
-            onChange={(event) => setAuditActionType(event.target.value)}
-            className="rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
-          >
-            <option value="">All actions</option>
-            <option value="POSITION_ADDED">Position Added</option>
-            <option value="POSITION_REMOVED">Position Removed</option>
-            <option value="POSITION_RESIZED">Position Resized</option>
-            <option value="RISK_SCORED">Risk Scored</option>
-            <option value="STRESS_TEST_RUN">Stress Test Run</option>
-            <option value="ALLOCATION_COMMITTED">Allocation Committed</option>
-          </select>
-          <input
-            type="date"
-            value={auditFrom}
-            onChange={(event) => setAuditFrom(event.target.value)}
-            className="rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
-          />
-          <input
-            type="date"
-            value={auditTo}
-            onChange={(event) => setAuditTo(event.target.value)}
-            className="rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-white outline-none transition focus:border-white/35"
-          />
-          <button
-            onClick={() =>
-              void refreshAudit().catch((error) =>
-                setAuditError(error instanceof Error ? error.message : "Audit refresh failed")
-              )
-            }
-            className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
-          >
-            Apply
-          </button>
-        </div>
-      </Panel>
+  const renderAudit = () => {
+    const normalizeAction = (actionType: string) =>
+      actionType
+        .toLowerCase()
+        .split("_")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
 
-      <Panel title="Audit Trail">
-        {auditRows.length === 0 ? (
-          <EmptyState
-            title="No audit events match"
-            copy="Try broadening the date range or action filter."
-          />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                <tr>
-                  <th className="pb-3">Timestamp</th>
-                  <th className="pb-3">Action</th>
-                  <th className="pb-3">Risk Change</th>
-                  <th className="pb-3">Details</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800">
-                {auditRows.map((entry) => (
-                  <tr key={entry.id}>
-                    <td className="py-4">{new Date(entry.timestamp).toLocaleString()}</td>
-                    <td className="py-4 text-white">{entry.actionType}</td>
-                    <td className="py-4">
-                      {entry.riskTierBefore ?? "N/A"} to {entry.riskTierAfter ?? "N/A"}
-                    </td>
-                    <td className="py-4 text-slate-400">
-                      {entry.metadata ? JSON.stringify(entry.metadata) : "No metadata"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+    const parsedRows = auditRows.map((entry) => {
+      const metadata = entry.metadata ?? {};
+      const metadataText = Object.values(metadata)
+        .filter((value): value is string | number => typeof value === "string" || typeof value === "number")
+        .map((value) => String(value));
+      const detail =
+        metadataText.find((value) => value.length > 8) ??
+        (entry.riskTierBefore || entry.riskTierAfter
+          ? `Risk ${entry.riskTierBefore ?? "N/A"} -> ${entry.riskTierAfter ?? "N/A"}`
+          : "System update");
+      const entity =
+        (typeof metadata.ticker === "string" && metadata.ticker) ||
+        (typeof metadata.entity === "string" && metadata.entity) ||
+        (typeof metadata.portfolioName === "string" && metadata.portfolioName) ||
+        "Portfolio";
+      const user =
+        (typeof metadata.user === "string" && metadata.user) ||
+        (typeof metadata.actor === "string" && metadata.actor) ||
+        "System";
+      const actionLabel = normalizeAction(entry.actionType);
+      const severity =
+        entry.actionType.includes("BREACH") || entry.actionType.includes("VIOLATION")
+          ? "Warning"
+          : entry.actionType.includes("RISK") && entry.riskTierAfter === "HIGH"
+            ? "Warning"
+            : "Info";
+      const status =
+        severity === "Warning"
+          ? "Flagged"
+          : entry.actionType.includes("CHECK")
+            ? "Passed"
+            : "Completed";
+
+      return {
+        ...entry,
+        actionLabel,
+        detail,
+        entity,
+        user,
+        severity,
+        status
+      };
+    });
+
+    const searchedRows = parsedRows.filter((entry) => {
+      const query = auditSearch.trim().toLowerCase();
+      if (!query) {
+        return true;
+      }
+      return (
+        entry.id.toLowerCase().includes(query) ||
+        entry.actionLabel.toLowerCase().includes(query) ||
+        entry.entity.toLowerCase().includes(query) ||
+        entry.user.toLowerCase().includes(query) ||
+        entry.detail.toLowerCase().includes(query)
+      );
+    });
+
+    const totalEvents = parsedRows.length;
+    const violations = parsedRows.filter((entry) => entry.severity !== "Info").length;
+    const pendingReview = parsedRows.filter((entry) => entry.status === "Flagged").length;
+    const lastViolationTs = parsedRows
+      .filter((entry) => entry.severity !== "Info")
+      .map((entry) => Date.parse(entry.timestamp))
+      .filter((timestamp) => Number.isFinite(timestamp))
+      .sort((left, right) => right - left)[0];
+    const cleanDays = lastViolationTs
+      ? Math.max(0, Math.floor((Date.now() - lastViolationTs) / (24 * 60 * 60 * 1000)))
+      : totalEvents > 0
+        ? 14
+        : 0;
+
+    const handleAuditExport = () => {
+      const rows = searchedRows.map((entry) => [
+        entry.id,
+        entry.timestamp,
+        entry.actionLabel,
+        entry.entity,
+        entry.user,
+        entry.detail,
+        entry.severity,
+        entry.status
+      ]);
+      const csv = [
+        ["ID", "TIMESTAMP", "ACTION", "ENTITY", "USER", "DETAIL", "SEVERITY", "STATUS"].join(","),
+        ...rows.map((row) => row.map((value) => `"${String(value).replaceAll("\"", "\"\"")}"`).join(","))
+      ].join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${(selectedPortfolio?.name ?? "portfolio").toLowerCase().replaceAll(" ", "-")}-audit.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    };
+
+    return (
+      <div className="space-y-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="panel p-4">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Total Events</p>
+            <p className="mt-2 font-mono-data text-4xl text-foreground">{totalEvents.toLocaleString()}</p>
           </div>
-        )}
-      </Panel>
-    </div>
-  );
+          <div className="panel p-4">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Violations</p>
+            <p className="mt-2 font-mono-data text-4xl text-foreground">{violations}</p>
+          </div>
+          <div className="panel p-4">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Pending Review</p>
+            <p className="mt-2 font-mono-data text-4xl text-foreground">{pendingReview}</p>
+          </div>
+          <div className="panel p-4">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Clean Days</p>
+            <p className="mt-2 font-mono-data text-4xl text-foreground">{cleanDays}</p>
+          </div>
+        </div>
+
+        <Panel title="Audit Log" action={<span className="text-xs text-muted-foreground">Compliance and operational trail</span>}>
+          {auditError ? <div className="mb-3"><InlineNotice message={auditError} tone="warning" /></div> : null}
+          <div className="mb-3 grid gap-3 xl:grid-cols-[1fr_auto_auto]">
+            <input
+              value={auditSearch}
+              onChange={(event) => setAuditSearch(event.target.value)}
+              placeholder="Search audit log..."
+              className="rounded border border-subtle bg-surface px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/35"
+            />
+            <button
+              onClick={() =>
+                void refreshAudit().catch((error) =>
+                  setAuditError(error instanceof Error ? error.message : "Audit refresh failed")
+                )
+              }
+              className="rounded border border-subtle px-4 py-2 text-sm text-foreground transition hover:bg-secondary"
+            >
+              Filter
+            </button>
+            <button
+              type="button"
+              onClick={handleAuditExport}
+              className="rounded border border-subtle px-4 py-2 text-sm text-foreground transition hover:bg-secondary"
+            >
+              Export
+            </button>
+          </div>
+
+          <div className="mb-3 grid gap-3 md:grid-cols-4">
+            <select
+              value={auditActionType}
+              onChange={(event) => setAuditActionType(event.target.value)}
+              className="rounded border border-subtle bg-surface px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/35"
+            >
+              <option value="">All actions</option>
+              <option value="POSITION_ADDED">Position Added</option>
+              <option value="POSITION_REMOVED">Position Removed</option>
+              <option value="POSITION_RESIZED">Position Resized</option>
+              <option value="RISK_SCORED">Risk Scored</option>
+              <option value="STRESS_TEST_RUN">Stress Test Run</option>
+              <option value="ALLOCATION_COMMITTED">Allocation Committed</option>
+            </select>
+            <input
+              type="date"
+              value={auditFrom}
+              onChange={(event) => setAuditFrom(event.target.value)}
+              className="rounded border border-subtle bg-surface px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/35"
+            />
+            <input
+              type="date"
+              value={auditTo}
+              onChange={(event) => setAuditTo(event.target.value)}
+              className="rounded border border-subtle bg-surface px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/35"
+            />
+            <div className="rounded border border-subtle bg-surface px-3 py-2 text-xs text-muted-foreground">
+              Showing {searchedRows.length} of {totalEvents}
+            </div>
+          </div>
+
+          {searchedRows.length === 0 ? (
+            <EmptyState
+              title="No audit events match"
+              copy="Try broadening the date range or action filter."
+            />
+          ) : (
+            <div className="overflow-hidden rounded border border-subtle">
+              <div className="max-h-[38rem] overflow-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="sticky top-0 z-10 bg-surface-bright text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">ID</th>
+                      <th className="px-4 py-3 font-medium">Timestamp</th>
+                      <th className="px-4 py-3 font-medium">Action</th>
+                      <th className="px-4 py-3 font-medium">Entity</th>
+                      <th className="px-4 py-3 font-medium">User</th>
+                      <th className="px-4 py-3 font-medium">Detail</th>
+                      <th className="px-4 py-3 font-medium">Severity</th>
+                      <th className="px-4 py-3 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {searchedRows.map((entry) => (
+                      <tr key={entry.id} className="hover:bg-secondary/30">
+                        <td className="px-4 py-3 font-mono-data text-muted-foreground">{entry.id.slice(0, 10)}</td>
+                        <td className="px-4 py-3 font-mono-data text-muted-foreground">
+                          {new Date(entry.timestamp).toISOString().replace("T", " ").slice(0, 19)}
+                        </td>
+                        <td className="px-4 py-3 text-foreground">{entry.actionLabel}</td>
+                        <td className="px-4 py-3 text-foreground">{entry.entity}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{entry.user}</td>
+                        <td className="max-w-[24rem] truncate px-4 py-3 text-muted-foreground">{entry.detail}</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={cn(
+                              "inline-flex rounded px-2 py-0.5 text-xs font-medium",
+                              entry.severity === "Warning"
+                                ? "bg-warning/10 text-warning"
+                                : "bg-primary/10 text-primary"
+                            )}
+                          >
+                            {entry.severity}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={cn(
+                              "inline-flex rounded px-2 py-0.5 text-xs font-medium",
+                              entry.status === "Flagged"
+                                ? "bg-risk/10 text-risk"
+                                : entry.status === "Passed"
+                                  ? "bg-positive/10 text-positive"
+                                  : "bg-primary/10 text-primary"
+                            )}
+                          >
+                            {entry.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </Panel>
+      </div>
+    );
+  };
 
   const renderSettings = () => (
     <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">

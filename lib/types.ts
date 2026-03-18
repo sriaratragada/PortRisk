@@ -276,6 +276,11 @@ export type BenchmarkAnalytics = {
   relativeMode: "return_only" | "sector_relative";
   benchmarkAvailable: boolean;
   benchmarkSectorDataAvailable: boolean;
+  chartSeries: Array<{
+    date: string;
+    portfolioIndex: number;
+    benchmarkIndex: number;
+  }>;
   dataState: MarketDataState;
   asOf: string | null;
   provider: MarketDataProvider;

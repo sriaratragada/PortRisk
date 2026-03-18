@@ -95,6 +95,30 @@ function calculateSeriesReturn(values: number[]) {
   return last / first - 1;
 }
 
+function buildIndexSeries(
+  portfolioSeries: Array<{ date: string; value: number }>,
+  benchmarkSeries: HistoricalPoint[]
+) {
+  const length = Math.min(portfolioSeries.length, benchmarkSeries.length);
+  if (length < 2) {
+    return [] as Array<{ date: string; portfolioIndex: number; benchmarkIndex: number }>;
+  }
+
+  const portfolioSlice = portfolioSeries.slice(-length);
+  const benchmarkSlice = benchmarkSeries.slice(-length);
+  const portfolioBase = portfolioSlice[0]?.value ?? 0;
+  const benchmarkBase = benchmarkSlice[0]?.close ?? 0;
+  if (portfolioBase <= 0 || benchmarkBase <= 0) {
+    return [] as Array<{ date: string; portfolioIndex: number; benchmarkIndex: number }>;
+  }
+
+  return portfolioSlice.map((point, index) => ({
+    date: point.date,
+    portfolioIndex: (point.value / portfolioBase) * 100,
+    benchmarkIndex: ((benchmarkSlice[index]?.close ?? benchmarkBase) / benchmarkBase) * 100
+  }));
+}
+
 function aggregateDataState(states: MarketDataState[]) {
   if (states.some((state) => state === "live")) {
     return "live" as const;
@@ -201,6 +225,8 @@ export function buildBenchmarkAnalyticsFromData(input: {
     );
   }
 
+  const chartSeries = buildIndexSeries(input.portfolioSeries, input.benchmarkSeries);
+
   return {
     benchmark: input.benchmark,
     portfolioReturn,
@@ -217,6 +243,7 @@ export function buildBenchmarkAnalyticsFromData(input: {
     relativeMode: "return_only",
     benchmarkAvailable: input.benchmarkSeries.length >= 2,
     benchmarkSectorDataAvailable: false,
+    chartSeries,
     dataState: input.dataState ?? "unavailable",
     asOf: input.asOf ?? null,
     provider: input.provider ?? null
