@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState, useTransition, type ChangeEvent } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, useTransition, type ChangeEvent } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Bell, Search } from "lucide-react";
@@ -339,10 +339,10 @@ function HealthBandBadge({ band }: { band: "Strong" | "Moderate" | "Weak" }) {
       className={cn(
         "inline-flex rounded-md border px-2 py-1 text-[11px] font-medium",
         band === "Strong"
-          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+          ? "border-emerald-500/30 bg-emerald-500/12 text-emerald-200"
           : band === "Moderate"
-            ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
-            : "border-rose-500/30 bg-rose-500/10 text-rose-300"
+            ? "border-amber-500/30 bg-amber-500/12 text-amber-200"
+            : "border-rose-500/30 bg-rose-500/12 text-rose-300"
       )}
     >
       {band}
@@ -363,7 +363,7 @@ function HealthScoreCard({
   };
 }) {
   return (
-    <div className="rounded-lg border border-white/8 bg-black/20 p-4">
+    <div className="panel p-4">
       <div className="flex items-start justify-between gap-3">
         <p className="text-xs font-medium text-slate-400">{label}</p>
         <HealthBandBadge band={detail.band} />
@@ -374,7 +374,7 @@ function HealthScoreCard({
         <summary className="cursor-pointer list-none text-xs font-medium text-slate-500 transition group-open:text-slate-300">
           Score basis
         </summary>
-        <div className="mt-3 space-y-2 border-t border-white/8 pt-3">
+        <div className="mt-3 space-y-2 border-t border-border pt-3">
           {detail.drivers.map((driver) => (
             <p key={driver} className="text-sm text-slate-300">
               {driver}
@@ -1093,6 +1093,7 @@ async function readErrorMessage(response: Response) {
 
 export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const router = useRouter();
+  const workspaceScrollRef = useRef<HTMLDivElement | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [portfolioSummaries, setPortfolioSummaries] = useState(initialData.portfolios);
@@ -1239,6 +1240,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const [isPending, startTransition] = useTransition();
   const prefersReducedMotion = useReducedMotion();
   const activeTabMeta = tabs.find((tab) => tab.id === activeTab) ?? tabs[0]!;
+  useEffect(() => {
+    workspaceScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [activeTab]);
 
   async function getAuthHeaders(): Promise<Record<string, string>> {
     const supabase = createSupabaseBrowserClient();
@@ -4392,7 +4396,10 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               </motion.div>
             ) : null}
 
-            <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-[#1a2b43] bg-[#0a1526]">
+            <div
+              className="min-h-0 flex-1 overflow-hidden rounded-md border border-subtle bg-surface"
+              style={{ maxHeight: 360 }}
+            >
               {researchFeedLoading ? (
                 <div className="px-3 py-3 text-xs text-[#7387a2]">Building Yahoo candidate feed...</div>
               ) : curatedResearchCandidates.length === 0 ? (
@@ -4401,20 +4408,20 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 </div>
               ) : (
                 <>
-                  <div className="grid grid-cols-[minmax(0,1.9fr)_0.45fr_0.5fr_auto] gap-3 border-b border-[#1a2b43] px-3 py-2 text-[10px] text-[#6e89ab]">
+                  <div className="grid grid-cols-[minmax(0,1.9fr)_0.45fr_0.5fr_auto] gap-3 border-b border-subtle px-3 py-2 text-[10px] text-muted-foreground">
                     <span>Candidate</span>
                     <span className="text-right">Fit</span>
                     <span className="text-right">Price</span>
                     <span className="text-right">Action</span>
                   </div>
-                  <div className="divide-y divide-[#1a2b43]">
+                  <div className="divide-y divide-border">
                     {curatedResearchCandidates.map((candidate, index) => (
                       <motion.div
                         key={`${candidate.sourceType}:${candidate.ticker}`}
                         initial={prefersReducedMotion ? false : { opacity: 0, y: 6 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.16, delay: prefersReducedMotion ? 0 : index * 0.02 }}
-                        className="grid grid-cols-[minmax(0,1.9fr)_0.45fr_0.5fr_auto] items-center gap-3 px-3 py-2"
+                        className="grid grid-cols-[minmax(0,1.9fr)_0.45fr_0.5fr_auto] items-center gap-3 px-3 py-2 transition hover:bg-secondary/40"
                       >
                         <button
                           type="button"
@@ -4428,17 +4435,17 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                           className={cn(
                             "min-w-0 rounded border px-2 py-1.5 text-left transition",
                             selectedResearchTicker === candidate.ticker
-                              ? "border-[#2a476b] bg-[#0d1c31]"
-                              : "border-transparent hover:border-[#2a476b] hover:bg-[#10253d]"
+                              ? "border-primary/40 bg-primary/10"
+                              : "border-transparent hover:border-primary/30 hover:bg-secondary"
                           )}
                         >
                           <div className="flex items-center gap-2">
-                            <p className="text-xs font-semibold text-[#d6e8ff]">{candidate.ticker}</p>
+                            <p className="text-xs font-semibold text-foreground">{candidate.ticker}</p>
                             <ResearchToneChip label={candidate.sourceLabel} />
                             <ResearchToneChip label={candidate.sector} />
                           </div>
-                          <p className="truncate text-xs text-[#7387a2]">{candidate.companyName}</p>
-                          <p className="line-clamp-1 text-[11px] text-[#9ab4d3]">
+                          <p className="truncate text-xs text-muted-foreground">{candidate.companyName}</p>
+                          <p className="line-clamp-1 text-[11px] text-muted-foreground">
                             {candidate.aiSummary ?? candidate.deterministicSummary}
                           </p>
                           <ResearchMiniFitStrip
@@ -5923,7 +5930,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             </div>
           )}
 
-          <main className="min-h-0 flex-1 overflow-auto p-3">
+          <main ref={workspaceScrollRef} className="min-h-0 flex-1 overflow-auto p-3">
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={activeTab}
