@@ -4932,7 +4932,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 />
               </div>
               <div className="flex flex-wrap gap-2 xl:hidden">
-                {(["feed", "notebook", "insight"] as const).map((view) => (
+                {(["feed", "insight", "notebook"] as const).map((view) => (
                   <button
                     key={view}
                     type="button"
@@ -4944,7 +4944,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                         : "border-[#1a2b43] bg-[#0d1c31] text-[#7387a2] hover:text-[#d6e8ff]"
                     )}
                   >
-                    {view === "feed" ? "Idea Feed" : view === "notebook" ? "Notebook" : "Analysis"}
+                    {view === "feed" ? "Idea Feed" : view === "insight" ? "Analysis" : "Notebook"}
                   </button>
                 ))}
               </div>
@@ -4954,14 +4954,14 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
         <div className="hidden min-h-0 flex-1 overflow-hidden xl:grid xl:grid-rows-3 xl:gap-3">
           <div className="min-h-0 overflow-hidden">{renderFeedPane()}</div>
-          <div className="min-h-0 overflow-hidden">{renderNotebookPane()}</div>
           <div className="min-h-0 overflow-hidden">{renderInsightPane()}</div>
+          <div className="min-h-0 overflow-hidden">{renderNotebookPane()}</div>
         </div>
 
         <div className="space-y-3 overflow-y-auto pr-1 xl:hidden">
           {researchMobileView === "feed" ? renderFeedPane() : null}
-          {researchMobileView === "notebook" ? renderNotebookPane() : null}
           {researchMobileView === "insight" ? renderInsightPane() : null}
+          {researchMobileView === "notebook" ? renderNotebookPane() : null}
         </div>
       </div>
     );
