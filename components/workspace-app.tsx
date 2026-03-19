@@ -5,7 +5,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState, useTransition, type ChangeEvent } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Bell, Search } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowDownRight,
+  ArrowUpRight,
+  Bell,
+  BookOpen,
+  Clock3,
+  Filter,
+  Minus,
+  Search,
+  Target
+} from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -64,6 +75,9 @@ type TabId =
   | "allocation"
   | "audit"
   | "settings";
+
+const researchSubTabs = ["Summary", "Proposals", "Intel Feed"] as const;
+type ResearchSubTab = (typeof researchSubTabs)[number];
 
 type PortfolioCardStats = {
   portfolioValue: number | null;
@@ -1156,6 +1170,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const [activeResearchAnalysisTab, setActiveResearchAnalysisTab] = useState<
     "fit" | "ai" | "quality" | "diligence"
   >("fit");
+  const [activeResearchSubTab, setActiveResearchSubTab] =
+    useState<ResearchSubTab>("Summary");
   const [researchSourceFilter, setResearchSourceFilter] = useState<
     "all" | "manual" | "related" | "screener" | "trending"
   >("all");
@@ -4223,6 +4239,32 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   };
 
   const renderResearch = () => {
+    const sourceLabel: Record<"manual" | ResearchCandidate["sourceType"], string> = {
+      manual: "Manual",
+      related: "Related",
+      screener: "Screener",
+      trending: "Trending"
+    };
+    const statusLabel: Record<WatchlistItem["status"], string> = {
+      NEW: "New",
+      RESEARCHING: "Under Review",
+      READY: "Approved",
+      PASSED: "Rejected",
+      PROMOTED: "Promoted"
+    };
+    const statusTone: Record<WatchlistItem["status"], string> = {
+      NEW: "bg-primary/10 text-primary",
+      RESEARCHING: "bg-warning/10 text-warning",
+      READY: "bg-success/10 text-success",
+      PASSED: "bg-danger/10 text-danger",
+      PROMOTED: "bg-secondary text-foreground"
+    };
+    const sentimentTone: Record<"Bullish" | "Neutral" | "Bearish", string> = {
+      Bullish: "text-success",
+      Neutral: "text-muted-foreground",
+      Bearish: "text-danger"
+    };
+
     const selectedLabel =
       selectedWatchlistItem?.companyName ??
       selectedFeedCandidate?.companyName ??
@@ -4235,7 +4277,6 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       getDefaultSector();
     const activeFitScoreValue =
       researchInsight?.fitScore ?? selectedFeedCandidate?.fitScore ?? researchFeatureBundle?.fitScore ?? null;
-    const insightFitScore = activeFitScoreValue != null ? `${activeFitScoreValue}/100` : "N/A";
     const analysisActionBias =
       activeFitScoreValue == null
         ? "Watch"
@@ -4244,35 +4285,6 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           : activeFitScoreValue >= 60
             ? "Research deeper"
             : "Monitor";
-    const insightBadges = researchFeatureBundle
-      ? [
-          {
-            label:
-              researchFeatureBundle.diversificationImpact.toLowerCase().includes("divers")
-                ? "Diversifies"
-                : "Sector overlap",
-            tone: researchFeatureBundle.diversificationImpact.toLowerCase().includes("divers")
-              ? ("positive" as const)
-              : ("neutral" as const)
-          },
-          {
-            label:
-              researchFeatureBundle.concentrationImpact.toLowerCase().includes("worsen") ||
-              researchFeatureBundle.concentrationImpact.toLowerCase().includes("increase")
-                ? "Concentration up"
-                : "Concentration stable",
-            tone:
-              researchFeatureBundle.concentrationImpact.toLowerCase().includes("worsen") ||
-              researchFeatureBundle.concentrationImpact.toLowerCase().includes("increase")
-                ? ("warning" as const)
-                : ("neutral" as const)
-          },
-          {
-            label: `Benchmark ${researchFeatureBundle.benchmark}`,
-            tone: "neutral" as const
-          }
-        ]
-      : [];
     const notebookSections: Array<{
       id: "thesis" | "catalysts" | "risks" | "valuation" | "notes";
       label: string;
@@ -4283,8 +4295,6 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       { id: "valuation", label: "Valuation" },
       { id: "notes", label: "Notes" }
     ];
-    const visibleCandidates = curatedResearchCandidates.slice(0, 6);
-    const visibleWatchlistItems = sortedWatchlist.slice(0, 6);
     const sectionLabel =
       notebookSections.find((section) => section.id === researchNotebookSection)?.label ?? "Notes";
     const sectionValue =
@@ -4297,20 +4307,204 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             : researchNotebookSection === "valuation"
               ? watchlistDraft.valuationNotes
               : watchlistDraft.notes;
-    const qualityItems = qualityScoreItems(researchFeatureBundle);
-    const compactSummary = [
-      { label: "Portfolio", value: selectedPortfolio?.name ?? "None" },
-      { label: "Benchmark", value: selectedPortfolio?.benchmark ?? "N/A" },
-      { label: "Watchlist", value: `${watchlistItems.length} names` },
-      { label: "Curated", value: `${visibleCandidates.length}/6` },
-      { label: "Selected", value: selectedResearchTicker ?? "None" },
-      {
-        label: "AI",
-        value: researchInsight?.source === "AI" ? "Interpretation ready" : "Deterministic only"
-      }
-    ];
     const topInsight = (entries: string[] | undefined) =>
       entries && entries.length > 0 ? entries.slice(0, 2).join(" • ") : "No detail yet.";
+    const qualityItems = qualityScoreItems(researchFeatureBundle);
+    const visibleCandidates = curatedResearchCandidates.slice(0, 6);
+    const visibleWatchlistItems = sortedWatchlist.slice(0, 6);
+    const candidateByTicker = new Map(
+      researchFeed.candidates.map((candidate) => [candidate.ticker.toUpperCase(), candidate] as const)
+    );
+    const activeWatchlistItems = sortedWatchlist.filter(
+      (item) => item.status !== "PASSED" && item.status !== "PROMOTED"
+    );
+    const activeWatchlistTickers = new Set(
+      activeWatchlistItems.map((item) => item.ticker.toUpperCase())
+    );
+    const proposalRows: Array<{
+      key: string;
+      ticker: string;
+      companyName: string;
+      thesis: string;
+      fitScore: number | null;
+      status: string;
+      statusTone: string;
+      conviction: string;
+      source: string;
+      watchlistItemId: string | null;
+      sourceType: "manual" | ResearchCandidate["sourceType"];
+    }> = activeWatchlistItems.slice(0, 4).map((item) => {
+      const matchedCandidate = candidateByTicker.get(item.ticker.toUpperCase());
+      return {
+        key: `watch:${item.id}`,
+        ticker: item.ticker,
+        companyName: item.companyName,
+        thesis:
+          item.thesis ||
+          item.catalysts ||
+          item.notes ||
+          matchedCandidate?.aiSummary ||
+          matchedCandidate?.deterministicSummary ||
+          "Watchlist thesis pending.",
+        fitScore: matchedCandidate?.fitScore ?? null,
+        status: statusLabel[item.status],
+        statusTone: statusTone[item.status],
+        conviction:
+          item.conviction >= 4 ? "High" : item.conviction >= 3 ? "Medium" : "Low",
+        source: item.sourceLabel,
+        watchlistItemId: item.id,
+        sourceType: item.sourceType
+      };
+    });
+    for (const candidate of visibleCandidates) {
+      if (proposalRows.length >= 4) {
+        break;
+      }
+      if (activeWatchlistTickers.has(candidate.ticker.toUpperCase())) {
+        continue;
+      }
+      proposalRows.push({
+        key: `candidate:${candidate.ticker}`,
+        ticker: candidate.ticker,
+        companyName: candidate.companyName,
+        thesis: candidate.aiSummary ?? candidate.deterministicSummary,
+        fitScore: candidate.fitScore,
+        status: "Candidate",
+        statusTone: "bg-primary/10 text-primary",
+        conviction: candidate.fitScore >= 75 ? "High" : candidate.fitScore >= 60 ? "Medium" : "Low",
+        source: candidate.sourceLabel,
+        watchlistItemId: null,
+        sourceType: candidate.sourceType
+      });
+    }
+
+    const sentimentForScore = (fitScore: number | null): "Bullish" | "Neutral" | "Bearish" => {
+      if (fitScore == null) {
+        return "Neutral";
+      }
+      if (fitScore >= 70) {
+        return "Bullish";
+      }
+      if (fitScore <= 52) {
+        return "Bearish";
+      }
+      return "Neutral";
+    };
+    const intelRows: Array<{
+      key: string;
+      ticker: string;
+      title: string;
+      detail: string;
+      type: string;
+      analyst: string;
+      date: string;
+      sentiment: "Bullish" | "Neutral" | "Bearish";
+      impact: "High" | "Medium" | "Low";
+    }> = [];
+    if (selectedResearchTicker) {
+      intelRows.push({
+        key: `selected:${selectedResearchTicker}`,
+        ticker: selectedResearchTicker,
+        title: researchInsight?.whyNow ?? "Portfolio-fit signal refreshed",
+        detail: researchInsight?.summary ?? "Deterministic fit context available for this name.",
+        type: "Research",
+        analyst: researchInsight?.source === "AI" ? "AI Copilot" : "Deterministic Engine",
+        date: researchFeed.generatedAt ? formatCompactDate(researchFeed.generatedAt) : "Today",
+        sentiment: sentimentForScore(activeFitScoreValue),
+        impact:
+          researchInsight?.dataConfidence === "HIGH"
+            ? "High"
+            : researchInsight?.dataConfidence === "LOW"
+              ? "Low"
+              : "Medium"
+      });
+    }
+    for (const candidate of visibleCandidates) {
+      if (intelRows.length >= 6) {
+        break;
+      }
+      if (intelRows.some((entry) => entry.ticker === candidate.ticker)) {
+        continue;
+      }
+      intelRows.push({
+        key: `candidate:${candidate.ticker}`,
+        ticker: candidate.ticker,
+        title: candidate.aiSummary ?? candidate.deterministicSummary,
+        detail: candidate.deterministicSummary,
+        type: sourceLabel[candidate.sourceType],
+        analyst: "Research Feed",
+        date: researchFeed.generatedAt ? formatCompactDate(researchFeed.generatedAt) : "Today",
+        sentiment: sentimentForScore(candidate.fitScore),
+        impact:
+          candidate.dataConfidence === "HIGH"
+            ? "High"
+            : candidate.dataConfidence === "LOW"
+              ? "Low"
+              : "Medium"
+      });
+    }
+
+    const coverageMap = new Map<string, { ticker: string; score: number }>();
+    for (const item of watchlistItems) {
+      coverageMap.set(item.ticker.toUpperCase(), {
+        ticker: item.ticker,
+        score: Math.max(20, Math.min(100, item.conviction * 20))
+      });
+    }
+    for (const candidate of visibleCandidates) {
+      const key = candidate.ticker.toUpperCase();
+      const current = coverageMap.get(key);
+      if (!current || candidate.fitScore > current.score) {
+        coverageMap.set(key, {
+          ticker: candidate.ticker,
+          score: Math.max(20, Math.min(100, candidate.fitScore))
+        });
+      }
+    }
+    const coverageRows = Array.from(coverageMap.values())
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 12);
+
+    const activeResearchCount = watchlistItems.filter(
+      (item) => item.status !== "PASSED" && item.status !== "PROMOTED"
+    ).length;
+    const riskAlertCount = visibleCandidates.filter((candidate) => {
+      const note = `${candidate.concentrationImpact} ${candidate.aiSummary ?? ""} ${candidate.deterministicSummary}`;
+      return /worsen|increase|downside|risk/i.test(note);
+    }).length;
+    const proposedCount = watchlistItems.filter(
+      (item) => item.status === "READY" || item.status === "RESEARCHING"
+    ).length;
+    const pendingCount = watchlistItems.filter(
+      (item) => item.status === "NEW" || item.status === "RESEARCHING"
+    ).length;
+    const summaryCards = [
+      {
+        label: "Active Research",
+        value: activeResearchCount,
+        delta: `+${watchlistItems.filter((item) => item.status === "NEW").length}`,
+        icon: BookOpen
+      },
+      {
+        label: "Risk Alerts",
+        value: riskAlertCount,
+        delta: `+${riskAlertCount}`,
+        icon: AlertCircle
+      },
+      {
+        label: "Proposed Positions",
+        value: proposedCount,
+        delta: `+${watchlistItems.filter((item) => item.status === "READY").length}`,
+        icon: Target
+      },
+      {
+        label: "Pending Actions",
+        value: pendingCount,
+        delta: `-${watchlistItems.filter((item) => item.status === "PASSED").length}`,
+        icon: Clock3
+      }
+    ];
+
     const updateSectionValue = (nextValue: string) => {
       setWatchlistDraft((current) => {
         if (researchNotebookSection === "thesis") {
@@ -4329,295 +4523,396 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       });
     };
 
-    const ideaFeedRow = (
-      <Panel title="Idea feed" className="h-full">
-        {researchFeedError ? (
-          <div className="mb-2">
-            <InlineNotice message={researchFeedError} tone="warning" />
-          </div>
-        ) : null}
-        <div className="flex h-full min-h-0 flex-col gap-2">
-          <div className="grid gap-2 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.75fr)_minmax(0,0.75fr)_auto]">
-            <div className="relative">
-              {researchSearchError ? (
-                <div className="mb-2">
-                  <InlineNotice message={researchSearchError} tone="warning" />
-                </div>
-              ) : null}
-              <input
-                value={researchSearchTerm}
-                onChange={(event) => {
-                  const nextQuery = event.target.value;
-                  setResearchSearchTerm(nextQuery);
-                  setSelectedResearchSecurity(null);
-                  setResearchPreview(null);
-                  setResearchSearchError(null);
-                }}
-                placeholder="Search ticker or company"
-                className="h-8 w-full rounded-md border border-[#1a2b43] bg-[#0a1526] px-3 text-xs text-[#d6e8ff] outline-none transition focus:border-[#2a476b] focus:shadow-[0_0_0_1px_rgba(66,199,255,0.3)]"
-              />
-              {researchSearchTerm.trim() && !selectedResearchSecurity ? (
-                <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-md border border-[#1a2b43] bg-[#0a1526] shadow-panel">
-                  {researchSearchLoading ? (
-                    <div className="px-3 py-2 text-xs text-[#7387a2]">Searching Yahoo Finance...</div>
-                  ) : researchSearchResults.length > 0 ? (
-                    <div className="divide-y divide-[#1a2b43]">
-                      {researchSearchResults.slice(0, 5).map((result) => (
-                        <button
-                          key={`${result.symbol}:${result.exchange}`}
-                          type="button"
-                          onClick={() => {
-                            setActiveResearchAnalysisTab("fit");
-                            void handleSelectResearchSearchResult(result);
-                          }}
-                          className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-2 px-3 py-2 text-left transition hover:bg-[#10253d]"
-                        >
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold text-[#d6e8ff]">{result.symbol}</p>
-                            <p className="truncate text-[11px] text-[#7387a2]">{result.companyName}</p>
-                          </div>
-                          <p className="text-[10px] text-[#6e89ab]">{result.exchange}</p>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="px-3 py-2 text-xs text-[#7387a2]">No listed Yahoo matches found.</div>
-                  )}
-                </div>
-              ) : null}
-            </div>
-            <ShellSelect
-              value={researchSourceFilter}
-              onChange={(event) =>
-                setResearchSourceFilter(
-                  event.target.value as "all" | "manual" | "related" | "screener" | "trending"
-                )
-              }
-              className="h-8 text-xs"
-            >
-              <option value="all">All sources</option>
-              <option value="related">Related</option>
-              <option value="screener">Screens</option>
-              <option value="trending">Trending</option>
-              <option value="manual">Manual</option>
-            </ShellSelect>
-            <ShellSelect
-              value={researchSectorFilter}
-              onChange={(event) => setResearchSectorFilter(event.target.value)}
-              className="h-8 text-xs"
-            >
-              <option value="all">All sectors</option>
-              {researchSectorOptions.map((sector) => (
-                <option key={sector} value={sector}>
-                  {sector}
-                </option>
-              ))}
-            </ShellSelect>
-            <button
-              type="button"
-              onClick={() => {
-                if (!selectedPortfolio) {
-                  return;
-                }
-                setResearchFeedLoading(true);
-                void loadResearchFeed(selectedPortfolio.id, true)
-                  .catch((error) => {
-                    setResearchFeedError(error instanceof Error ? error.message : "Failed to refresh research feed");
-                  })
-                  .finally(() => setResearchFeedLoading(false));
-              }}
-              className="h-8 rounded-md border border-[#2a476b] bg-[#10253d] px-3 text-xs text-[#d6e8ff] transition hover:border-[#42c7ff] hover:text-[#42c7ff]"
-            >
-              Refresh
-            </button>
-          </div>
-
-          {researchPreview ? (
-            <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md border border-[#1a2b43] bg-[#0a1526] px-3 py-1.5">
+    const summaryView = (
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_minmax(0,0.95fr)] gap-2">
+        <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+          {summaryCards.map((card) => (
+            <div key={card.label} className="panel flex items-center gap-3 px-3 py-2.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-secondary">
+                <card.icon className="h-4 w-4 text-muted-foreground" />
+              </div>
               <div className="min-w-0">
-                <p className="text-xs font-semibold text-[#d6e8ff]">{researchPreview.symbol}</p>
-                <p className="truncate text-[11px] text-[#7387a2]">{researchPreview.companyName}</p>
-              </div>
-              <p className="text-xs text-[#d6e8ff]">{formatCurrency(researchPreview.currentPrice ?? null)}</p>
-              <button
-                type="button"
-                onClick={() =>
-                  void saveWatchlistEntry({
-                    ticker: researchPreview.symbol,
-                    sourceType: "manual",
-                    sourceLabel: "Manual search"
-                  })
-                }
-                className="rounded border border-[#2a476b] px-2 py-1 text-[10px] text-[#d6e8ff] transition hover:border-[#42c7ff] hover:text-[#42c7ff]"
-              >
-                Save
-              </button>
-            </div>
-          ) : null}
-
-          <div className="min-h-0 flex-1 rounded-md border border-[#1a2b43] bg-[#0a1526]">
-            {researchFeedLoading ? (
-              <div className="px-3 py-2 text-xs text-[#7387a2]">Building Yahoo candidate feed...</div>
-            ) : visibleCandidates.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-[#7387a2]">No curated ideas for current filters.</div>
-            ) : (
-              <>
-                <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_auto_auto] gap-2 border-b border-[#1a2b43] px-3 py-1.5 text-[10px] text-[#6e89ab]">
-                  <p>Ticker</p>
-                  <p>Sector</p>
-                  <p>Source</p>
-                  <p className="text-right">Fit</p>
-                  <p className="text-right">Save</p>
-                </div>
-                <div className="divide-y divide-[#1a2b43]">
-                  {visibleCandidates.map((candidate) => (
-                    <div
-                      key={`${candidate.sourceType}:${candidate.ticker}`}
-                      className={cn(
-                        "grid grid-cols-[minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_auto_auto] items-center gap-2 px-3 py-1.5",
-                        selectedResearchTicker === candidate.ticker ? "bg-[#10253d]" : "bg-transparent"
-                      )}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveResearchAnalysisTab("fit");
-                          setSelectedResearchTicker(candidate.ticker);
-                          setSelectedResearchItemId(null);
-                          setResearchPreview(null);
-                        }}
-                        className="min-w-0 text-left"
-                      >
-                        <p className="truncate text-xs font-semibold text-[#d6e8ff]">
-                          {candidate.ticker}
-                          <span className="ml-2 font-normal text-[#7387a2]">{candidate.companyName}</span>
-                        </p>
-                        <p className="truncate text-[10px] text-[#7387a2]">
-                          {candidate.aiSummary ?? candidate.deterministicSummary}
-                        </p>
-                        <ResearchMiniFitStrip
-                          fitScore={candidate.fitScore}
-                          diversificationImpact={candidate.diversificationImpact}
-                          concentrationImpact={candidate.concentrationImpact}
-                          dataConfidence={candidate.dataConfidence}
-                        />
-                      </button>
-                      <p className="truncate text-[11px] text-[#9ab4d3]">{candidate.sector}</p>
-                      <p className="truncate text-[11px] text-[#7387a2]">{candidate.sourceLabel}</p>
-                      <p className="text-right text-xs text-[#42c7ff]">{candidate.fitScore}</p>
-                      <div className="text-right">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void saveWatchlistEntry({
-                              ticker: candidate.ticker,
-                              sourceType: candidate.sourceType,
-                              sourceLabel: candidate.sourceLabel
-                            })
-                          }
-                          disabled={activeWatchlistTickerSet.has(candidate.ticker.toUpperCase())}
-                          className="rounded border border-[#2a476b] px-2 py-1 text-[10px] text-[#d6e8ff] transition hover:border-[#42c7ff] hover:text-[#42c7ff] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {activeWatchlistTickerSet.has(candidate.ticker.toUpperCase()) ? "Saved" : "Save"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </Panel>
-    );
-
-    const notebookRow = (
-      <Panel title="Watchlist / Notebook" className="h-full">
-        {watchlistItems.length === 0 ? (
-          <EmptyState
-            title="No watchlist names"
-            copy="Save an idea from the feed to start a notebook and promotion flow."
-          />
-        ) : (
-          <div className="grid h-full min-h-0 gap-2 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-            <div className="flex min-h-0 flex-col rounded-md border border-[#1a2b43] bg-[#0a1526]">
-              <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-[#1a2b43] px-3 py-2">
-                <p className="truncate text-xs text-[#6e89ab]">
-                  Queue ({visibleWatchlistItems.length}/{watchlistItems.length})
+                <p className="truncate text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                  {card.label}
                 </p>
-                <ShellSelect
-                  value={researchSort}
-                  onChange={(event) =>
-                    setResearchSort(event.target.value as "updated" | "conviction" | "marketCap")
-                  }
-                  className="h-7 min-w-[7.5rem] text-[11px]"
-                >
-                  <option value="updated">Updated</option>
-                  <option value="conviction">Conviction</option>
-                  <option value="marketCap">Market cap</option>
-                </ShellSelect>
+                <div className="mt-0.5 flex items-center gap-2">
+                  <p className="font-mono-data text-xl text-foreground">{card.value}</p>
+                  <p className={cn("text-xs", card.delta.startsWith("+") ? "text-success" : "text-danger")}>
+                    {card.delta}
+                  </p>
+                </div>
               </div>
-              <div className="divide-y divide-[#1a2b43]">
-                {visibleWatchlistItems.map((item) => (
+            </div>
+          ))}
+        </div>
+
+        <div className="grid min-h-0 grid-cols-12 gap-2">
+          <Panel title="Top Proposals" action={<span className="text-xs text-muted-foreground">Sorted by conviction</span>} className="col-span-12 lg:col-span-7">
+            <div className="space-y-2">
+              {proposalRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No proposals available yet.</p>
+              ) : (
+                proposalRows.slice(0, 3).map((row) => (
                   <button
-                    key={item.id}
+                    key={row.key}
                     type="button"
                     onClick={() => {
-                      setActiveResearchAnalysisTab("fit");
-                      setSelectedResearchItemId(item.id);
-                      setSelectedResearchTicker(item.ticker);
-                      setResearchPreview(null);
+                      setSelectedResearchTicker(row.ticker);
+                      if (row.watchlistItemId) {
+                        setSelectedResearchItemId(row.watchlistItemId);
+                        setActiveResearchSubTab("Proposals");
+                      } else {
+                        setSelectedResearchItemId(null);
+                      }
                     }}
-                    className={cn(
-                      "grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-1.5 text-left",
-                      selectedResearchItemId === item.id ? "bg-[#10253d]" : "hover:bg-[#10253d]/70"
-                    )}
+                    className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-subtle bg-secondary/20 px-3 py-2 text-left hover:border-primary/30"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-xs font-semibold text-[#d6e8ff]">{item.ticker}</p>
-                      <p className="truncate text-[10px] text-[#7387a2]">{item.companyName}</p>
+                      <p className="truncate text-sm font-medium text-foreground">
+                        <span className="mr-2 font-mono-data text-primary">{row.ticker}</span>
+                        {row.companyName}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">{row.thesis}</p>
                     </div>
-                    <p className="text-[10px] text-[#9ab4d3]">{item.conviction}/5 · {item.status}</p>
+                    <div className="text-right">
+                      <p className="font-mono-data text-sm text-foreground">
+                        {row.fitScore != null ? `${row.fitScore}` : "N/A"}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">{row.conviction}</p>
+                      <span className={cn("mt-1 inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium", row.statusTone)}>
+                        {row.status}
+                      </span>
+                    </div>
                   </button>
-                ))}
+                ))
+              )}
+            </div>
+          </Panel>
+
+          <Panel title="Latest Intel" action={<button type="button" onClick={() => setActiveResearchSubTab("Intel Feed")} className="text-xs text-primary hover:underline">View all</button>} className="col-span-12 lg:col-span-5">
+            <div className="space-y-2">
+              {intelRows.slice(0, 4).map((row) => {
+                const Icon =
+                  row.sentiment === "Bullish"
+                    ? ArrowUpRight
+                    : row.sentiment === "Bearish"
+                      ? ArrowDownRight
+                      : Minus;
+                return (
+                  <button
+                    key={row.key}
+                    type="button"
+                    onClick={() => setSelectedResearchTicker(row.ticker)}
+                    className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-2 text-left"
+                  >
+                    <Icon className={cn("mt-0.5 h-3.5 w-3.5", sentimentTone[row.sentiment])} />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm text-foreground">
+                        <span className="mr-1 font-mono-data text-primary">{row.ticker}</span>
+                        {row.title}
+                      </p>
+                      <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">{row.type}</span>
+                        <span>{row.analyst}</span>
+                        <span>·</span>
+                        <span>{row.date}</span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </Panel>
+        </div>
+
+        <Panel title="Research Coverage Map" className="min-h-0">
+          <div className="grid grid-cols-3 gap-1.5 md:grid-cols-4 xl:grid-cols-6">
+            {coverageRows.length === 0 ? (
+              <p className="col-span-full text-sm text-muted-foreground">
+                Coverage map appears after feed generation.
+              </p>
+            ) : (
+              coverageRows.map((item) => (
+                <button
+                  key={item.ticker}
+                  type="button"
+                  onClick={() => setSelectedResearchTicker(item.ticker)}
+                  className="rounded border border-subtle bg-secondary/20 px-2 py-2 text-center hover:border-primary/40"
+                >
+                  <p className="font-mono-data text-sm text-foreground">{item.ticker}</p>
+                  <p className="text-xs text-muted-foreground">{item.score}%</p>
+                </button>
+              ))
+            )}
+          </div>
+        </Panel>
+      </div>
+    );
+
+    const proposalsView = (
+      <div className="grid h-full min-h-0 grid-cols-12 gap-2">
+        <Panel title="Proposed Positions" className="col-span-12 lg:col-span-8">
+          {researchFeedError ? <div className="mb-2"><InlineNotice message={researchFeedError} tone="warning" /></div> : null}
+          <div className="flex h-full min-h-0 flex-col gap-2">
+            <div className="grid gap-2 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto]">
+              <div className="relative">
+                <input
+                  value={researchSearchTerm}
+                  onChange={(event) => {
+                    const nextQuery = event.target.value;
+                    setResearchSearchTerm(nextQuery);
+                    setSelectedResearchSecurity(null);
+                    setResearchPreview(null);
+                    setResearchSearchError(null);
+                  }}
+                  placeholder="Search ticker or company"
+                  className="h-8 w-full rounded-md border border-[#1a2b43] bg-[#0a1526] px-3 text-xs text-[#d6e8ff] outline-none transition focus:border-[#2a476b] focus:shadow-[0_0_0_1px_rgba(66,199,255,0.3)]"
+                />
+                {researchSearchTerm.trim() && !selectedResearchSecurity ? (
+                  <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-md border border-[#1a2b43] bg-[#0a1526] shadow-panel">
+                    {researchSearchLoading ? (
+                      <div className="px-3 py-2 text-xs text-[#7387a2]">Searching Yahoo Finance...</div>
+                    ) : researchSearchResults.length > 0 ? (
+                      <div className="divide-y divide-[#1a2b43]">
+                        {researchSearchResults.slice(0, 5).map((result) => (
+                          <button
+                            key={`${result.symbol}:${result.exchange}`}
+                            type="button"
+                            onClick={() => void handleSelectResearchSearchResult(result)}
+                            className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-2 px-3 py-2 text-left transition hover:bg-[#10253d]"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-[#d6e8ff]">{result.symbol}</p>
+                              <p className="truncate text-[11px] text-[#7387a2]">{result.companyName}</p>
+                            </div>
+                            <p className="text-[10px] text-[#6e89ab]">{result.exchange}</p>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="px-3 py-2 text-xs text-[#7387a2]">No listed Yahoo matches found.</div>
+                    )}
+                  </div>
+                ) : null}
               </div>
+              <ShellSelect
+                value={researchSourceFilter}
+                onChange={(event) =>
+                  setResearchSourceFilter(
+                    event.target.value as "all" | "manual" | "related" | "screener" | "trending"
+                  )
+                }
+                className="h-8 text-xs"
+              >
+                <option value="all">All sources</option>
+                <option value="related">Related</option>
+                <option value="screener">Screens</option>
+                <option value="trending">Trending</option>
+                <option value="manual">Manual</option>
+              </ShellSelect>
+              <ShellSelect
+                value={researchSectorFilter}
+                onChange={(event) => setResearchSectorFilter(event.target.value)}
+                className="h-8 text-xs"
+              >
+                <option value="all">All sectors</option>
+                {researchSectorOptions.map((sector) => (
+                  <option key={sector} value={sector}>
+                    {sector}
+                  </option>
+                ))}
+              </ShellSelect>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!selectedPortfolio) {
+                    return;
+                  }
+                  setResearchFeedLoading(true);
+                  void loadResearchFeed(selectedPortfolio.id, true)
+                    .catch((error) => {
+                      setResearchFeedError(error instanceof Error ? error.message : "Failed to refresh research feed");
+                    })
+                    .finally(() => setResearchFeedLoading(false));
+                }}
+                className="h-8 rounded-md border border-[#2a476b] bg-[#10253d] px-3 text-xs text-[#d6e8ff] transition hover:border-[#42c7ff] hover:text-[#42c7ff]"
+              >
+                Refresh
+              </button>
             </div>
 
-            {!selectedWatchlistItem ? (
-              <EmptyState
-                title="Select a watchlist name"
-                copy="Choose a saved name to edit notes, update status, and promote."
-              />
-            ) : (
-              <div className="grid h-full min-h-0 grid-rows-[auto_auto_auto_minmax(0,1fr)_auto] gap-2 rounded-md border border-[#1a2b43] bg-[#0a1526] p-2.5">
-                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-[#d6e8ff]">{selectedWatchlistItem.ticker}</p>
-                    <p className="truncate text-[11px] text-[#7387a2]">{selectedWatchlistItem.companyName}</p>
-                  </div>
-                  <div className="flex flex-wrap justify-end gap-1">
-                    <ResearchToneChip label={selectedWatchlistItem.sourceLabel} />
-                    <ResearchToneChip label={selectedWatchlistItem.sector} />
-                  </div>
+            {researchPreview ? (
+              <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md border border-subtle bg-secondary/20 px-3 py-1.5">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-foreground">{researchPreview.symbol}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">{researchPreview.companyName}</p>
                 </div>
+                <p className="text-xs text-foreground">
+                  {researchPreviewLoading ? "Loading..." : formatCurrency(researchPreview.currentPrice ?? null)}
+                </p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void saveWatchlistEntry({
+                      ticker: researchPreview.symbol,
+                      sourceType: "manual",
+                      sourceLabel: "Manual search"
+                    })
+                  }
+                  className="rounded border border-primary/40 px-2 py-1 text-[10px] text-primary transition hover:bg-primary/10"
+                >
+                  Save
+                </button>
+              </div>
+            ) : null}
 
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <ShellSelect
-                    value={watchlistDraft.status}
-                    onChange={(event) =>
-                      setWatchlistDraft((current) => ({
-                        ...current,
-                        status: event.target.value as WatchlistItem["status"]
-                      }))
-                    }
-                    className="h-7 text-[11px]"
+            <div className="min-h-0 flex-1 rounded-md border border-subtle bg-secondary/20">
+              {researchFeedLoading ? (
+                <div className="px-3 py-2 text-xs text-muted-foreground">Building Yahoo candidate feed...</div>
+              ) : proposalRows.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-muted-foreground">No proposals available for current filters.</div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,0.75fr)_minmax(0,0.65fr)_auto_auto] gap-2 border-b border-subtle px-3 py-1.5 text-[10px] text-muted-foreground">
+                    <p>Name</p>
+                    <p>Source</p>
+                    <p>Status</p>
+                    <p className="text-right">Fit</p>
+                    <p className="text-right">Action</p>
+                  </div>
+                  <div className="divide-y divide-subtle">
+                    {proposalRows.map((row) => (
+                      <div
+                        key={row.key}
+                        className={cn(
+                          "grid grid-cols-[minmax(0,1.1fr)_minmax(0,0.75fr)_minmax(0,0.65fr)_auto_auto] items-center gap-2 px-3 py-1.5",
+                          selectedResearchTicker === row.ticker ? "bg-primary/8" : "bg-transparent"
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedResearchTicker(row.ticker);
+                            setActiveResearchAnalysisTab("fit");
+                            setResearchPreview(null);
+                            if (row.watchlistItemId) {
+                              setSelectedResearchItemId(row.watchlistItemId);
+                            } else {
+                              setSelectedResearchItemId(null);
+                            }
+                          }}
+                          className="min-w-0 text-left"
+                        >
+                          <p className="truncate text-xs font-semibold text-foreground">
+                            {row.ticker}
+                            <span className="ml-2 font-normal text-muted-foreground">{row.companyName}</span>
+                          </p>
+                          <p className="truncate text-[10px] text-muted-foreground">{row.thesis}</p>
+                        </button>
+                        <p className="truncate text-[11px] text-muted-foreground">{row.source}</p>
+                        <span className={cn("inline-flex w-fit rounded px-1.5 py-0.5 text-[10px] font-medium", row.statusTone)}>
+                          {row.status}
+                        </span>
+                        <p className="text-right font-mono-data text-xs text-foreground">
+                          {row.fitScore != null ? row.fitScore : "N/A"}
+                        </p>
+                        <div className="text-right">
+                          {row.watchlistItemId ? (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedResearchItemId(row.watchlistItemId)}
+                              className="rounded border border-subtle px-2 py-1 text-[10px] text-foreground hover:border-primary/40"
+                            >
+                              Open
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void saveWatchlistEntry({
+                                  ticker: row.ticker,
+                                  sourceType: row.sourceType,
+                                  sourceLabel: row.source
+                                })
+                              }
+                              disabled={activeWatchlistTickerSet.has(row.ticker.toUpperCase())}
+                              className="rounded border border-primary/40 px-2 py-1 text-[10px] text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {activeWatchlistTickerSet.has(row.ticker.toUpperCase()) ? "Saved" : "Save"}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </Panel>
+
+        <div className="col-span-12 grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2 lg:col-span-4">
+          <Panel title="Watchlist Pipeline">
+            <div className="grid grid-cols-2 gap-2">
+              {groupedWatchlist.map((group) => (
+                <div key={group.status} className="rounded border border-subtle bg-secondary/20 px-2.5 py-2">
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                    {statusLabel[group.status as WatchlistItem["status"]]}
+                  </p>
+                  <p className="mt-1 font-mono-data text-lg text-foreground">{group.items.length}</p>
+                </div>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel title="Approval Desk" className="h-full">
+            {!selectedWatchlistItem ? (
+              <p className="text-sm text-muted-foreground">Select a watchlist item to approve or promote.</p>
+            ) : (
+              <div className="grid h-full min-h-0 grid-rows-[auto_auto_auto_minmax(0,1fr)_auto] gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{selectedWatchlistItem.ticker}</p>
+                  <p className="truncate text-xs text-muted-foreground">{selectedWatchlistItem.companyName}</p>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setWatchlistDraft((current) => ({ ...current, status: "RESEARCHING" }))}
+                    className={cn(
+                      "rounded border px-2 py-1 text-[10px]",
+                      watchlistDraft.status === "RESEARCHING"
+                        ? "border-warning/40 bg-warning/10 text-warning"
+                        : "border-subtle text-muted-foreground"
+                    )}
                   >
-                    <option value="NEW">NEW</option>
-                    <option value="RESEARCHING">RESEARCHING</option>
-                    <option value="READY">READY</option>
-                    <option value="PASSED">PASSED</option>
-                    <option value="PROMOTED">PROMOTED</option>
-                  </ShellSelect>
+                    Review
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWatchlistDraft((current) => ({ ...current, status: "READY" }))}
+                    className={cn(
+                      "rounded border px-2 py-1 text-[10px]",
+                      watchlistDraft.status === "READY"
+                        ? "border-success/40 bg-success/10 text-success"
+                        : "border-subtle text-muted-foreground"
+                    )}
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWatchlistDraft((current) => ({ ...current, status: "PASSED" }))}
+                    className={cn(
+                      "rounded border px-2 py-1 text-[10px]",
+                      watchlistDraft.status === "PASSED"
+                        ? "border-danger/40 bg-danger/10 text-danger"
+                        : "border-subtle text-muted-foreground"
+                    )}
+                  >
+                    Reject
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
                   <input
                     value={watchlistDraft.conviction}
                     onChange={(event) =>
@@ -4629,7 +4924,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     type="number"
                     min="1"
                     max="5"
-                    className="h-7 w-full rounded-md border border-[#1a2b43] bg-[#0d1c31] px-2 text-[11px] text-[#d6e8ff] outline-none focus:border-[#2a476b]"
+                    className="h-8 rounded border border-subtle bg-secondary/20 px-2 text-xs text-foreground outline-none focus:border-primary/40"
                   />
                   <input
                     value={watchlistDraft.targetPrice}
@@ -4643,247 +4938,271 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                     min="0"
                     step="any"
                     placeholder="Target"
-                    className="h-7 w-full rounded-md border border-[#1a2b43] bg-[#0d1c31] px-2 text-[11px] text-[#d6e8ff] outline-none focus:border-[#2a476b]"
+                    className="h-8 rounded border border-subtle bg-secondary/20 px-2 text-xs text-foreground outline-none focus:border-primary/40"
                   />
                 </div>
-
-                <div className="flex flex-wrap gap-1 border-y border-[#1a2b43] py-1.5">
-                  {notebookSections.map((section) => (
-                    <button
-                      key={section.id}
-                      type="button"
-                      onClick={() => setResearchNotebookSection(section.id)}
-                      className={cn(
-                        "rounded border px-2 py-1 text-[10px]",
-                        researchNotebookSection === section.id
-                          ? "border-[#2a476b] bg-[#10253d] text-[#d6e8ff]"
-                          : "border-[#1a2b43] bg-[#0d1c31] text-[#7387a2]"
-                      )}
-                    >
-                      {section.label}
-                    </button>
-                  ))}
-                </div>
-
-                <label className="flex min-h-0 flex-col">
-                  <span className="text-[11px] text-[#9ab4d3]">{sectionLabel}</span>
-                  <textarea
-                    value={sectionValue}
-                    onChange={(event) => updateSectionValue(event.target.value)}
-                    rows={3}
-                    className="mt-1 h-full min-h-0 w-full resize-none rounded-md border border-[#1a2b43] bg-[#0d1c31] px-2.5 py-2 text-[11px] leading-5 text-[#d6e8ff] outline-none focus:border-[#2a476b]"
-                  />
-                </label>
-
-                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t border-[#1a2b43] pt-1.5">
-                  <p className="truncate text-[11px] text-[#7387a2]">
-                    Latest {formatCurrency(researchPriceMap.get(selectedWatchlistItem.ticker.toUpperCase()))}
-                  </p>
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() => void removeWatchlistItem(selectedWatchlistItem.id)}
-                      className="rounded border border-danger/40 px-2 py-1 text-[10px] text-danger"
-                    >
-                      Remove
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void promoteWatchlistItem(selectedWatchlistItem)}
-                      className="rounded border border-[#2a476b] px-2 py-1 text-[10px] text-[#d6e8ff] transition hover:border-[#42c7ff] hover:text-[#42c7ff]"
-                    >
-                      Promote
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void saveWatchlistDraft()}
-                      className="rounded border border-[#2a476b] bg-[#10253d] px-2 py-1 text-[10px] text-[#d6e8ff] transition hover:border-[#42c7ff] hover:text-[#42c7ff]"
-                    >
-                      Save
-                    </button>
+                <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-1.5">
+                  <div className="flex flex-wrap gap-1">
+                    {notebookSections.map((section) => (
+                      <button
+                        key={section.id}
+                        type="button"
+                        onClick={() => setResearchNotebookSection(section.id)}
+                        className={cn(
+                          "rounded border px-2 py-1 text-[10px]",
+                          researchNotebookSection === section.id
+                            ? "border-primary/40 bg-primary/10 text-primary"
+                            : "border-subtle text-muted-foreground"
+                        )}
+                      >
+                        {section.label}
+                      </button>
+                    ))}
                   </div>
+                  <label className="flex min-h-0 flex-col">
+                    <span className="text-[10px] text-muted-foreground">{sectionLabel}</span>
+                    <textarea
+                      value={sectionValue}
+                      onChange={(event) => updateSectionValue(event.target.value)}
+                      rows={3}
+                      className="mt-1 h-full min-h-0 resize-none rounded border border-subtle bg-secondary/20 px-2.5 py-2 text-xs text-foreground outline-none focus:border-primary/40"
+                    />
+                  </label>
+                </div>
+                <div className="flex items-center justify-end gap-1.5 border-t border-subtle pt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => void removeWatchlistItem(selectedWatchlistItem.id)}
+                    className="rounded border border-danger/40 px-2 py-1 text-[10px] text-danger"
+                  >
+                    Remove
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void promoteWatchlistItem(selectedWatchlistItem)}
+                    className="rounded border border-primary/40 px-2 py-1 text-[10px] text-primary hover:bg-primary/10"
+                  >
+                    Promote
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void saveWatchlistDraft()}
+                    className="rounded border border-subtle bg-secondary px-2 py-1 text-[10px] text-foreground hover:border-primary/40"
+                  >
+                    Save
+                  </button>
                 </div>
               </div>
             )}
-          </div>
-        )}
-      </Panel>
+          </Panel>
+        </div>
+      </div>
     );
 
-    const analysisRow = (
-      <Panel title="Analysis" className="h-full">
-        {researchInsightError ? (
-          <div className="mb-2">
-            <InlineNotice message={researchInsightError} tone="warning" />
+    const intelFeedView = (
+      <div className="grid h-full min-h-0 grid-cols-12 gap-2">
+        <Panel title="Intel Feed" className="col-span-12 lg:col-span-7">
+          <div className="space-y-2">
+            {intelRows.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Intel feed unavailable.</p>
+            ) : (
+              intelRows.slice(0, 6).map((row) => {
+                const Icon =
+                  row.sentiment === "Bullish"
+                    ? ArrowUpRight
+                    : row.sentiment === "Bearish"
+                      ? ArrowDownRight
+                      : Minus;
+                return (
+                  <button
+                    key={row.key}
+                    type="button"
+                    onClick={() => {
+                      setSelectedResearchTicker(row.ticker);
+                      setActiveResearchAnalysisTab("ai");
+                    }}
+                    className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 rounded-md border border-subtle bg-secondary/20 px-3 py-2 text-left hover:border-primary/30"
+                  >
+                    <Icon className={cn("mt-0.5 h-3.5 w-3.5", sentimentTone[row.sentiment])} />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm text-foreground">
+                        <span className="mr-1 font-mono-data text-primary">{row.ticker}</span>
+                        {row.title}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">{row.detail}</p>
+                      <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">{row.type}</span>
+                        <span>{row.analyst}</span>
+                        <span>·</span>
+                        <span>{row.date}</span>
+                      </div>
+                    </div>
+                    <span className={cn(
+                      "rounded px-1.5 py-0.5 text-[10px]",
+                      row.impact === "High"
+                        ? "bg-danger/10 text-danger"
+                        : row.impact === "Medium"
+                          ? "bg-warning/10 text-warning"
+                          : "bg-secondary text-muted-foreground"
+                    )}>
+                      {row.impact}
+                    </span>
+                  </button>
+                );
+              })
+            )}
           </div>
-        ) : null}
-        {!selectedPortfolio || !selectedResearchTicker ? (
-          <EmptyState
-            title="No selected name"
-            copy="Select an idea or watchlist name to view fit, AI, quality, and diligence."
-          />
-        ) : researchInsightLoading ? (
-          <div className="rounded-md border border-[#1a2b43] bg-[#0a1526] p-3 text-xs text-[#7387a2]">
-            Building research memo and portfolio-fit summary...
-          </div>
-        ) : (
-          <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-2">
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-md border border-[#1a2b43] bg-[#0a1526] px-3 py-2">
-              <div className="min-w-0">
-                <p className="text-xs text-[#6e89ab]">{selectedResearchTicker}</p>
-                <p className="truncate text-sm font-semibold text-[#d6e8ff]">{selectedLabel ?? selectedResearchTicker}</p>
-                <p className="text-[11px] text-[#7387a2]">{selectedSector}</p>
+        </Panel>
+
+        <Panel title="Selected Analysis" className="col-span-12 lg:col-span-5">
+          {!selectedPortfolio || !selectedResearchTicker ? (
+            <p className="text-sm text-muted-foreground">Select a ticker to view analysis.</p>
+          ) : (
+            <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-2">
+              <div className="rounded border border-subtle bg-secondary/20 px-3 py-2">
+                <p className="text-xs text-muted-foreground">{selectedResearchTicker}</p>
+                <p className="truncate text-sm font-semibold text-foreground">{selectedLabel ?? selectedResearchTicker}</p>
+                <p className="text-[11px] text-muted-foreground">{selectedSector}</p>
               </div>
-              <div className="flex flex-wrap justify-end gap-1">
-                {insightBadges.map((badge) => (
-                  <ResearchToneChip key={badge.label} label={badge.label} tone={badge.tone} />
+              <div className="grid grid-cols-4 gap-1.5">
+                {(["fit", "ai", "quality", "diligence"] as const).map((tabValue) => (
+                  <button
+                    key={tabValue}
+                    type="button"
+                    onClick={() => setActiveResearchAnalysisTab(tabValue)}
+                    className={cn(
+                      "rounded border px-2 py-1 text-[10px] uppercase tracking-[0.12em]",
+                      activeResearchAnalysisTab === tabValue
+                        ? "border-primary/40 bg-primary/10 text-primary"
+                        : "border-subtle text-muted-foreground"
+                    )}
+                  >
+                    {tabValue}
+                  </button>
                 ))}
               </div>
-            </div>
-
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                ["fit", "Fit"],
-                ["ai", "AI"],
-                ["quality", "Quality"],
-                ["diligence", "Diligence"]
-              ].map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setActiveResearchAnalysisTab(value as "fit" | "ai" | "quality" | "diligence")}
-                  className={cn(
-                    "rounded-md border px-2 py-1 text-[11px]",
-                    activeResearchAnalysisTab === value
-                      ? "border-[#2a476b] bg-[#10253d] text-[#d6e8ff]"
-                      : "border-[#1a2b43] bg-[#0d1c31] text-[#7387a2]"
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <div className="min-h-0">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={activeResearchAnalysisTab}
-                  initial={prefersReducedMotion ? false : { opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={prefersReducedMotion ? undefined : { opacity: 0, y: -4 }}
-                  transition={{ duration: 0.14 }}
-                  className="grid h-full gap-2 md:grid-cols-2"
-                >
-                  {activeResearchAnalysisTab === "fit" ? (
-                    <>
-                      <ResearchInsightCard label="Fit Score" value={insightFitScore} />
-                      <ResearchInsightCard label="Action Bias" value={analysisActionBias} />
-                      <ResearchInsightCard label="Latest Price" value={formatCurrency(selectedResearchPrice)} />
-                      <ResearchInsightCard
-                        label="Coverage"
-                        value={researchInsight?.dataConfidence ?? researchFeatureBundle?.dataConfidence ?? "N/A"}
-                        helper={
-                          researchFeatureBundle?.missingData.length
-                            ? researchFeatureBundle.missingData.slice(0, 2).join(", ")
-                            : "Core fields covered."
-                        }
-                      />
-                    </>
-                  ) : null}
-
-                  {activeResearchAnalysisTab === "ai" ? (
-                    <>
-                      <div className="md:col-span-2">
+              <div className="min-h-0">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={activeResearchAnalysisTab}
+                    initial={prefersReducedMotion ? false : { opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={prefersReducedMotion ? undefined : { opacity: 0, y: -6 }}
+                    transition={{ duration: 0.14 }}
+                    className="grid h-full gap-2 md:grid-cols-2"
+                  >
+                    {activeResearchAnalysisTab === "fit" ? (
+                      <>
                         <ResearchInsightCard
-                          label="AI interpretation"
-                          value={researchInsight?.summary ?? "AI interpretation unavailable."}
+                          label="Fit Score"
+                          value={activeFitScoreValue != null ? `${activeFitScoreValue}/100` : "N/A"}
                         />
-                      </div>
-                      <ResearchInsightCard label="Why Now" value={researchInsight?.whyNow ?? "Unavailable"} />
-                      <ResearchInsightCard label="Top Concern" value={researchInsight?.topConcern ?? "Unavailable"} />
-                      <ResearchInsightCard label="Role" value={researchInsight?.portfolioFit ?? "Unavailable"} />
-                      <ResearchInsightCard
-                        label="Missing Data"
-                        value={
-                          researchInsight?.missingData.length
-                            ? researchInsight.missingData.slice(0, 2).join(", ")
-                            : "No major missing fields."
-                        }
-                      />
-                    </>
-                  ) : null}
-
-                  {activeResearchAnalysisTab === "quality" ? (
-                    <>
-                      {(qualityItems.length > 0 ? qualityItems : [
-                        { label: "Growth", score: 50 },
-                        { label: "Margins", score: 50 },
-                        { label: "Balance Sheet", score: 50 },
-                        { label: "Liquidity", score: 50 }
-                      ]).map((item) => (
+                        <ResearchInsightCard label="Action Bias" value={analysisActionBias} />
+                        <ResearchInsightCard label="Latest Price" value={formatCurrency(selectedResearchPrice)} />
                         <ResearchInsightCard
-                          key={item.label}
-                          label={item.label}
-                          value={`${item.score}/100`}
-                          helper={item.score >= 70 ? "Healthy" : item.score >= 45 ? "Mixed" : "Needs diligence"}
+                          label="Coverage"
+                          value={researchInsight?.dataConfidence ?? researchFeatureBundle?.dataConfidence ?? "N/A"}
                         />
-                      ))}
-                    </>
-                  ) : null}
-
-                  {activeResearchAnalysisTab === "diligence" ? (
-                    <>
-                      <ResearchInsightCard label="Thesis" value={topInsight(researchInsight?.thesis)} />
-                      <ResearchInsightCard label="Catalysts" value={topInsight(researchInsight?.catalysts)} />
-                      <ResearchInsightCard label="Risks" value={topInsight(researchInsight?.risks)} />
-                      <ResearchInsightCard
-                        label="Questions"
-                        value={topInsight(researchInsight?.diligenceQuestions)}
-                      />
-                    </>
-                  ) : null}
-                </motion.div>
-              </AnimatePresence>
+                      </>
+                    ) : null}
+                    {activeResearchAnalysisTab === "ai" ? (
+                      <>
+                        <div className="md:col-span-2">
+                          <ResearchInsightCard
+                            label="AI Interpretation"
+                            value={researchInsight?.summary ?? "AI interpretation unavailable."}
+                          />
+                        </div>
+                        <ResearchInsightCard label="Why Now" value={researchInsight?.whyNow ?? "Unavailable"} />
+                        <ResearchInsightCard label="Top Concern" value={researchInsight?.topConcern ?? "Unavailable"} />
+                      </>
+                    ) : null}
+                    {activeResearchAnalysisTab === "quality" ? (
+                      <>
+                        {(qualityItems.length > 0 ? qualityItems : [
+                          { label: "Growth", score: 50 },
+                          { label: "Margins", score: 50 },
+                          { label: "Balance Sheet", score: 50 },
+                          { label: "Liquidity", score: 50 }
+                        ]).map((item) => (
+                          <ResearchInsightCard key={item.label} label={item.label} value={`${item.score}/100`} />
+                        ))}
+                      </>
+                    ) : null}
+                    {activeResearchAnalysisTab === "diligence" ? (
+                      <>
+                        <ResearchInsightCard label="Thesis" value={topInsight(researchInsight?.thesis)} />
+                        <ResearchInsightCard label="Catalysts" value={topInsight(researchInsight?.catalysts)} />
+                        <ResearchInsightCard label="Risks" value={topInsight(researchInsight?.risks)} />
+                        <ResearchInsightCard
+                          label="Questions"
+                          value={topInsight(researchInsight?.diligenceQuestions)}
+                        />
+                      </>
+                    ) : null}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
             </div>
-          </div>
-        )}
-      </Panel>
+          )}
+        </Panel>
+      </div>
     );
 
     return (
       <div className="flex h-[calc(100vh-9.5rem)] min-h-0 flex-col gap-2 overflow-hidden">
-        <section className="shrink-0 rounded-xl border border-white/8 bg-panel px-3 py-2.5">
-          {!selectedPortfolio ? (
-            <EmptyState
-              title="No portfolio selected"
-              copy="Select a portfolio to source ideas, build a watchlist, and promote research names into holdings."
-            />
-          ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              {compactSummary.map((item) => (
-                <div key={item.label} className="rounded-md border border-white/8 bg-black/20 px-2.5 py-1">
-                  <span className="text-[10px] text-slate-500">{item.label}</span>
-                  <span className="ml-1.5 text-xs font-medium text-white">{item.value}</span>
-                </div>
-              ))}
+        <section className="shrink-0 rounded-xl border border-white/8 bg-panel p-1.5">
+          <div className="flex items-center gap-1">
+            {researchSubTabs.map((tabLabel) => (
+              <button
+                key={tabLabel}
+                type="button"
+                onClick={() => setActiveResearchSubTab(tabLabel)}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-sm font-medium transition",
+                  activeResearchSubTab === tabLabel
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {tabLabel}
+              </button>
+            ))}
+            <div className="ml-auto flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setActiveResearchSubTab("Proposals")}
+                className="flex h-8 w-8 items-center justify-center rounded border border-subtle text-muted-foreground hover:text-foreground"
+                aria-label="Open proposal search"
+              >
+                <Search className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setResearchSourceFilter((current) => (current === "all" ? "related" : "all"))
+                }
+                className="flex h-8 w-8 items-center justify-center rounded border border-subtle text-muted-foreground hover:text-foreground"
+                aria-label="Toggle source filter"
+              >
+                <Filter className="h-4 w-4" />
+              </button>
             </div>
-          )}
+          </div>
         </section>
 
-        {selectedPortfolio ? (
-          <>
-            <div className="hidden min-h-0 flex-1 overflow-hidden xl:grid xl:grid-rows-[minmax(0,1.45fr)_minmax(0,1.25fr)_minmax(0,1.1fr)] xl:gap-2">
-              <div className="min-h-0">{ideaFeedRow}</div>
-              <div className="min-h-0">{notebookRow}</div>
-              <div className="min-h-0">{analysisRow}</div>
-            </div>
-            <div className="space-y-2 xl:hidden">
-              {ideaFeedRow}
-              {notebookRow}
-              {analysisRow}
-            </div>
-          </>
-        ) : null}
+        {!selectedPortfolio ? (
+          <EmptyState
+            title="No portfolio selected"
+            copy="Select a portfolio to generate ideas, approve watchlist candidates, and promote names into holdings."
+          />
+        ) : (
+          <div className="min-h-0 flex-1">
+            {activeResearchSubTab === "Summary" ? summaryView : null}
+            {activeResearchSubTab === "Proposals" ? proposalsView : null}
+            {activeResearchSubTab === "Intel Feed" ? intelFeedView : null}
+          </div>
+        )}
       </div>
     );
   };
