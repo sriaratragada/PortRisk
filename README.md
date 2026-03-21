@@ -1,4 +1,4 @@
-# Portfolio Risk & Compliance Engine
+# Portfolio Management Platform
 
 An accuracy-first portfolio operating workspace built with Next.js + TypeScript.
 
