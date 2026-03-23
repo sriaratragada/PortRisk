@@ -6,6 +6,7 @@ import { fetchSecurityPreview } from "@/lib/market";
 import { mapWatchlistItemRow } from "@/lib/research";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { watchlistCreateSchema } from "@/lib/validation";
+import { writeAuditEvent } from "@/lib/audit-events";
 
 export const dynamic = "force-dynamic";
 
@@ -129,27 +130,29 @@ export async function POST(request: NextRequest, context: Context) {
     return badRequest(saveError?.message ?? "Failed to save watchlist item", 500);
   }
 
-  await Promise.all([
-    supabase.from("AuditLog").insert({
-      id: crypto.randomUUID(),
-      userId: auth.user.id,
-      portfolioId,
-      actionType: "WATCHLIST_ITEM_ADDED",
-      beforeState: {},
-      afterState: saved,
-      riskTierBefore: null,
-      riskTierAfter: null,
-      metadata: {
-        sourceType: payload.sourceType,
-        sourceLabel: payload.sourceLabel
-      }
-    }),
-    supabase
-      .from("Portfolio")
-      .update({ updatedAt: now })
-      .eq("id", portfolioId)
-      .eq("userId", auth.user.id)
-  ]);
+  try {
+    await Promise.all([
+      writeAuditEvent(supabase, {
+        request,
+        userId: auth.user.id,
+        portfolioId,
+        actionType: "WATCHLIST_ITEM_ADDED",
+        beforeState: {},
+        afterState: saved as Record<string, unknown>,
+        metadata: {
+          sourceType: payload.sourceType,
+          sourceLabel: payload.sourceLabel
+        }
+      }),
+      supabase
+        .from("Portfolio")
+        .update({ updatedAt: now })
+        .eq("id", portfolioId)
+        .eq("userId", auth.user.id)
+    ]);
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : "Failed to write audit log", 500);
+  }
 
   return json({ item: mapWatchlistItemRow(saved) }, { status: 201 });
 }

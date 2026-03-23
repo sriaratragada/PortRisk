@@ -286,6 +286,78 @@ export type BenchmarkAnalytics = {
   provider: MarketDataProvider;
 };
 
+export type AllocationRecommendationVariant = "primary" | "conservative" | "growth";
+
+export type AllocationRecommendation = {
+  variant: AllocationRecommendationVariant;
+  label: string;
+  objective: string;
+  weights: Array<{
+    ticker: string;
+    companyName: string;
+    sector: string;
+    currentWeight: number;
+    targetWeight: number;
+    deltaWeight: number;
+  }>;
+  expected: {
+    annualReturn: number | null;
+    annualVolatility: number | null;
+    sharpe: number | null;
+    var95: number | null;
+    betaToBenchmark: number | null;
+    correlationToBenchmark: number | null;
+  };
+  diagnostics: {
+    turnover: number;
+    topWeight: number;
+    topSector: string | null;
+    topSectorWeight: number;
+    effectiveHoldings: number;
+    dataCoverage: number;
+  };
+};
+
+export type AllocationInsight = {
+  id: string;
+  label: string;
+  value: string;
+  tone: "positive" | "neutral" | "risk";
+  description: string;
+};
+
+export type AllocationRecommendationSet = {
+  benchmark: string;
+  range: ChartRange;
+  recommendationState: "available" | "insufficient_history" | "unavailable";
+  model: {
+    objective: "max_sharpe_v1";
+    constraints: {
+      longOnly: true;
+      maxSingleWeight: number;
+      maxSectorWeight: number;
+      universe: "current_holdings";
+    };
+  };
+  current: {
+    annualReturn: number | null;
+    annualVolatility: number | null;
+    sharpe: number | null;
+    var95: number | null;
+    betaToBenchmark: number | null;
+    correlationToBenchmark: number | null;
+    topWeight: number | null;
+    topSector: string | null;
+    topSectorWeight: number | null;
+    effectiveHoldings: number | null;
+  };
+  recommendations: AllocationRecommendation[];
+  insights: AllocationInsight[];
+  asOf: string | null;
+  dataState: MarketDataState;
+  provider: MarketDataProvider;
+};
+
 export type HydratedPortfolioRisk = {
   holdings: HoldingSnapshot[];
   series: Array<{

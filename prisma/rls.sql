@@ -121,5 +121,14 @@ revoke delete on table "AuditLog" from anon, authenticated, service_role;
 create index if not exists "AuditLog_userId_timestamp_idx"
 on "AuditLog" ("userId", "timestamp" desc);
 
+create index if not exists "AuditLog_userId_portfolioId_timestamp_idx"
+on "AuditLog" ("userId", "portfolioId", "timestamp" desc);
+
+create index if not exists "AuditLog_category_severity_outcome_timestamp_idx"
+on "AuditLog" ("category", "severity", "outcome", "timestamp" desc);
+
+create index if not exists "AuditLog_requestId_idx"
+on "AuditLog" ("requestId");
+
 create index if not exists "RiskScore_portfolioId_scoredAt_idx"
 on "RiskScore" ("portfolioId", "scoredAt" desc);

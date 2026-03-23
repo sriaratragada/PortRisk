@@ -7,6 +7,7 @@ import { positionSchema } from "@/lib/validation";
 import { normalizeBenchmarkSymbol } from "@/lib/benchmarks";
 import { fetchHistoricalSeriesResult, fetchSecurityPreview } from "@/lib/market";
 import { mapWatchlistItemRow } from "@/lib/research";
+import { writeAuditEvent } from "@/lib/audit-events";
 import { z } from "zod";
 
 const patchSchema = z.object({
@@ -244,21 +245,21 @@ export async function PATCH(request: NextRequest, context: Context) {
     }
   }
 
-  const { error: auditError } = await supabase.from("AuditLog").insert(
-    auditEvents.map((event) => ({
-      id: crypto.randomUUID(),
-      userId: auth.user.id,
-      portfolioId,
-      actionType: event.actionType,
-      beforeState: event.beforeState,
-      afterState: event.afterState,
-      riskTierBefore: null,
-      riskTierAfter: null
-    }))
-  );
-
-  if (auditError) {
-    return badRequest(auditError.message, 500);
+  try {
+    await Promise.all(
+      auditEvents.map((event) =>
+        writeAuditEvent(supabase, {
+          request,
+          userId: auth.user.id,
+          portfolioId,
+          actionType: event.actionType,
+          beforeState: event.beforeState as Record<string, unknown>,
+          afterState: event.afterState as Record<string, unknown>
+        })
+      )
+    );
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : "Failed to write audit log", 500);
   }
 
   return json({ portfolio });
@@ -284,25 +285,23 @@ export async function DELETE(request: NextRequest, context: Context) {
 
   const now = new Date().toISOString();
 
-  const { error: auditError } = await supabase.from("AuditLog").insert({
-    id: crypto.randomUUID(),
-    userId: auth.user.id,
-    portfolioId,
-    actionType: "PORTFOLIO_ARCHIVED",
-    beforeState: existing,
-    afterState: {
-      ...existing,
-      status: "ARCHIVED"
-    },
-    riskTierBefore: null,
-    riskTierAfter: null,
-    metadata: {
-      archivedAt: now
-    }
-  });
-
-  if (auditError) {
-    return badRequest(auditError.message, 500);
+  try {
+    await writeAuditEvent(supabase, {
+      request,
+      userId: auth.user.id,
+      portfolioId,
+      actionType: "PORTFOLIO_ARCHIVED",
+      beforeState: existing as Record<string, unknown>,
+      afterState: {
+        ...existing,
+        status: "ARCHIVED"
+      },
+      metadata: {
+        archivedAt: now
+      }
+    });
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : "Failed to write audit log", 500);
   }
 
   return json({ archived: true });

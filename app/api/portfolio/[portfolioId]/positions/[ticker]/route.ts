@@ -5,6 +5,7 @@ import { badRequest, json } from "@/lib/http";
 import { isPortfolioArchived } from "@/lib/portfolio-archive";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { assetClassSchema } from "@/lib/validation";
+import { writeAuditEvent } from "@/lib/audit-events";
 
 export const dynamic = "force-dynamic";
 
@@ -73,19 +74,17 @@ export async function PATCH(request: NextRequest, context: Context) {
     return badRequest(updateError?.message ?? "Failed to update position", 500);
   }
 
-  const { error: auditError } = await supabase.from("AuditLog").insert({
-    id: crypto.randomUUID(),
-    userId: auth.user.id,
-    portfolioId,
-    actionType: "POSITION_RESIZED",
-    beforeState: existingPosition,
-    afterState: updatedPosition,
-    riskTierBefore: null,
-    riskTierAfter: null
-  });
-
-  if (auditError) {
-    return badRequest(auditError.message, 500);
+  try {
+    await writeAuditEvent(supabase, {
+      request,
+      userId: auth.user.id,
+      portfolioId,
+      actionType: "POSITION_RESIZED",
+      beforeState: existingPosition as Record<string, unknown>,
+      afterState: updatedPosition as Record<string, unknown>
+    });
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : "Failed to write audit log", 500);
   }
 
   await supabase
@@ -144,19 +143,17 @@ export async function DELETE(_request: NextRequest, context: Context) {
     return badRequest(deleteError.message, 500);
   }
 
-  const { error: auditError } = await supabase.from("AuditLog").insert({
-    id: crypto.randomUUID(),
-    userId: auth.user.id,
-    portfolioId,
-    actionType: "POSITION_REMOVED",
-    beforeState: existingPosition,
-    afterState: {},
-    riskTierBefore: null,
-    riskTierAfter: null
-  });
-
-  if (auditError) {
-    return badRequest(auditError.message, 500);
+  try {
+    await writeAuditEvent(supabase, {
+      request: _request,
+      userId: auth.user.id,
+      portfolioId,
+      actionType: "POSITION_REMOVED",
+      beforeState: existingPosition as Record<string, unknown>,
+      afterState: {}
+    });
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : "Failed to write audit log", 500);
   }
 
   await supabase

@@ -6,6 +6,7 @@ import { buildStressSummary, estimateRecoveryDays, getPortfolioWithPositionsEdge
 import { badRequest, json, parseJson } from "@/lib/http";
 import { STRESS_SCENARIOS } from "@/lib/stress-scenarios";
 import { stressSchema } from "@/lib/validation";
+import { writeAuditEvent } from "@/lib/audit-events";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -87,19 +88,27 @@ export async function POST(request: NextRequest) {
     return badRequest(stressError.message, 500);
   }
 
-  const { error: auditError } = await supabase.from("AuditLog").insert({
-    id: crypto.randomUUID(),
-    userId: auth.user.id,
-    portfolioId: payload.portfolioId,
-    actionType: "STRESS_TEST_RUN",
-    beforeState: current.metrics,
-    afterState: response,
-    riskTierBefore: current.metrics.riskTier,
-    riskTierAfter: stressed.riskTier,
-    metadata: { scenario }
-  });
-  if (auditError) {
-    return badRequest(auditError.message, 500);
+  try {
+    await writeAuditEvent(supabase, {
+      request,
+      userId: auth.user.id,
+      portfolioId: payload.portfolioId,
+      actionType: "STRESS_TEST_RUN",
+      beforeState: current.metrics as Record<string, unknown>,
+      afterState: response as Record<string, unknown>,
+      riskTierBefore: current.metrics.riskTier,
+      riskTierAfter: stressed.riskTier,
+      metadata: { scenario },
+      policyEvaluations: [
+        {
+          policyId: "STRESS_PRICE_COVERAGE",
+          result: "PASS",
+          message: "Current prices were available for all holdings before stress execution."
+        }
+      ]
+    });
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : "Failed to write audit log", 500);
   }
 
   return json(response);

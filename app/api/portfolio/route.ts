@@ -6,6 +6,7 @@ import { getArchivedPortfolioIds } from "@/lib/portfolio-archive";
 import { ensureAppUserRecord } from "@/lib/user";
 import { portfolioCreateSchema } from "@/lib/validation";
 import { defaultBenchmarkForPortfolio } from "@/lib/benchmarks";
+import { writeAuditEvent } from "@/lib/audit-events";
 
 export const dynamic = "force-dynamic";
 
@@ -83,19 +84,20 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const { error: auditError } = await supabase.from("AuditLog").insert({
-    id: crypto.randomUUID(),
-    userId: auth.user.id,
-    portfolioId: portfolio.id,
-    actionType: "ALLOCATION_COMMITTED",
-    beforeState: {},
-    afterState: portfolio,
-    riskTierBefore: null,
-    riskTierAfter: null
-  });
-
-  if (auditError) {
-    return badRequest(auditError.message, 500);
+  try {
+    await writeAuditEvent(supabase, {
+      request,
+      userId: auth.user.id,
+      portfolioId: portfolio.id,
+      actionType: "ALLOCATION_COMMITTED",
+      beforeState: {},
+      afterState: portfolio,
+      metadata: {
+        source: "portfolio_create"
+      }
+    });
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : "Failed to write audit log", 500);
   }
 
   return json({ portfolio }, { status: 201 });

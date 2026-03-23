@@ -5,6 +5,7 @@ import { badRequest, json } from "@/lib/http";
 import { isPortfolioArchived } from "@/lib/portfolio-archive";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { positionSchema } from "@/lib/validation";
+import { writeAuditEvent } from "@/lib/audit-events";
 
 export const dynamic = "force-dynamic";
 
@@ -81,19 +82,17 @@ export async function POST(request: NextRequest, context: Context) {
         ? "POSITION_RESIZED"
         : "POSITION_RESIZED";
 
-  const { error: auditError } = await supabase.from("AuditLog").insert({
-    id: crypto.randomUUID(),
-    userId: auth.user.id,
-    portfolioId,
-    actionType,
-    beforeState: existingPosition ?? {},
-    afterState: savedPosition,
-    riskTierBefore: null,
-    riskTierAfter: null
-  });
-
-  if (auditError) {
-    return badRequest(auditError.message, 500);
+  try {
+    await writeAuditEvent(supabase, {
+      request,
+      userId: auth.user.id,
+      portfolioId,
+      actionType,
+      beforeState: (existingPosition ?? {}) as Record<string, unknown>,
+      afterState: savedPosition as Record<string, unknown>
+    });
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : "Failed to write audit log", 500);
   }
 
   await supabase

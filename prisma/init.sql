@@ -124,7 +124,23 @@ CREATE TABLE "AuditLog" (
     "userId" TEXT NOT NULL,
     "portfolioId" TEXT NOT NULL,
     "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "eventVersion" INTEGER NOT NULL DEFAULT 2,
     "actionType" TEXT NOT NULL,
+    "category" TEXT NOT NULL DEFAULT 'SYSTEM',
+    "severity" TEXT NOT NULL DEFAULT 'INFO',
+    "outcome" TEXT NOT NULL DEFAULT 'SUCCESS',
+    "actorType" TEXT NOT NULL DEFAULT 'USER',
+    "requestId" TEXT,
+    "route" TEXT,
+    "method" TEXT,
+    "sessionId" TEXT,
+    "ipHash" TEXT,
+    "userAgentHash" TEXT,
+    "reasonCode" TEXT,
+    "controlRefs" JSONB,
+    "policyEvaluations" JSONB,
+    "prevEventHash" TEXT,
+    "eventHash" TEXT,
     "beforeState" JSONB NOT NULL,
     "afterState" JSONB NOT NULL,
     "riskTierBefore" TEXT,
@@ -168,6 +184,15 @@ CREATE INDEX "AuditLog_userId_timestamp_idx" ON "AuditLog"("userId", "timestamp"
 
 -- CreateIndex
 CREATE INDEX "AuditLog_portfolioId_timestamp_idx" ON "AuditLog"("portfolioId", "timestamp" DESC);
+
+-- CreateIndex
+CREATE INDEX "AuditLog_userId_portfolioId_timestamp_idx" ON "AuditLog"("userId", "portfolioId", "timestamp" DESC);
+
+-- CreateIndex
+CREATE INDEX "AuditLog_category_severity_outcome_timestamp_idx" ON "AuditLog"("category", "severity", "outcome", "timestamp" DESC);
+
+-- CreateIndex
+CREATE INDEX "AuditLog_requestId_idx" ON "AuditLog"("requestId");
 
 -- AddForeignKey
 ALTER TABLE "Portfolio" ADD CONSTRAINT "Portfolio_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

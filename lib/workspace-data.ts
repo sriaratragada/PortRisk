@@ -17,7 +17,27 @@ export type PortfolioSummary = {
 export type AuditEntryView = {
   id: string;
   timestamp: string;
+  eventVersion: number | null;
   actionType: string;
+  category: string | null;
+  severity: string | null;
+  outcome: string | null;
+  actorType: string | null;
+  requestId: string | null;
+  route: string | null;
+  method: string | null;
+  sessionId: string | null;
+  reasonCode: string | null;
+  controlRefs: string[] | null;
+  policyEvaluations: Array<{
+    policyId: string;
+    result: "PASS" | "FAIL" | "WARN";
+    message: string;
+  }> | null;
+  prevEventHash: string | null;
+  eventHash: string | null;
+  beforeState: Record<string, unknown> | null;
+  afterState: Record<string, unknown> | null;
   riskTierBefore: string | null;
   riskTierAfter: string | null;
   metadata: Record<string, unknown> | null;
@@ -156,7 +176,23 @@ export async function buildWorkspacePortfolio(portfolioId: string, userId: strin
       auditLog: (auditLogs ?? []).map((entry) => ({
         id: entry.id,
         timestamp: entry.timestamp,
+        eventVersion: entry.eventVersion ?? null,
         actionType: entry.actionType,
+        category: entry.category ?? null,
+        severity: entry.severity ?? null,
+        outcome: entry.outcome ?? null,
+        actorType: entry.actorType ?? null,
+        requestId: entry.requestId ?? null,
+        route: entry.route ?? null,
+        method: entry.method ?? null,
+        sessionId: entry.sessionId ?? null,
+        reasonCode: entry.reasonCode ?? null,
+        controlRefs: Array.isArray(entry.controlRefs) ? entry.controlRefs : null,
+        policyEvaluations: Array.isArray(entry.policyEvaluations) ? entry.policyEvaluations : null,
+        prevEventHash: entry.prevEventHash ?? null,
+        eventHash: entry.eventHash ?? null,
+        beforeState: (entry.beforeState as Record<string, unknown> | null) ?? null,
+        afterState: (entry.afterState as Record<string, unknown> | null) ?? null,
         riskTierBefore: entry.riskTierBefore,
         riskTierAfter: entry.riskTierAfter,
         metadata: (entry.metadata as Record<string, unknown> | null) ?? null
@@ -190,7 +226,23 @@ export async function buildWorkspacePortfolio(portfolioId: string, userId: strin
       auditLog: (auditLogs ?? []).map((entry) => ({
         id: entry.id,
         timestamp: entry.timestamp,
+        eventVersion: entry.eventVersion ?? null,
         actionType: entry.actionType,
+        category: entry.category ?? null,
+        severity: entry.severity ?? null,
+        outcome: entry.outcome ?? null,
+        actorType: entry.actorType ?? null,
+        requestId: entry.requestId ?? null,
+        route: entry.route ?? null,
+        method: entry.method ?? null,
+        sessionId: entry.sessionId ?? null,
+        reasonCode: entry.reasonCode ?? null,
+        controlRefs: Array.isArray(entry.controlRefs) ? entry.controlRefs : null,
+        policyEvaluations: Array.isArray(entry.policyEvaluations) ? entry.policyEvaluations : null,
+        prevEventHash: entry.prevEventHash ?? null,
+        eventHash: entry.eventHash ?? null,
+        beforeState: (entry.beforeState as Record<string, unknown> | null) ?? null,
+        afterState: (entry.afterState as Record<string, unknown> | null) ?? null,
         riskTierBefore: entry.riskTierBefore,
         riskTierAfter: entry.riskTierAfter,
         metadata: (entry.metadata as Record<string, unknown> | null) ?? null
@@ -218,7 +270,23 @@ export async function buildWorkspacePortfolio(portfolioId: string, userId: strin
       auditLog: (auditLogs ?? []).map((entry) => ({
         id: entry.id,
         timestamp: entry.timestamp,
+        eventVersion: entry.eventVersion ?? null,
         actionType: entry.actionType,
+        category: entry.category ?? null,
+        severity: entry.severity ?? null,
+        outcome: entry.outcome ?? null,
+        actorType: entry.actorType ?? null,
+        requestId: entry.requestId ?? null,
+        route: entry.route ?? null,
+        method: entry.method ?? null,
+        sessionId: entry.sessionId ?? null,
+        reasonCode: entry.reasonCode ?? null,
+        controlRefs: Array.isArray(entry.controlRefs) ? entry.controlRefs : null,
+        policyEvaluations: Array.isArray(entry.policyEvaluations) ? entry.policyEvaluations : null,
+        prevEventHash: entry.prevEventHash ?? null,
+        eventHash: entry.eventHash ?? null,
+        beforeState: (entry.beforeState as Record<string, unknown> | null) ?? null,
+        afterState: (entry.afterState as Record<string, unknown> | null) ?? null,
         riskTierBefore: entry.riskTierBefore,
         riskTierAfter: entry.riskTierAfter,
         metadata: (entry.metadata as Record<string, unknown> | null) ?? null

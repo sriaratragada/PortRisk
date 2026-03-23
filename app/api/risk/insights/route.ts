@@ -6,11 +6,13 @@ import { getPortfolioWithPositionsEdge, hydratePortfolioRisk } from "@/lib/portf
 import { buildRiskReport } from "@/lib/risk-report";
 import { generateRiskInsight } from "@/lib/ai-risk";
 import { riskInsightSchema } from "@/lib/validation";
+import { writeAuditEvent } from "@/lib/audit-events";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function persistInsight(input: {
+  request?: NextRequest;
   userId: string;
   portfolioId: string;
   insight: Awaited<ReturnType<typeof generateRiskInsight>>["insight"];
@@ -42,15 +44,13 @@ async function persistInsight(input: {
     return { persisted: false, error: error.message };
   }
 
-  await supabase.from("AuditLog").insert({
-    id: crypto.randomUUID(),
+  await writeAuditEvent(supabase, {
+    request: input.request,
     userId: input.userId,
     portfolioId: input.portfolioId,
     actionType: "RISK_INSIGHT_GENERATED",
     beforeState: {},
-    afterState: row,
-    riskTierBefore: null,
-    riskTierAfter: null,
+    afterState: row as Record<string, unknown>,
     metadata: {
       provider: input.insight.provider,
       model: input.insight.model,
@@ -188,6 +188,7 @@ export async function GET(request: NextRequest) {
       );
     }
     const persistence = await persistInsight({
+      request,
       userId: auth.user.id,
       portfolioId,
       insight: built.insight,
@@ -234,6 +235,7 @@ export async function POST(request: NextRequest) {
 
     const persistence = payload.persist
       ? await persistInsight({
+          request,
           userId: auth.user.id,
           portfolioId: payload.portfolioId,
           insight: built.insight,

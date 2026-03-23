@@ -5,6 +5,7 @@ import { isPortfolioArchived } from "@/lib/portfolio-archive";
 import { mapWatchlistItemRow } from "@/lib/research";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { watchlistUpdateSchema } from "@/lib/validation";
+import { writeAuditEvent } from "@/lib/audit-events";
 
 export const dynamic = "force-dynamic";
 
@@ -73,23 +74,25 @@ export async function PATCH(request: NextRequest, context: Context) {
     return badRequest(updateError?.message ?? "Failed to update research item", 500);
   }
 
-  await Promise.all([
-    supabase.from("AuditLog").insert({
-      id: crypto.randomUUID(),
-      userId: auth.user.id,
-      portfolioId,
-      actionType: "WATCHLIST_ITEM_UPDATED",
-      beforeState: existing,
-      afterState: updated,
-      riskTierBefore: null,
-      riskTierAfter: null
-    }),
-    supabase
-      .from("Portfolio")
-      .update({ updatedAt: now })
-      .eq("id", portfolioId)
-      .eq("userId", auth.user.id)
-  ]);
+  try {
+    await Promise.all([
+      writeAuditEvent(supabase, {
+        request,
+        userId: auth.user.id,
+        portfolioId,
+        actionType: "WATCHLIST_ITEM_UPDATED",
+        beforeState: existing as Record<string, unknown>,
+        afterState: updated as Record<string, unknown>
+      }),
+      supabase
+        .from("Portfolio")
+        .update({ updatedAt: now })
+        .eq("id", portfolioId)
+        .eq("userId", auth.user.id)
+    ]);
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : "Failed to write audit log", 500);
+  }
 
   return json({ item: mapWatchlistItemRow(updated) });
 }
@@ -140,23 +143,25 @@ export async function DELETE(_request: NextRequest, context: Context) {
     return badRequest(deleteError.message, 500);
   }
 
-  await Promise.all([
-    supabase.from("AuditLog").insert({
-      id: crypto.randomUUID(),
-      userId: auth.user.id,
-      portfolioId,
-      actionType: "WATCHLIST_ITEM_REMOVED",
-      beforeState: existing,
-      afterState: {},
-      riskTierBefore: null,
-      riskTierAfter: null
-    }),
-    supabase
-      .from("Portfolio")
-      .update({ updatedAt: now })
-      .eq("id", portfolioId)
-      .eq("userId", auth.user.id)
-  ]);
+  try {
+    await Promise.all([
+      writeAuditEvent(supabase, {
+        request: _request,
+        userId: auth.user.id,
+        portfolioId,
+        actionType: "WATCHLIST_ITEM_REMOVED",
+        beforeState: existing as Record<string, unknown>,
+        afterState: {}
+      }),
+      supabase
+        .from("Portfolio")
+        .update({ updatedAt: now })
+        .eq("id", portfolioId)
+        .eq("userId", auth.user.id)
+    ]);
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : "Failed to write audit log", 500);
+  }
 
   return json({ deleted: true });
 }

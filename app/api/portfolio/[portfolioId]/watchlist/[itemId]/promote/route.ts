@@ -4,6 +4,7 @@ import { badRequest, json } from "@/lib/http";
 import { isPortfolioArchived } from "@/lib/portfolio-archive";
 import { mapWatchlistItemRow } from "@/lib/research";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { writeAuditEvent } from "@/lib/audit-events";
 
 export const dynamic = "force-dynamic";
 
@@ -62,26 +63,28 @@ export async function POST(_request: NextRequest, context: Context) {
     return badRequest(updateError?.message ?? "Failed to promote research item", 500);
   }
 
-  await Promise.all([
-    supabase.from("AuditLog").insert({
-      id: crypto.randomUUID(),
-      userId: auth.user.id,
-      portfolioId,
-      actionType: "WATCHLIST_ITEM_PROMOTED",
-      beforeState: item,
-      afterState: updated,
-      riskTierBefore: null,
-      riskTierAfter: null,
-      metadata: {
-        ticker: item.ticker
-      }
-    }),
-    supabase
-      .from("Portfolio")
-      .update({ updatedAt: now })
-      .eq("id", portfolioId)
-      .eq("userId", auth.user.id)
-  ]);
+  try {
+    await Promise.all([
+      writeAuditEvent(supabase, {
+        request: _request,
+        userId: auth.user.id,
+        portfolioId,
+        actionType: "WATCHLIST_ITEM_PROMOTED",
+        beforeState: item as Record<string, unknown>,
+        afterState: updated as Record<string, unknown>,
+        metadata: {
+          ticker: item.ticker
+        }
+      }),
+      supabase
+        .from("Portfolio")
+        .update({ updatedAt: now })
+        .eq("id", portfolioId)
+        .eq("userId", auth.user.id)
+    ]);
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : "Failed to write audit log", 500);
+  }
 
   return json({ item: mapWatchlistItemRow(updated) });
 }

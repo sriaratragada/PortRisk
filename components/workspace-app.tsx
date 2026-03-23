@@ -43,6 +43,7 @@ import { getDefaultSector } from "@/lib/sectors";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { buildFallbackHoldings } from "@/lib/holdings";
 import type {
+  AllocationRecommendationSet,
   BenchmarkAnalytics,
   ChartRange,
   CompanyDetail,
@@ -83,6 +84,14 @@ type PortfolioCardStats = {
   portfolioValue: number | null;
   dailyPnl: number | null;
   topWeight: number | null;
+};
+
+type AuditVerification = {
+  verified: boolean;
+  checked: number;
+  firstBrokenEventId: string | null;
+  firstBrokenTimestamp: string | null;
+  reason: string | null;
 };
 
 type IconProps = {
@@ -1204,6 +1213,14 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   );
   const [auditSearch, setAuditSearch] = useState("");
   const [auditActionType, setAuditActionType] = useState("");
+  const [auditCategory, setAuditCategory] = useState("");
+  const [auditSeverity, setAuditSeverity] = useState("");
+  const [auditOutcome, setAuditOutcome] = useState("");
+  const [auditReasonCode, setAuditReasonCode] = useState("");
+  const [auditRequestId, setAuditRequestId] = useState("");
+  const [auditVerifiedOnly, setAuditVerifiedOnly] = useState(false);
+  const [auditVerification, setAuditVerification] = useState<AuditVerification | null>(null);
+  const [selectedAuditId, setSelectedAuditId] = useState<string | null>(null);
   const [auditFrom, setAuditFrom] = useState("");
   const [auditTo, setAuditTo] = useState("");
   const [stressScenario, setStressScenario] = useState("2008 Financial Crisis");
@@ -1216,6 +1233,10 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const [allocationWeights, setAllocationWeights] = useState<Record<string, number>>({});
   const [proposedMetrics, setProposedMetrics] =
     useState<WorkspacePortfolio["metrics"]>(null);
+  const [allocationRecommendation, setAllocationRecommendation] =
+    useState<AllocationRecommendationSet | null>(null);
+  const [allocationRecommendationLoading, setAllocationRecommendationLoading] = useState(false);
+  const [allocationRecommendationError, setAllocationRecommendationError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [positionPreview, setPositionPreview] = useState<SecurityPreview | null>(null);
@@ -1301,9 +1322,13 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     if (!selectedPortfolio) {
       setAllocationWeights({});
       setProposedMetrics(null);
+      setAllocationRecommendation(null);
+      setAllocationRecommendationError(null);
       setRiskReport(null);
       setRiskInsight(null);
       setWatchlistItems([]);
+      setAuditVerification(null);
+      setSelectedAuditId(null);
       setResearchFeed({ generatedAt: null, candidates: [] });
       setSelectedResearchItemId(null);
       setSelectedResearchTicker(null);
@@ -1314,6 +1339,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     }
 
     setAuditRows(selectedPortfolio.auditLog);
+    setAuditVerification(null);
+    setSelectedAuditId(selectedPortfolio.auditLog[0]?.id ?? null);
     setAllocationWeights(
       Object.fromEntries(
         selectedPortfolio.holdings.map((holding) => [holding.ticker, holding.weight ?? 0])
@@ -1720,6 +1747,66 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       cancelled = true;
     };
   }, [activeTab, portfolioRange, selectedPortfolio?.id, holdingsDependencyKey]);
+
+  useEffect(() => {
+    if (
+      !selectedPortfolio ||
+      selectedPortfolio.positions.length < 2 ||
+      activeTab !== "allocation"
+    ) {
+      setAllocationRecommendation(null);
+      setAllocationRecommendationError(null);
+      setAllocationRecommendationLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const portfolioId = selectedPortfolio.id;
+    setAllocationRecommendationLoading(true);
+    setAllocationRecommendationError(null);
+
+    async function loadAllocationRecommendation() {
+      try {
+        const response = await fetch(
+          `/api/portfolio/${portfolioId}/allocation/recommend?range=1Y`,
+          {
+            headers: {
+              ...(await getAuthHeaders())
+            }
+          }
+        );
+        if (!response.ok) {
+          throw new Error(await readErrorMessage(response));
+        }
+        const data = (await response.json()) as {
+          recommendation: AllocationRecommendationSet | null;
+        };
+        if (cancelled) {
+          return;
+        }
+        setAllocationRecommendation(data.recommendation ?? null);
+        setAllocationRecommendationError(
+          data.recommendation ? null : "Allocation recommendation unavailable"
+        );
+      } catch (error) {
+        if (!cancelled) {
+          setAllocationRecommendation(null);
+          setAllocationRecommendationError(
+            error instanceof Error ? error.message : "Allocation recommendation unavailable"
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setAllocationRecommendationLoading(false);
+        }
+      }
+    }
+
+    void loadAllocationRecommendation();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, selectedPortfolio?.id, holdingsDependencyKey]);
 
   useEffect(() => {
     if (!selectedPortfolioId) {
@@ -2228,6 +2315,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       setRiskReport(null);
       setRiskInsight(null);
       setBenchmarkAnalytics(null);
+      setAllocationRecommendation(null);
+      setAllocationRecommendationError(null);
       setStressResult(null);
 
       const requests: Promise<void>[] = [
@@ -2314,6 +2403,12 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       portfolioId: selectedPortfolioId
     });
     if (auditActionType) params.set("actionType", auditActionType);
+    if (auditCategory) params.set("category", auditCategory);
+    if (auditSeverity) params.set("severity", auditSeverity);
+    if (auditOutcome) params.set("outcome", auditOutcome);
+    if (auditReasonCode) params.set("reasonCode", auditReasonCode);
+    if (auditRequestId) params.set("requestId", auditRequestId);
+    if (auditVerifiedOnly) params.set("verifiedOnly", "1");
     if (auditFrom) params.set("from", auditFrom);
     if (auditTo) params.set("to", auditTo);
 
@@ -2325,8 +2420,17 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     if (!response.ok) {
       throw new Error(await readErrorMessage(response));
     }
-    const data = (await response.json()) as { items: AuditEntryView[] };
+    const data = (await response.json()) as {
+      items: AuditEntryView[];
+      verification?: AuditVerification | null;
+    };
     setAuditRows(data.items);
+    setSelectedAuditId((current) =>
+      current && data.items.some((entry) => entry.id === current)
+        ? current
+        : data.items[0]?.id ?? null
+    );
+    setAuditVerification(data.verification ?? null);
     setAuditError(null);
     return true;
   }
@@ -5590,82 +5694,201 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     );
   };
 
-  const renderAllocation = () => (
-    <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-      <Panel title="Target Weights">
-        {allocationError ? <div className="mb-4"><InlineNotice message={allocationError} tone="warning" /></div> : null}
-        {!selectedPortfolio || selectedPortfolio.holdings.length === 0 || !selectedMetrics ? (
-          <EmptyState
-            title="No holdings to rebalance"
-            copy="Add positions before using the allocation modeler."
-          />
-        ) : (
-          <div className="space-y-5">
-            {selectedPortfolio.holdings.map((holding) => (
-              <div key={holding.ticker} className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-white">{holding.ticker}</span>
-                  <span className="font-mono text-slate-300">
-                    {formatPercent(allocationWeights[holding.ticker] ?? 0)}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={allocationWeights[holding.ticker] ?? 0}
-                  onChange={(event) =>
-                    setAllocationWeights((current) => ({
-                      ...current,
-                      [holding.ticker]: Number(event.target.value)
-                    }))
-                  }
-                  className="w-full accent-white"
-                />
-              </div>
-            ))}
-            <button
-              onClick={commitAllocation}
-              className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
-            >
-              Commit Allocation
-            </button>
-          </div>
-        )}
-      </Panel>
+  const renderAllocation = () => {
+    const rawWeightTotal = Object.values(allocationWeights).reduce((sum, value) => sum + value, 0);
+    const normalizedWeightTotal = rawWeightTotal > 0 ? 1 : 0;
+    const primaryRecommendation = allocationRecommendation?.recommendations[0] ?? null;
+    const topRecommendedRows = [...(primaryRecommendation?.weights ?? [])]
+      .sort((left, right) => right.targetWeight - left.targetWeight)
+      .slice(0, 6);
+    const constraints = allocationRecommendation?.model.constraints;
 
-      <Panel title="Current vs Proposed Risk">
-        {!selectedMetrics || !proposedMetrics ? (
-          <EmptyState
-            title="Waiting for proposed weights"
-            copy="Adjust target weights to calculate proposed risk in real time."
-          />
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-3xl border border-slate-800 bg-slate-950/30 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Current</p>
-              <div className="mt-4 space-y-3 text-sm text-slate-300">
-                <p>Sharpe: {selectedMetrics.sharpe.toFixed(2)}</p>
-                <p>Max Drawdown: {formatPercent(selectedMetrics.maxDrawdown)}</p>
-                <p>VaR (95%): {formatPercent(selectedMetrics.var95)}</p>
-                <p>Risk Tier: {selectedMetrics.riskTier}</p>
+    return (
+      <div className="space-y-5">
+        <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+          <Panel title="Target Weights">
+            {allocationError ? <div className="mb-4"><InlineNotice message={allocationError} tone="warning" /></div> : null}
+            {!selectedPortfolio || selectedPortfolio.holdings.length === 0 || !selectedMetrics ? (
+              <EmptyState
+                title="No holdings to rebalance"
+                copy="Add positions before using the allocation modeler."
+              />
+            ) : (
+              <div className="space-y-5">
+                {selectedPortfolio.holdings.map((holding) => (
+                  <div key={holding.ticker} className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-white">{holding.ticker}</span>
+                      <span className="font-mono text-slate-300">
+                        {formatPercent(allocationWeights[holding.ticker] ?? 0)}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={allocationWeights[holding.ticker] ?? 0}
+                      onChange={(event) =>
+                        setAllocationWeights((current) => ({
+                          ...current,
+                          [holding.ticker]: Number(event.target.value)
+                        }))
+                      }
+                      className="w-full accent-white"
+                    />
+                  </div>
+                ))}
+                <div className="rounded border border-subtle bg-surface px-3 py-2 text-xs text-muted-foreground">
+                  Weight input sum: {formatPercent(rawWeightTotal)} • Normalized for scoring: {normalizedWeightTotal === 1 ? "Yes" : "No"}
+                </div>
+                <button
+                  onClick={commitAllocation}
+                  className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200"
+                >
+                  Commit Allocation
+                </button>
               </div>
-            </div>
-            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Proposed</p>
-              <div className="mt-4 space-y-3 text-sm text-slate-300">
-                <p>Sharpe: {proposedMetrics.sharpe.toFixed(2)}</p>
-                <p>Max Drawdown: {formatPercent(proposedMetrics.maxDrawdown)}</p>
-                <p>VaR (95%): {formatPercent(proposedMetrics.var95)}</p>
-                <p>Risk Tier: {proposedMetrics.riskTier}</p>
+            )}
+          </Panel>
+
+          <Panel title="Current vs Proposed Risk">
+            {!selectedMetrics || !proposedMetrics ? (
+              <EmptyState
+                title="Waiting for proposed weights"
+                copy="Adjust target weights to calculate proposed risk in real time."
+              />
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded border border-subtle bg-surface p-4">
+                  <p className="text-xs text-muted-foreground">Current</p>
+                  <div className="mt-3 space-y-2 text-sm text-slate-300">
+                    <p>Sharpe: {selectedMetrics.sharpe.toFixed(2)}</p>
+                    <p>Max Drawdown: {formatPercent(selectedMetrics.maxDrawdown)}</p>
+                    <p>VaR (95%): {formatPercent(selectedMetrics.var95)}</p>
+                    <p>Risk Tier: {selectedMetrics.riskTier}</p>
+                  </div>
+                </div>
+                <div className="rounded border border-subtle bg-surface p-4">
+                  <p className="text-xs text-muted-foreground">Proposed</p>
+                  <div className="mt-3 space-y-2 text-sm text-slate-300">
+                    <p>Sharpe: {proposedMetrics.sharpe.toFixed(2)}</p>
+                    <p>Max Drawdown: {formatPercent(proposedMetrics.maxDrawdown)}</p>
+                    <p>VaR (95%): {formatPercent(proposedMetrics.var95)}</p>
+                    <p>Risk Tier: {proposedMetrics.riskTier}</p>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        )}
-      </Panel>
-    </div>
-  );
+            )}
+          </Panel>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+          <Panel title="Deterministic Allocation Recommendations">
+            {allocationRecommendationError ? (
+              <div className="mb-4"><InlineNotice message={allocationRecommendationError} tone="warning" /></div>
+            ) : null}
+            {allocationRecommendationLoading ? (
+              <div className="text-sm text-muted-foreground">Computing deterministic recommendations...</div>
+            ) : !allocationRecommendation || allocationRecommendation.recommendationState !== "available" ? (
+              <EmptyState
+                title="Recommendation unavailable"
+                copy="At least 60 aligned daily points are required to produce deterministic recommendations."
+              />
+            ) : (
+              <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-3">
+                  {allocationRecommendation.recommendations.map((recommendation) => (
+                    <div key={recommendation.variant} className="rounded border border-subtle bg-surface p-3">
+                      <p className="text-xs text-muted-foreground">{recommendation.label}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{recommendation.objective}</p>
+                      <div className="mt-3 grid gap-1 text-xs text-foreground">
+                        <p>Return: {formatPercent(recommendation.expected.annualReturn)}</p>
+                        <p>Volatility: {formatPercent(recommendation.expected.annualVolatility)}</p>
+                        <p>Sharpe: {recommendation.expected.sharpe != null ? recommendation.expected.sharpe.toFixed(2) : "N/A"}</p>
+                        <p>Turnover: {formatPercent(recommendation.diagnostics.turnover)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="overflow-hidden rounded border border-subtle">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="bg-surface-bright text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">Ticker</th>
+                        <th className="px-3 py-2 font-medium">Sector</th>
+                        <th className="px-3 py-2 text-right font-medium">Current</th>
+                        <th className="px-3 py-2 text-right font-medium">Target</th>
+                        <th className="px-3 py-2 text-right font-medium">Delta</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {topRecommendedRows.map((row) => (
+                        <tr key={row.ticker}>
+                          <td className="px-3 py-2 text-foreground">{row.ticker}</td>
+                          <td className="px-3 py-2 text-muted-foreground">{row.sector}</td>
+                          <td className="px-3 py-2 text-right font-mono-data">{formatPercent(row.currentWeight)}</td>
+                          <td className="px-3 py-2 text-right font-mono-data text-foreground">{formatPercent(row.targetWeight)}</td>
+                          <td
+                            className={cn(
+                              "px-3 py-2 text-right font-mono-data",
+                              row.deltaWeight >= 0 ? "text-positive" : "text-risk"
+                            )}
+                          >
+                            {row.deltaWeight >= 0 ? "+" : ""}
+                            {formatPercent(row.deltaWeight)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="Allocation Insights">
+            {!allocationRecommendation || allocationRecommendation.recommendationState !== "available" ? (
+              <EmptyState
+                title="No insights yet"
+                copy="Recommendations must load before deterministic insights are available."
+              />
+            ) : (
+              <div className="space-y-4">
+                <div className="grid gap-3">
+                  {allocationRecommendation.insights.map((insight) => (
+                    <div key={insight.id} className="rounded border border-subtle bg-surface p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs text-muted-foreground">{insight.label}</p>
+                        <p
+                          className={cn(
+                            "font-mono-data text-sm",
+                            insight.tone === "positive"
+                              ? "text-positive"
+                              : insight.tone === "risk"
+                                ? "text-risk"
+                                : "text-foreground"
+                          )}
+                        >
+                          {insight.value}
+                        </p>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">{insight.description}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded border border-subtle bg-surface px-3 py-2 text-xs text-muted-foreground">
+                  Constraints: long-only • max single {formatPercent(constraints?.maxSingleWeight ?? 0.25)} • max sector{" "}
+                  {formatPercent(constraints?.maxSectorWeight ?? 0.4)}
+                </div>
+              </div>
+            )}
+          </Panel>
+        </div>
+      </div>
+    );
+  };
 
   const renderAudit = () => {
     const normalizeAction = (actionType: string) =>
@@ -5687,25 +5910,19 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           : "System update");
       const entity =
         (typeof metadata.ticker === "string" && metadata.ticker) ||
+        (typeof entry.beforeState?.ticker === "string" && entry.beforeState.ticker) ||
+        (typeof entry.afterState?.ticker === "string" && entry.afterState.ticker) ||
         (typeof metadata.entity === "string" && metadata.entity) ||
         (typeof metadata.portfolioName === "string" && metadata.portfolioName) ||
         "Portfolio";
-      const user =
-        (typeof metadata.user === "string" && metadata.user) ||
-        (typeof metadata.actor === "string" && metadata.actor) ||
-        "System";
+      const user = entry.actorType === "USER" ? "User" : entry.actorType ?? "System";
       const actionLabel = normalizeAction(entry.actionType);
-      const severity =
-        entry.actionType.includes("BREACH") || entry.actionType.includes("VIOLATION")
-          ? "Warning"
-          : entry.actionType.includes("RISK") && entry.riskTierAfter === "HIGH"
-            ? "Warning"
-            : "Info";
+      const severity = entry.severity ?? "INFO";
       const status =
-        severity === "Warning"
-          ? "Flagged"
-          : entry.actionType.includes("CHECK")
-            ? "Passed"
+        entry.outcome === "FAILED"
+          ? "Failed"
+          : entry.outcome === "DENIED"
+            ? "Denied"
             : "Completed";
 
       return {
@@ -5734,10 +5951,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     });
 
     const totalEvents = parsedRows.length;
-    const violations = parsedRows.filter((entry) => entry.severity !== "Info").length;
-    const pendingReview = parsedRows.filter((entry) => entry.status === "Flagged").length;
+    const violations = parsedRows.filter((entry) => entry.severity !== "INFO").length;
+    const pendingReview = parsedRows.filter((entry) => entry.status !== "Completed").length;
+    const verifiedRows = parsedRows.filter((entry) => Boolean(entry.eventHash)).length;
     const lastViolationTs = parsedRows
-      .filter((entry) => entry.severity !== "Info")
+      .filter((entry) => entry.severity !== "INFO")
       .map((entry) => Date.parse(entry.timestamp))
       .filter((timestamp) => Number.isFinite(timestamp))
       .sort((left, right) => right - left)[0];
@@ -5752,14 +5970,33 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         entry.id,
         entry.timestamp,
         entry.actionLabel,
+        entry.category ?? "",
+        entry.outcome ?? "",
         entry.entity,
         entry.user,
         entry.detail,
         entry.severity,
-        entry.status
+        entry.status,
+        entry.requestId ?? "",
+        entry.reasonCode ?? "",
+        entry.eventHash ?? ""
       ]);
       const csv = [
-        ["ID", "TIMESTAMP", "ACTION", "ENTITY", "USER", "DETAIL", "SEVERITY", "STATUS"].join(","),
+        [
+          "ID",
+          "TIMESTAMP",
+          "ACTION",
+          "CATEGORY",
+          "OUTCOME",
+          "ENTITY",
+          "USER",
+          "DETAIL",
+          "SEVERITY",
+          "STATUS",
+          "REQUEST_ID",
+          "REASON_CODE",
+          "EVENT_HASH"
+        ].join(","),
         ...rows.map((row) => row.map((value) => `"${String(value).replaceAll("\"", "\"\"")}"`).join(","))
       ].join("\n");
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -5770,6 +6007,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       link.click();
       URL.revokeObjectURL(url);
     };
+
+    const selectedAudit =
+      searchedRows.find((entry) => entry.id === selectedAuditId) ?? searchedRows[0] ?? null;
 
     return (
       <div className="space-y-3">
@@ -5787,13 +6027,41 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             <p className="mt-2 font-mono-data text-4xl text-foreground">{pendingReview}</p>
           </div>
           <div className="panel p-4">
-            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Clean Days</p>
-            <p className="mt-2 font-mono-data text-4xl text-foreground">{cleanDays}</p>
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Hashed Events</p>
+            <p className="mt-2 font-mono-data text-4xl text-foreground">{verifiedRows}</p>
           </div>
         </div>
 
         <Panel title="Audit Log" action={<span className="text-xs text-muted-foreground">Compliance and operational trail</span>}>
           {auditError ? <div className="mb-3"><InlineNotice message={auditError} tone="warning" /></div> : null}
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded border border-subtle bg-surface px-2 py-1 text-muted-foreground">
+              Clean days: {cleanDays}
+            </span>
+            <span
+              className={cn(
+                "rounded border px-2 py-1",
+                auditVerification?.verified
+                  ? "border-positive/30 bg-positive/10 text-positive"
+                  : auditVerification
+                    ? "border-risk/30 bg-risk/10 text-risk"
+                    : "border-subtle bg-surface text-muted-foreground"
+              )}
+            >
+              Chain: {auditVerification ? (auditVerification.verified ? "Verified" : "Broken") : "Not checked"}
+            </span>
+            {auditVerification ? (
+              <span className="rounded border border-subtle bg-surface px-2 py-1 text-muted-foreground">
+                Checked: {auditVerification.checked}
+              </span>
+            ) : null}
+            {auditVerification?.reason ? (
+              <span className="rounded border border-subtle bg-surface px-2 py-1 text-muted-foreground">
+                Reason: {auditVerification.reason}
+              </span>
+            ) : null}
+          </div>
+
           <div className="mb-3 grid gap-3 xl:grid-cols-[1fr_auto_auto]">
             <input
               value={auditSearch}
@@ -5820,7 +6088,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             </button>
           </div>
 
-          <div className="mb-3 grid gap-3 md:grid-cols-4">
+          <div className="mb-3 grid gap-3 md:grid-cols-4 xl:grid-cols-8">
             <ShellSelect
               value={auditActionType}
               onChange={(event) => setAuditActionType(event.target.value)}
@@ -5831,9 +6099,62 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               <option value="POSITION_REMOVED">Position Removed</option>
               <option value="POSITION_RESIZED">Position Resized</option>
               <option value="RISK_SCORED">Risk Scored</option>
+              <option value="RISK_INSIGHT_GENERATED">Risk Insight Generated</option>
               <option value="STRESS_TEST_RUN">Stress Test Run</option>
               <option value="ALLOCATION_COMMITTED">Allocation Committed</option>
+              <option value="PORTFOLIO_BENCHMARK_UPDATED">Benchmark Updated</option>
+              <option value="PORTFOLIO_ARCHIVED">Portfolio Archived</option>
+              <option value="WATCHLIST_ITEM_ADDED">Watchlist Added</option>
+              <option value="WATCHLIST_ITEM_UPDATED">Watchlist Updated</option>
+              <option value="WATCHLIST_ITEM_REMOVED">Watchlist Removed</option>
+              <option value="WATCHLIST_ITEM_PROMOTED">Watchlist Promoted</option>
             </ShellSelect>
+            <ShellSelect
+              value={auditCategory}
+              onChange={(event) => setAuditCategory(event.target.value)}
+              className="h-[42px] text-xs"
+            >
+              <option value="">All categories</option>
+              <option value="PORTFOLIO">Portfolio</option>
+              <option value="POSITION">Position</option>
+              <option value="RISK">Risk</option>
+              <option value="STRESS">Stress</option>
+              <option value="RESEARCH">Research</option>
+              <option value="COMPLIANCE">Compliance</option>
+              <option value="SYSTEM">System</option>
+            </ShellSelect>
+            <ShellSelect
+              value={auditSeverity}
+              onChange={(event) => setAuditSeverity(event.target.value)}
+              className="h-[42px] text-xs"
+            >
+              <option value="">All severity</option>
+              <option value="INFO">Info</option>
+              <option value="WARNING">Warning</option>
+              <option value="CRITICAL">Critical</option>
+            </ShellSelect>
+            <ShellSelect
+              value={auditOutcome}
+              onChange={(event) => setAuditOutcome(event.target.value)}
+              className="h-[42px] text-xs"
+            >
+              <option value="">All outcomes</option>
+              <option value="SUCCESS">Success</option>
+              <option value="DENIED">Denied</option>
+              <option value="FAILED">Failed</option>
+            </ShellSelect>
+            <input
+              value={auditReasonCode}
+              onChange={(event) => setAuditReasonCode(event.target.value)}
+              placeholder="Reason code..."
+              className="rounded border border-subtle bg-surface px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/35"
+            />
+            <input
+              value={auditRequestId}
+              onChange={(event) => setAuditRequestId(event.target.value)}
+              placeholder="Request ID..."
+              className="rounded border border-subtle bg-surface px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/35"
+            />
             <input
               type="date"
               value={auditFrom}
@@ -5846,6 +6167,15 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               onChange={(event) => setAuditTo(event.target.value)}
               className="rounded border border-subtle bg-surface px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/35"
             />
+            <label className="flex items-center gap-2 rounded border border-subtle bg-surface px-3 py-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={auditVerifiedOnly}
+                onChange={(event) => setAuditVerifiedOnly(event.target.checked)}
+                className="accent-white"
+              />
+              Verified only
+            </label>
             <div className="rounded border border-subtle bg-surface px-3 py-2 text-xs text-muted-foreground">
               Showing {searchedRows.length} of {totalEvents}
             </div>
@@ -5865,29 +6195,36 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       <th className="px-4 py-3 font-medium">ID</th>
                       <th className="px-4 py-3 font-medium">Timestamp</th>
                       <th className="px-4 py-3 font-medium">Action</th>
+                      <th className="px-4 py-3 font-medium">Category</th>
                       <th className="px-4 py-3 font-medium">Entity</th>
-                      <th className="px-4 py-3 font-medium">User</th>
                       <th className="px-4 py-3 font-medium">Detail</th>
                       <th className="px-4 py-3 font-medium">Severity</th>
-                      <th className="px-4 py-3 font-medium">Status</th>
+                      <th className="px-4 py-3 font-medium">Outcome</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {searchedRows.map((entry) => (
-                      <tr key={entry.id} className="hover:bg-secondary/30">
+                      <tr
+                        key={entry.id}
+                        className={cn(
+                          "cursor-pointer hover:bg-secondary/30",
+                          selectedAudit?.id === entry.id ? "bg-secondary/40" : ""
+                        )}
+                        onClick={() => setSelectedAuditId(entry.id)}
+                      >
                         <td className="px-4 py-3 font-mono-data text-muted-foreground">{entry.id.slice(0, 10)}</td>
                         <td className="px-4 py-3 font-mono-data text-muted-foreground">
                           {new Date(entry.timestamp).toISOString().replace("T", " ").slice(0, 19)}
                         </td>
                         <td className="px-4 py-3 text-foreground">{entry.actionLabel}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{entry.category ?? "SYSTEM"}</td>
                         <td className="px-4 py-3 text-foreground">{entry.entity}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{entry.user}</td>
                         <td className="max-w-[24rem] truncate px-4 py-3 text-muted-foreground">{entry.detail}</td>
                         <td className="px-4 py-3">
                           <span
                             className={cn(
                               "inline-flex rounded px-2 py-0.5 text-xs font-medium",
-                              entry.severity === "Warning"
+                              entry.severity === "WARNING" || entry.severity === "CRITICAL"
                                 ? "bg-warning/10 text-warning"
                                 : "bg-primary/10 text-primary"
                             )}
@@ -5899,14 +6236,14 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                           <span
                             className={cn(
                               "inline-flex rounded px-2 py-0.5 text-xs font-medium",
-                              entry.status === "Flagged"
+                              entry.outcome === "FAILED" || entry.outcome === "DENIED"
                                 ? "bg-risk/10 text-risk"
-                                : entry.status === "Passed"
+                                : entry.outcome === "SUCCESS"
                                   ? "bg-positive/10 text-positive"
                                   : "bg-primary/10 text-primary"
                             )}
                           >
-                            {entry.status}
+                            {entry.outcome ?? "SUCCESS"}
                           </span>
                         </td>
                       </tr>
@@ -5916,6 +6253,51 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               </div>
             </div>
           )}
+
+          {selectedAudit ? (
+            <div className="mt-3 grid gap-3 xl:grid-cols-3">
+              <div className="rounded border border-subtle bg-surface p-3 xl:col-span-1">
+                <p className="text-xs text-muted-foreground">Event context</p>
+                <div className="mt-2 space-y-1 text-xs text-foreground">
+                  <p>Action: {selectedAudit.actionLabel}</p>
+                  <p>Category: {selectedAudit.category ?? "SYSTEM"}</p>
+                  <p>Severity: {selectedAudit.severity}</p>
+                  <p>Outcome: {selectedAudit.outcome ?? "SUCCESS"}</p>
+                  <p>Actor: {selectedAudit.user}</p>
+                  <p>Request ID: {selectedAudit.requestId ?? "N/A"}</p>
+                  <p>Route: {selectedAudit.route ?? "N/A"}</p>
+                  <p>Reason: {selectedAudit.reasonCode ?? "N/A"}</p>
+                </div>
+                <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                  <p>Control refs: {(selectedAudit.controlRefs ?? []).join(", ") || "N/A"}</p>
+                  <p>Event hash: {selectedAudit.eventHash ? `${selectedAudit.eventHash.slice(0, 18)}...` : "N/A"}</p>
+                </div>
+                {selectedAudit.policyEvaluations && selectedAudit.policyEvaluations.length > 0 ? (
+                  <div className="mt-3 space-y-1">
+                    {selectedAudit.policyEvaluations.map((policy, index) => (
+                      <div key={`${policy.policyId}:${index}`} className="rounded border border-subtle bg-surface-bright px-2 py-1 text-xs">
+                        <span className="font-medium text-foreground">{policy.policyId}</span>{" "}
+                        <span className="text-muted-foreground">({policy.result})</span>
+                        <p className="mt-0.5 text-muted-foreground">{policy.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              <div className="rounded border border-subtle bg-surface p-3 xl:col-span-1">
+                <p className="text-xs text-muted-foreground">Before state</p>
+                <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap break-words rounded border border-subtle bg-surface-bright p-2 text-[11px] text-muted-foreground">
+                  {JSON.stringify(selectedAudit.beforeState ?? {}, null, 2)}
+                </pre>
+              </div>
+              <div className="rounded border border-subtle bg-surface p-3 xl:col-span-1">
+                <p className="text-xs text-muted-foreground">After state</p>
+                <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap break-words rounded border border-subtle bg-surface-bright p-2 text-[11px] text-muted-foreground">
+                  {JSON.stringify(selectedAudit.afterState ?? {}, null, 2)}
+                </pre>
+              </div>
+            </div>
+          ) : null}
         </Panel>
       </div>
     );

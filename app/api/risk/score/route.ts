@@ -5,6 +5,7 @@ import { enforceRateLimit } from "@/lib/ratelimit";
 import { getPortfolioWithPositionsEdge, hydratePortfolioRisk } from "@/lib/portfolio-edge";
 import { badRequest, json, parseJson } from "@/lib/http";
 import { riskScoreSchema } from "@/lib/validation";
+import { writeAuditEvent } from "@/lib/audit-events";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,24 +83,31 @@ export async function POST(request: NextRequest) {
       .limit(2);
 
     const riskTierBefore = latestScore?.[1]?.riskTier ?? null;
-    const { error: auditError } = await supabase.from("AuditLog").insert({
-      id: crypto.randomUUID(),
-      userId: auth.user.id,
-      portfolioId: payload.portfolioId,
-      actionType: "RISK_SCORED",
-      beforeState: {},
-      afterState: riskRow,
-      riskTierBefore,
-      riskTierAfter: result.metrics.riskTier,
-      metadata: {
-        portfolioValue: result.metrics.portfolioValue,
-        annualizedReturn: result.metrics.annualizedReturn,
-        annualizedVolatility: result.metrics.annualizedVolatility
-      }
-    });
-
-    if (auditError) {
-      return badRequest(auditError.message, 500);
+    try {
+      await writeAuditEvent(supabase, {
+        request,
+        userId: auth.user.id,
+        portfolioId: payload.portfolioId,
+        actionType: "RISK_SCORED",
+        beforeState: {},
+        afterState: riskRow as Record<string, unknown>,
+        riskTierBefore,
+        riskTierAfter: result.metrics.riskTier,
+        metadata: {
+          portfolioValue: result.metrics.portfolioValue,
+          annualizedReturn: result.metrics.annualizedReturn,
+          annualizedVolatility: result.metrics.annualizedVolatility
+        },
+        policyEvaluations: [
+          {
+            policyId: "RISK_HISTORY_SUFFICIENCY",
+            result: "PASS",
+            message: `Risk scoring ran with ${result.historyCoverageDays} aligned daily points.`
+          }
+        ]
+      });
+    } catch (error) {
+      return badRequest(error instanceof Error ? error.message : "Failed to write audit log", 500);
     }
   }
 

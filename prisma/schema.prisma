@@ -136,7 +136,23 @@ model AuditLog {
   userId          String
   portfolioId     String
   timestamp       DateTime  @default(now())
+  eventVersion    Int       @default(2)
   actionType      String
+  category        String    @default("SYSTEM")
+  severity        String    @default("INFO")
+  outcome         String    @default("SUCCESS")
+  actorType       String    @default("USER")
+  requestId       String?
+  route           String?
+  method          String?
+  sessionId       String?
+  ipHash          String?
+  userAgentHash   String?
+  reasonCode      String?
+  controlRefs     Json?
+  policyEvaluations Json?
+  prevEventHash   String?
+  eventHash       String?
   beforeState     Json
   afterState      Json
   riskTierBefore  String?
@@ -147,4 +163,7 @@ model AuditLog {
 
   @@index([userId, timestamp(sort: Desc)])
   @@index([portfolioId, timestamp(sort: Desc)])
+  @@index([userId, portfolioId, timestamp(sort: Desc)])
+  @@index([category, severity, outcome, timestamp(sort: Desc)])
+  @@index([requestId])
 }
