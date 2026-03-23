@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
   if (!portfolio) {
     return badRequest("Portfolio not found", 404);
   }
+  const supabase = createSupabaseAdminClient();
 
   const positions = portfolio.positions.map((position) => ({
     ticker: position.ticker,
@@ -43,6 +44,27 @@ export async function POST(request: NextRequest) {
   }
 
   if (!current.metrics) {
+    try {
+      await writeAuditEvent(supabase, {
+        request,
+        userId: auth.user.id,
+        portfolioId: payload.portfolioId,
+        actionType: "STRESS_TEST_RUN",
+        outcome: "FAILED",
+        reasonCode: "INSUFFICIENT_HISTORY",
+        beforeState: {},
+        afterState: {},
+        policyEvaluations: [
+          {
+            policyId: "STRESS_HISTORY_SUFFICIENCY",
+            result: "FAIL",
+            message: "Stress execution requires risk metrics with sufficient aligned history."
+          }
+        ]
+      });
+    } catch {
+      // Keep endpoint behavior stable if audit logging fails.
+    }
     return badRequest("Insufficient Yahoo Finance history to run a reliable stress test.", 422);
   }
 
@@ -55,6 +77,30 @@ export async function POST(request: NextRequest) {
       .map((holding) => [holding.ticker.toUpperCase(), holding.currentPrice])
   );
   if (Object.keys(basePrices).length !== current.holdings.length) {
+    try {
+      await writeAuditEvent(supabase, {
+        request,
+        userId: auth.user.id,
+        portfolioId: payload.portfolioId,
+        actionType: "STRESS_TEST_RUN",
+        outcome: "FAILED",
+        reasonCode: "MARKET_DATA_UNAVAILABLE",
+        beforeState: {},
+        afterState: {
+          pricedHoldings: Object.keys(basePrices).length,
+          totalHoldings: current.holdings.length
+        },
+        policyEvaluations: [
+          {
+            policyId: "STRESS_PRICE_COVERAGE",
+            result: "FAIL",
+            message: "Not all holdings had live price coverage for stress execution."
+          }
+        ]
+      });
+    } catch {
+      // Keep endpoint behavior stable if audit logging fails.
+    }
     return badRequest("Current Yahoo Finance prices are unavailable for one or more holdings.", 422);
   }
   const stressed = scoreStressedPortfolio(positions, basePrices, scenario);
@@ -73,7 +119,6 @@ export async function POST(request: NextRequest) {
     comparison: stressed.estimatedMetrics
   };
 
-  const supabase = createSupabaseAdminClient();
   const { error: stressError } = await supabase.from("StressTest").insert({
     id: crypto.randomUUID(),
     portfolioId: payload.portfolioId,

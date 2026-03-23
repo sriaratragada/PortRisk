@@ -176,6 +176,20 @@ export async function GET(request: NextRequest) {
     const built = await buildInsightForPortfolio(portfolioId, auth.user.id);
     if ("routeError" in built) return built.routeError;
     if (!built.insight) {
+      try {
+        await writeAuditEvent(supabase, {
+          request,
+          userId: auth.user.id,
+          portfolioId,
+          actionType: "RISK_INSIGHT_GENERATED",
+          outcome: "FAILED",
+          reasonCode: "INSUFFICIENT_HISTORY",
+          beforeState: {},
+          afterState: { degraded: true, error: built.error }
+        });
+      } catch {
+        // Keep response stable if audit logging fails.
+      }
       return json(
         {
           insight: null,
@@ -201,6 +215,22 @@ export async function GET(request: NextRequest) {
       warning: persistence.persisted ? null : persistence.error
     });
   } catch (error) {
+    try {
+      await writeAuditEvent(supabase, {
+        request,
+        userId: auth.user.id,
+        portfolioId,
+        actionType: "RISK_INSIGHT_GENERATED",
+        outcome: "FAILED",
+        reasonCode: "PROCESSING_FAILED",
+        beforeState: {},
+        afterState: {
+          message: error instanceof Error ? error.message : "Failed to build AI insight"
+        }
+      });
+    } catch {
+      // Keep response stable if audit logging fails.
+    }
     return json(
       {
         insight: null,
@@ -217,10 +247,25 @@ export async function POST(request: NextRequest) {
   if ("error" in auth) return auth.error;
 
   const payload = await parseJson(request, riskInsightSchema);
+  const supabase = createSupabaseAdminClient();
   try {
     const built = await buildInsightForPortfolio(payload.portfolioId, auth.user.id);
     if ("routeError" in built) return built.routeError;
     if (!built.insight) {
+      try {
+        await writeAuditEvent(supabase, {
+          request,
+          userId: auth.user.id,
+          portfolioId: payload.portfolioId,
+          actionType: "RISK_INSIGHT_GENERATED",
+          outcome: "FAILED",
+          reasonCode: "INSUFFICIENT_HISTORY",
+          beforeState: {},
+          afterState: { degraded: true, error: built.error }
+        });
+      } catch {
+        // Keep response stable if audit logging fails.
+      }
       return json(
         {
           insight: null,
@@ -251,6 +296,22 @@ export async function POST(request: NextRequest) {
       warning: "error" in persistence ? persistence.error : null
     });
   } catch (error) {
+    try {
+      await writeAuditEvent(supabase, {
+        request,
+        userId: auth.user.id,
+        portfolioId: payload.portfolioId,
+        actionType: "RISK_INSIGHT_GENERATED",
+        outcome: "FAILED",
+        reasonCode: "PROCESSING_FAILED",
+        beforeState: {},
+        afterState: {
+          message: error instanceof Error ? error.message : "Failed to generate AI insight"
+        }
+      });
+    } catch {
+      // Keep response stable if audit logging fails.
+    }
     return json(
       {
         insight: null,

@@ -39,6 +39,33 @@ export async function POST(request: NextRequest) {
 
   const result = await hydratePortfolioRisk(positions, payload.drawdownThreshold);
   if (!result.metrics) {
+    if (payload.persist !== false && payload.portfolioId) {
+      const supabase = createSupabaseAdminClient();
+      try {
+        await writeAuditEvent(supabase, {
+          request,
+          userId: auth.user.id,
+          portfolioId: payload.portfolioId,
+          actionType: "RISK_SCORED",
+          outcome: "FAILED",
+          reasonCode: "INSUFFICIENT_HISTORY",
+          beforeState: {},
+          afterState: {
+            degraded: true,
+            historyCoverageDays: result.historyCoverageDays
+          },
+          policyEvaluations: [
+            {
+              policyId: "RISK_HISTORY_SUFFICIENCY",
+              result: "FAIL",
+              message: `Aligned daily history (${result.historyCoverageDays}) was below minimum threshold.`
+            }
+          ]
+        });
+      } catch {
+        // Keep risk endpoint availability independent from logging write failures.
+      }
+    }
     return json({
       holdings: result.holdings,
       series: result.series,
