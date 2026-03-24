@@ -74,6 +74,7 @@ export async function PATCH(request: NextRequest, context: Context) {
     return badRequest(updateError?.message ?? "Failed to update position", 500);
   }
 
+  let auditWarning: string | null = null;
   try {
     await writeAuditEvent(supabase, {
       request,
@@ -84,7 +85,7 @@ export async function PATCH(request: NextRequest, context: Context) {
       afterState: updatedPosition as Record<string, unknown>
     });
   } catch (error) {
-    return badRequest(error instanceof Error ? error.message : "Failed to write audit log", 500);
+    auditWarning = error instanceof Error ? error.message : "Failed to write audit log";
   }
 
   await supabase
@@ -93,7 +94,7 @@ export async function PATCH(request: NextRequest, context: Context) {
     .eq("id", portfolioId)
     .eq("userId", auth.user.id);
 
-  return json({ position: updatedPosition });
+  return json({ position: updatedPosition, auditWarning });
 }
 
 export async function DELETE(_request: NextRequest, context: Context) {
@@ -143,6 +144,7 @@ export async function DELETE(_request: NextRequest, context: Context) {
     return badRequest(deleteError.message, 500);
   }
 
+  let auditWarning: string | null = null;
   try {
     await writeAuditEvent(supabase, {
       request: _request,
@@ -153,7 +155,7 @@ export async function DELETE(_request: NextRequest, context: Context) {
       afterState: {}
     });
   } catch (error) {
-    return badRequest(error instanceof Error ? error.message : "Failed to write audit log", 500);
+    auditWarning = error instanceof Error ? error.message : "Failed to write audit log";
   }
 
   await supabase
@@ -162,5 +164,5 @@ export async function DELETE(_request: NextRequest, context: Context) {
     .eq("id", portfolioId)
     .eq("userId", auth.user.id);
 
-  return json({ deleted: true });
+  return json({ deleted: true, auditWarning });
 }

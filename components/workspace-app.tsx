@@ -43,6 +43,7 @@ import { getDefaultSector } from "@/lib/sectors";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { buildFallbackHoldings } from "@/lib/holdings";
 import type {
+  AllocationRecommendationVariant,
   AllocationRecommendationSet,
   BenchmarkAnalytics,
   ChartRange,
@@ -1237,6 +1238,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     useState<AllocationRecommendationSet | null>(null);
   const [allocationRecommendationLoading, setAllocationRecommendationLoading] = useState(false);
   const [allocationRecommendationError, setAllocationRecommendationError] = useState<string | null>(null);
+  const [selectedAllocationVariant, setSelectedAllocationVariant] =
+    useState<AllocationRecommendationVariant>("primary");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [positionPreview, setPositionPreview] = useState<SecurityPreview | null>(null);
@@ -1807,6 +1810,22 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       cancelled = true;
     };
   }, [activeTab, selectedPortfolio?.id, holdingsDependencyKey]);
+
+  useEffect(() => {
+    if (
+      !allocationRecommendation ||
+      allocationRecommendation.recommendationState !== "available"
+    ) {
+      setSelectedAllocationVariant("primary");
+      return;
+    }
+    const hasSelectedVariant = allocationRecommendation.recommendations.some(
+      (recommendation) => recommendation.variant === selectedAllocationVariant
+    );
+    if (!hasSelectedVariant) {
+      setSelectedAllocationVariant("primary");
+    }
+  }, [allocationRecommendation, selectedAllocationVariant]);
 
   useEffect(() => {
     if (!selectedPortfolioId) {
@@ -5697,10 +5716,23 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   const renderAllocation = () => {
     const rawWeightTotal = Object.values(allocationWeights).reduce((sum, value) => sum + value, 0);
     const normalizedWeightTotal = rawWeightTotal > 0 ? 1 : 0;
-    const primaryRecommendation = allocationRecommendation?.recommendations[0] ?? null;
-    const topRecommendedRows = [...(primaryRecommendation?.weights ?? [])]
-      .sort((left, right) => right.targetWeight - left.targetWeight)
-      .slice(0, 6);
+    const activeRecommendation =
+      allocationRecommendation?.recommendations.find(
+        (recommendation) => recommendation.variant === selectedAllocationVariant
+      ) ??
+      allocationRecommendation?.recommendations[0] ??
+      null;
+    const topRecommendedRows = [...(activeRecommendation?.weights ?? [])]
+      .sort(
+        (left, right) => Math.abs(right.deltaWeight) - Math.abs(left.deltaWeight)
+      )
+      .slice(0, 8);
+    const recommendationChartRows = topRecommendedRows.map((row) => ({
+      ticker: row.ticker,
+      currentWeight: row.currentWeight,
+      targetWeight: row.targetWeight,
+      deltaWeight: row.deltaWeight
+    }));
     const constraints = allocationRecommendation?.model.constraints;
 
     return (
@@ -5797,19 +5829,98 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               />
             ) : (
               <div className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-3">
-                  {allocationRecommendation.recommendations.map((recommendation) => (
-                    <div key={recommendation.variant} className="rounded border border-subtle bg-surface p-3">
-                      <p className="text-xs text-muted-foreground">{recommendation.label}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{recommendation.objective}</p>
-                      <div className="mt-3 grid gap-1 text-xs text-foreground">
-                        <p>Return: {formatPercent(recommendation.expected.annualReturn)}</p>
-                        <p>Volatility: {formatPercent(recommendation.expected.annualVolatility)}</p>
-                        <p>Sharpe: {recommendation.expected.sharpe != null ? recommendation.expected.sharpe.toFixed(2) : "N/A"}</p>
-                        <p>Turnover: {formatPercent(recommendation.diagnostics.turnover)}</p>
-                      </div>
-                    </div>
+                <div className="flex flex-wrap gap-2">
+                  {(
+                    [
+                      { variant: "primary", label: "Balanced" },
+                      { variant: "conservative", label: "Conservative" },
+                      { variant: "growth", label: "Growth" }
+                    ] as const
+                  ).map((option) => (
+                    <button
+                      key={option.variant}
+                      type="button"
+                      onClick={() => setSelectedAllocationVariant(option.variant)}
+                      className={cn(
+                        "rounded border px-3 py-1.5 text-sm transition-colors",
+                        selectedAllocationVariant === option.variant
+                          ? "border-cyan-400/70 bg-cyan-500/10 text-cyan-200"
+                          : "border-subtle bg-surface text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {option.label}
+                    </button>
                   ))}
+                </div>
+
+                {activeRecommendation ? (
+                  <div className="grid gap-3 sm:grid-cols-4">
+                    <div className="rounded border border-subtle bg-surface p-3">
+                      <p className="text-[11px] text-muted-foreground">Return</p>
+                      <p className="mt-1 font-mono-data text-sm text-foreground">
+                        {formatPercent(activeRecommendation.expected.annualReturn)}
+                      </p>
+                    </div>
+                    <div className="rounded border border-subtle bg-surface p-3">
+                      <p className="text-[11px] text-muted-foreground">Volatility</p>
+                      <p className="mt-1 font-mono-data text-sm text-foreground">
+                        {formatPercent(activeRecommendation.expected.annualVolatility)}
+                      </p>
+                    </div>
+                    <div className="rounded border border-subtle bg-surface p-3">
+                      <p className="text-[11px] text-muted-foreground">Sharpe</p>
+                      <p className="mt-1 font-mono-data text-sm text-foreground">
+                        {activeRecommendation.expected.sharpe != null
+                          ? activeRecommendation.expected.sharpe.toFixed(2)
+                          : "N/A"}
+                      </p>
+                    </div>
+                    <div className="rounded border border-subtle bg-surface p-3">
+                      <p className="text-[11px] text-muted-foreground">Turnover</p>
+                      <p className="mt-1 font-mono-data text-sm text-foreground">
+                        {formatPercent(activeRecommendation.diagnostics.turnover)}
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="h-72 rounded border border-subtle bg-surface p-3">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={recommendationChartRows}
+                      margin={{ top: 6, right: 12, left: 0, bottom: 4 }}
+                    >
+                      <CartesianGrid vertical={false} stroke="rgba(148, 163, 184, 0.12)" />
+                      <XAxis
+                        dataKey="ticker"
+                        tick={{ fill: "#8CA0BF", fontSize: 11 }}
+                        axisLine={{ stroke: "rgba(148, 163, 184, 0.22)" }}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        tickFormatter={(value) => `${(value * 100).toFixed(0)}%`}
+                        tick={{ fill: "#8CA0BF", fontSize: 11 }}
+                        axisLine={{ stroke: "rgba(148, 163, 184, 0.22)" }}
+                        tickLine={false}
+                        width={46}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "#071427",
+                          border: "1px solid rgba(148, 163, 184, 0.3)",
+                          borderRadius: 8,
+                          color: "#dbeafe"
+                        }}
+                        formatter={(value: number, _name, item) => [
+                          formatPercent(value),
+                          item.dataKey === "currentWeight" ? "Current" : "Target"
+                        ]}
+                        cursor={{ fill: "rgba(56, 189, 248, 0.08)" }}
+                      />
+                      <Bar dataKey="currentWeight" fill="#334155" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="targetWeight" fill="#22d3ee" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
 
                 <div className="overflow-hidden rounded border border-subtle">

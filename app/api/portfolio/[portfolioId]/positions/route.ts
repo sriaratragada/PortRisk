@@ -82,6 +82,7 @@ export async function POST(request: NextRequest, context: Context) {
         ? "POSITION_RESIZED"
         : "POSITION_RESIZED";
 
+  let auditWarning: string | null = null;
   try {
     await writeAuditEvent(supabase, {
       request,
@@ -92,7 +93,7 @@ export async function POST(request: NextRequest, context: Context) {
       afterState: savedPosition as Record<string, unknown>
     });
   } catch (error) {
-    return badRequest(error instanceof Error ? error.message : "Failed to write audit log", 500);
+    auditWarning = error instanceof Error ? error.message : "Failed to write audit log";
   }
 
   await supabase
@@ -101,5 +102,8 @@ export async function POST(request: NextRequest, context: Context) {
     .eq("id", portfolioId)
     .eq("userId", auth.user.id);
 
-  return json({ position: savedPosition }, { status: existingPosition ? 200 : 201 });
+  return json(
+    { position: savedPosition, auditWarning },
+    { status: existingPosition ? 200 : 201 }
+  );
 }

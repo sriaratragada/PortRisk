@@ -100,6 +100,24 @@ const ACTION_DEFAULTS: AuditActionDefaultsMap = {
 
 const DEFAULT_CONTROL_REFS = ["CC1.2", "CC7.2"];
 const AUDIT_EVENT_VERSION = 2;
+const EVIDENCE_COLUMNS = [
+  "eventVersion",
+  "category",
+  "severity",
+  "outcome",
+  "actorType",
+  "requestId",
+  "route",
+  "method",
+  "sessionId",
+  "ipHash",
+  "userAgentHash",
+  "reasonCode",
+  "controlRefs",
+  "policyEvaluations",
+  "prevEventHash",
+  "eventHash"
+] as const;
 
 type JsonValue =
   | string
@@ -147,6 +165,19 @@ type AuditLogRow = {
   metadata: JsonValue | null;
 };
 
+type LegacyAuditLogRow = {
+  id: string;
+  userId: string;
+  portfolioId: string;
+  timestamp: string;
+  actionType: string;
+  beforeState: JsonValue;
+  afterState: JsonValue;
+  riskTierBefore: string | null;
+  riskTierAfter: string | null;
+  metadata: JsonValue | null;
+};
+
 type WriteAuditEventInput = {
   request?: NextRequest | null;
   userId: string;
@@ -179,6 +210,20 @@ export type VerifyAuditHashResult = {
   firstBrokenTimestamp: string | null;
   reason: string | null;
 };
+
+function isMissingEvidenceColumnError(error: unknown): boolean {
+  const message =
+    typeof error === "string"
+      ? error
+      : error instanceof Error
+        ? error.message
+        : "";
+  if (!message) {
+    return false;
+  }
+  const normalized = message.toLowerCase();
+  return EVIDENCE_COLUMNS.some((column) => normalized.includes(column.toLowerCase()));
+}
 
 function stableStringify(value: unknown): string {
   if (value === undefined) {
@@ -279,6 +324,9 @@ async function fetchPreviousEventHash(
     .limit(1)
     .maybeSingle();
   if (error) {
+    if (isMissingEvidenceColumnError(error.message)) {
+      return null;
+    }
     throw new Error(error.message);
   }
   return typeof data?.eventHash === "string" && data.eventHash ? data.eventHash : null;
@@ -333,14 +381,38 @@ export async function writeAuditEvent(
     eventHash
   };
 
-  const { error } = await supabase.from("AuditLog").insert(row);
-  if (error) {
-    throw new Error(error.message);
+  const { error: richInsertError } = await supabase.from("AuditLog").insert(row);
+  if (!richInsertError) {
+    return {
+      id: row.id,
+      eventHash: row.eventHash,
+      requestId: row.requestId
+    };
+  }
+  if (!isMissingEvidenceColumnError(richInsertError.message)) {
+    throw new Error(richInsertError.message);
+  }
+
+  const legacyRow: LegacyAuditLogRow = {
+    id: row.id,
+    userId: row.userId,
+    portfolioId: row.portfolioId,
+    timestamp: row.timestamp,
+    actionType: row.actionType,
+    beforeState: row.beforeState,
+    afterState: row.afterState,
+    riskTierBefore: row.riskTierBefore,
+    riskTierAfter: row.riskTierAfter,
+    metadata: row.metadata
+  };
+  const { error: legacyInsertError } = await supabase.from("AuditLog").insert(legacyRow);
+  if (legacyInsertError) {
+    throw new Error(legacyInsertError.message);
   }
 
   return {
-    id: row.id,
-    eventHash: row.eventHash,
+    id: legacyRow.id,
+    eventHash: "",
     requestId: row.requestId
   };
 }
@@ -506,6 +578,15 @@ export async function verifyAuditHashChain(
 
   const { data, error } = await query;
   if (error) {
+    if (isMissingEvidenceColumnError(error.message)) {
+      return {
+        verified: false,
+        checked: 0,
+        firstBrokenEventId: null,
+        firstBrokenTimestamp: null,
+        reason: "EVIDENCE_FIELDS_UNAVAILABLE"
+      };
+    }
     throw new Error(error.message);
   }
 
