@@ -37,6 +37,17 @@ type MetricsSnapshot = {
   effectiveHoldings: number;
 };
 
+type ObjectiveAnchors = {
+  currentWeights: number[];
+  conservativeAnchor: number[];
+  growthAnchor: number[];
+};
+
+type OptimizationConstraints = {
+  singleCap: number;
+  sectorCap: number;
+};
+
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
@@ -114,8 +125,12 @@ function multiplyMatrixVector(matrix: number[][], vector: number[]) {
   return matrix.map((row) => dot(row, vector));
 }
 
-function projectWeights(weights: number[], sectors: string[]) {
-  let next = weights.map((value) => clamp(value, 0, MAX_SINGLE_WEIGHT));
+function projectWeights(
+  weights: number[],
+  sectors: string[],
+  constraints: OptimizationConstraints
+) {
+  let next = weights.map((value) => clamp(value, 0, constraints.singleCap));
 
   const applySectorCaps = () => {
     const sectorTotals = new Map<string, number>();
@@ -127,15 +142,15 @@ function projectWeights(weights: number[], sectors: string[]) {
     for (let index = 0; index < next.length; index += 1) {
       const sector = sectors[index] ?? "ETFs / Funds / Other";
       const sectorTotal = sectorTotals.get(sector) ?? 0;
-      if (sectorTotal > MAX_SECTOR_WEIGHT + 1e-9) {
-        const factor = MAX_SECTOR_WEIGHT / sectorTotal;
+      if (sectorTotal > constraints.sectorCap + 1e-9) {
+        const factor = constraints.sectorCap / sectorTotal;
         next[index] = (next[index] ?? 0) * factor;
       }
     }
   };
 
   applySectorCaps();
-  next = next.map((value) => clamp(value, 0, MAX_SINGLE_WEIGHT));
+  next = next.map((value) => clamp(value, 0, constraints.singleCap));
 
   let total = next.reduce((sum, value) => sum + value, 0);
   if (total > 1 + 1e-9) {
@@ -156,8 +171,8 @@ function projectWeights(weights: number[], sectors: string[]) {
     for (let index = 0; index < next.length; index += 1) {
       if (remainder <= 1e-9) break;
       const sector = sectors[index] ?? "ETFs / Funds / Other";
-      const singleHeadroom = MAX_SINGLE_WEIGHT - (next[index] ?? 0);
-      const sectorHeadroom = MAX_SECTOR_WEIGHT - (sectorTotals.get(sector) ?? 0);
+      const singleHeadroom = constraints.singleCap - (next[index] ?? 0);
+      const sectorHeadroom = constraints.sectorCap - (sectorTotals.get(sector) ?? 0);
       const headroom = Math.min(singleHeadroom, sectorHeadroom);
       if (headroom <= 1e-9) {
         continue;
@@ -175,7 +190,117 @@ function projectWeights(weights: number[], sectors: string[]) {
   }
 
   applySectorCaps();
-  return next.map((value) => clamp(value, 0, MAX_SINGLE_WEIGHT));
+  next = next.map((value) => clamp(value, 0, constraints.singleCap));
+
+  // Force a deterministic sum of 1 whenever feasible under constraints.
+  let finalRemainder = 1 - next.reduce((sum, value) => sum + value, 0);
+  if (Math.abs(finalRemainder) > 1e-9) {
+    const sectorTotals = new Map<string, number>();
+    for (let index = 0; index < next.length; index += 1) {
+      const sector = sectors[index] ?? "ETFs / Funds / Other";
+      sectorTotals.set(sector, (sectorTotals.get(sector) ?? 0) + (next[index] ?? 0));
+    }
+
+    if (finalRemainder > 0) {
+      for (let index = 0; index < next.length && finalRemainder > 1e-9; index += 1) {
+        const sector = sectors[index] ?? "ETFs / Funds / Other";
+        const singleHeadroom = constraints.singleCap - (next[index] ?? 0);
+        const sectorHeadroom = constraints.sectorCap - (sectorTotals.get(sector) ?? 0);
+        const add = Math.min(finalRemainder, Math.max(0, Math.min(singleHeadroom, sectorHeadroom)));
+        if (add > 0) {
+          next[index] = (next[index] ?? 0) + add;
+          sectorTotals.set(sector, (sectorTotals.get(sector) ?? 0) + add);
+          finalRemainder -= add;
+        }
+      }
+    } else {
+      let excess = Math.abs(finalRemainder);
+      for (let index = 0; index < next.length && excess > 1e-9; index += 1) {
+        const remove = Math.min(excess, next[index] ?? 0);
+        if (remove > 0) {
+          next[index] = (next[index] ?? 0) - remove;
+          excess -= remove;
+        }
+      }
+    }
+  }
+
+  return next.map((value) => clamp(value, 0, constraints.singleCap));
+}
+
+function l1Distance(left: number[], right: number[]) {
+  return left.reduce((sum, value, index) => sum + Math.abs(value - (right[index] ?? 0)), 0);
+}
+
+function buildReturnTiltSeed(
+  expectedReturns: number[],
+  sectors: string[],
+  constraints: OptimizationConstraints
+) {
+  const seed = expectedReturns.map(() => 0);
+  const ranked = expectedReturns
+    .map((expectedReturn, index) => ({ expectedReturn, index }))
+    .sort((left, right) => right.expectedReturn - left.expectedReturn);
+
+  const sectorTotals = new Map<string, number>();
+  let remainder = 1;
+  for (const { index } of ranked) {
+    if (remainder <= 1e-9) {
+      break;
+    }
+    const sector = sectors[index] ?? "ETFs / Funds / Other";
+    const sectorTotal = sectorTotals.get(sector) ?? 0;
+    const headroom = Math.min(
+      constraints.singleCap,
+      constraints.sectorCap - sectorTotal
+    );
+    if (headroom <= 1e-9) {
+      continue;
+    }
+    const allocation = Math.min(headroom, remainder);
+    seed[index] = allocation;
+    sectorTotals.set(sector, sectorTotal + allocation);
+    remainder -= allocation;
+  }
+
+  return projectWeights(seed, sectors, constraints);
+}
+
+function maxFeasibleWeightTotal(
+  sectors: string[],
+  constraints: OptimizationConstraints
+) {
+  const sectorCounts = new Map<string, number>();
+  for (const sector of sectors) {
+    const key = sector || "ETFs / Funds / Other";
+    sectorCounts.set(key, (sectorCounts.get(key) ?? 0) + 1);
+  }
+  return [...sectorCounts.values()].reduce(
+    (sum, count) =>
+      sum + Math.min(constraints.sectorCap, count * constraints.singleCap),
+    0
+  );
+}
+
+function resolveOptimizationConstraints(sectors: string[]) {
+  const holdingCount = sectors.length;
+  const sectorCount = new Set(
+    sectors.map((sector) => sector || "ETFs / Funds / Other")
+  ).size;
+
+  let singleCap = Math.max(MAX_SINGLE_WEIGHT, 1 / Math.max(holdingCount, 1));
+  let sectorCap = MAX_SECTOR_WEIGHT;
+  let constraints: OptimizationConstraints = { singleCap, sectorCap };
+
+  if (maxFeasibleWeightTotal(sectors, constraints) < 1 - 1e-9) {
+    sectorCap = Math.max(sectorCap, 1 / Math.max(sectorCount, 1));
+    constraints = { singleCap, sectorCap };
+  }
+  if (maxFeasibleWeightTotal(sectors, constraints) < 1 - 1e-9) {
+    sectorCap = 1;
+    constraints = { singleCap, sectorCap };
+  }
+  return constraints;
 }
 
 function buildSectorSnapshot(weights: number[], sectors: string[]) {
@@ -259,24 +384,54 @@ function evaluateWeights(input: {
 
 function objectiveScore(
   variant: AllocationRecommendationVariant,
-  metrics: MetricsSnapshot
+  metrics: MetricsSnapshot,
+  weights: number[],
+  anchors: ObjectiveAnchors
 ) {
   const sharpe = metrics.sharpe ?? -1;
   const annualReturn = metrics.annualReturn ?? -1;
   const annualVolatility = metrics.annualVolatility ?? 1;
   const concentrationPenalty = Math.max(0, metrics.topWeight - 0.2);
+  const sectorPenalty = Math.max(0, metrics.topSectorWeight - 0.33);
+  const distanceToConservative = l1Distance(weights, anchors.conservativeAnchor);
+  const distanceToGrowth = l1Distance(weights, anchors.growthAnchor);
+  const distanceToCurrent = l1Distance(weights, anchors.currentWeights);
+
   if (variant === "conservative") {
-    return sharpe - annualVolatility * 0.9 - metrics.turnover * 0.1;
+    return (
+      sharpe * 0.45 -
+      annualVolatility * 1.35 -
+      metrics.turnover * 0.16 -
+      concentrationPenalty * 0.7 -
+      sectorPenalty * 0.55 -
+      distanceToConservative * 0.25
+    );
   }
   if (variant === "growth") {
-    return annualReturn - annualVolatility * 0.55 - concentrationPenalty * 0.2 - metrics.turnover * 0.08;
+    return (
+      annualReturn * 1.45 +
+      sharpe * 0.2 -
+      annualVolatility * 0.3 -
+      metrics.turnover * 0.06 -
+      concentrationPenalty * 0.12 -
+      distanceToGrowth * 0.1
+    );
   }
-  return sharpe - metrics.turnover * 0.15 - concentrationPenalty * 0.35;
+  return (
+    sharpe * 1.15 -
+    annualVolatility * 0.35 -
+    metrics.turnover * 0.14 -
+    concentrationPenalty * 0.32 -
+    sectorPenalty * 0.2 -
+    distanceToCurrent * 0.05
+  );
 }
 
 function localSearch(input: {
   seed: number[];
   variant: AllocationRecommendationVariant;
+  anchors: ObjectiveAnchors;
+  constraints: OptimizationConstraints;
   sectors: string[];
   currentWeights: number[];
   expectedReturns: number[];
@@ -284,7 +439,7 @@ function localSearch(input: {
   returnsMatrix: number[][];
   benchmarkReturns: number[];
 }) {
-  let bestWeights = projectWeights(input.seed, input.sectors);
+  let bestWeights = projectWeights(input.seed, input.sectors, input.constraints);
   let bestMetrics = evaluateWeights({
     weights: bestWeights,
     currentWeights: input.currentWeights,
@@ -294,7 +449,7 @@ function localSearch(input: {
     returnsMatrix: input.returnsMatrix,
     benchmarkReturns: input.benchmarkReturns
   });
-  let bestScore = objectiveScore(input.variant, bestMetrics);
+  let bestScore = objectiveScore(input.variant, bestMetrics, bestWeights, input.anchors);
 
   const steps = [0.08, 0.04, 0.02, 0.01];
   for (const step of steps) {
@@ -313,7 +468,11 @@ function localSearch(input: {
             const next = [...bestWeights];
             next[candidate.to] = (next[candidate.to] ?? 0) + step;
             next[candidate.from] = (next[candidate.from] ?? 0) - step;
-            const projected = projectWeights(next, input.sectors);
+            const projected = projectWeights(
+              next,
+              input.sectors,
+              input.constraints
+            );
             const metrics = evaluateWeights({
               weights: projected,
               currentWeights: input.currentWeights,
@@ -323,7 +482,7 @@ function localSearch(input: {
               returnsMatrix: input.returnsMatrix,
               benchmarkReturns: input.benchmarkReturns
             });
-            const score = objectiveScore(input.variant, metrics);
+            const score = objectiveScore(input.variant, metrics, projected, input.anchors);
             if (score > bestScore + 1e-9) {
               bestWeights = projected;
               bestMetrics = metrics;
@@ -367,8 +526,8 @@ function aggregateAsOf(values: Array<string | null | undefined>) {
 
 function buildRecommendationLabel(variant: AllocationRecommendationVariant) {
   if (variant === "conservative") return "Conservative";
-  if (variant === "growth") return "Growth-Tilted";
-  return "Balanced Max Sharpe";
+  if (variant === "growth") return "Growth";
+  return "Balanced";
 }
 
 function buildRecommendationObjective(variant: AllocationRecommendationVariant) {
@@ -387,6 +546,7 @@ function buildInsights(input: {
   current: MetricsSnapshot;
   primary: MetricsSnapshot;
   recommendation: AllocationRecommendation;
+  constraints: OptimizationConstraints;
 }) {
   const volatilityDelta =
     input.primary.annualVolatility != null && input.current.annualVolatility != null
@@ -398,8 +558,9 @@ function buildInsights(input: {
       : null;
   const topWeightDelta = input.primary.topWeight - input.current.topWeight;
   const constraintsPassing =
-    input.recommendation.weights.every((row) => row.targetWeight <= MAX_SINGLE_WEIGHT + 1e-9) &&
-    input.primary.topSectorWeight <= MAX_SECTOR_WEIGHT + 1e-9;
+    input.recommendation.weights.every(
+      (row) => row.targetWeight <= input.constraints.singleCap + 1e-9
+    ) && input.primary.topSectorWeight <= input.constraints.sectorCap + 1e-9;
 
   const insights: AllocationInsight[] = [
     {
@@ -598,6 +759,51 @@ export async function buildAllocationRecommendationSet(input: {
     sortedHoldings.map((holding) => (holding.weight != null ? holding.weight : 0))
   );
   const sectors = sortedHoldings.map((holding) => holding.sector ?? "ETFs / Funds / Other");
+  const constraints = resolveOptimizationConstraints(sectors);
+  const feasibleCapacity = maxFeasibleWeightTotal(sectors, constraints);
+  if (feasibleCapacity < 1 - 1e-6) {
+    return {
+      benchmark,
+      range,
+      recommendationState: "unavailable",
+      model: {
+        objective: "max_sharpe_v1",
+        constraints: {
+          longOnly: true,
+          maxSingleWeight: constraints.singleCap,
+          maxSectorWeight: constraints.sectorCap,
+          universe: "current_holdings"
+        }
+      },
+      current: {
+        annualReturn: null,
+        annualVolatility: null,
+        sharpe: null,
+        var95: null,
+        betaToBenchmark: null,
+        correlationToBenchmark: null,
+        topWeight: null,
+        topSector: null,
+        topSectorWeight: null,
+        effectiveHoldings: null
+      },
+      recommendations: [],
+      insights: [
+        {
+          id: "constraints",
+          label: "Constraint Status",
+          value: "Infeasible",
+          tone: "risk",
+          description:
+            "Current-holdings universe cannot satisfy 100% allocation under 25% single-name and 40% sector caps."
+        }
+      ],
+      asOf,
+      dataState,
+      provider
+    };
+  }
+
   const currentMetrics = evaluateWeights({
     weights: currentWeights,
     currentWeights,
@@ -615,15 +821,29 @@ export async function buildAllocationRecommendationSet(input: {
     })
   );
   const equalSeed = normalizeWeights(alignedReturnsMatrix.map(() => 1));
+  const conservativeAnchor = projectWeights(inverseVolSeed, sectors, constraints);
+  const growthAnchor = buildReturnTiltSeed(expectedReturns, sectors, constraints);
+  const anchors: ObjectiveAnchors = {
+    currentWeights,
+    conservativeAnchor,
+    growthAnchor
+  };
 
   const buildRecommendation = (
     variant: AllocationRecommendationVariant
   ): { weights: number[]; metrics: MetricsSnapshot } => {
-    const seeds = [currentWeights, equalSeed, inverseVolSeed];
+    const seeds =
+      variant === "conservative"
+        ? [conservativeAnchor, currentWeights, equalSeed]
+        : variant === "growth"
+          ? [growthAnchor, currentWeights, equalSeed]
+          : [currentWeights, equalSeed, conservativeAnchor];
     const candidates = seeds.map((seed) =>
       localSearch({
         seed,
         variant,
+        anchors,
+        constraints,
         sectors,
         currentWeights,
         expectedReturns,
@@ -634,13 +854,93 @@ export async function buildAllocationRecommendationSet(input: {
     );
     return candidates.sort(
       (left, right) =>
-        objectiveScore(variant, right.metrics) - objectiveScore(variant, left.metrics)
+        objectiveScore(variant, right.metrics, right.weights, anchors) -
+        objectiveScore(variant, left.metrics, left.weights, anchors)
     )[0]!;
   };
 
+  const ensureVariantDistinct = (
+    candidateWeights: number[],
+    anchorWeights: number[]
+  ) => {
+    const blended = candidateWeights.map(
+      (weight, index) => weight * 0.35 + (anchorWeights[index] ?? 0) * 0.65
+    );
+    return projectWeights(blended, sectors, constraints);
+  };
+
+  const buildCandidateForVariant = (
+    variant: AllocationRecommendationVariant
+  ) => buildRecommendation(variant);
+
   const variants: AllocationRecommendationVariant[] = ["primary", "conservative", "growth"];
+  const candidateByVariant = new Map<
+    AllocationRecommendationVariant,
+    { weights: number[]; metrics: MetricsSnapshot }
+  >();
+
+  for (const variant of variants) {
+    candidateByVariant.set(variant, buildCandidateForVariant(variant));
+  }
+
+  const primaryCandidate = candidateByVariant.get("primary")!;
+  const conservativeCandidate = candidateByVariant.get("conservative")!;
+  const growthCandidate = candidateByVariant.get("growth")!;
+
+  if (l1Distance(primaryCandidate.weights, conservativeCandidate.weights) < 0.01) {
+    const adjustedWeights = ensureVariantDistinct(
+      conservativeCandidate.weights,
+      conservativeAnchor
+    );
+    candidateByVariant.set("conservative", {
+      weights: adjustedWeights,
+      metrics: evaluateWeights({
+        weights: adjustedWeights,
+        currentWeights,
+        sectors,
+        expectedReturns,
+        covarianceMatrix,
+        returnsMatrix: alignedReturnsMatrix,
+        benchmarkReturns: alignedBenchmarkReturns
+      })
+    });
+  }
+
+  if (l1Distance(primaryCandidate.weights, growthCandidate.weights) < 0.01) {
+    const adjustedWeights = ensureVariantDistinct(growthCandidate.weights, growthAnchor);
+    candidateByVariant.set("growth", {
+      weights: adjustedWeights,
+      metrics: evaluateWeights({
+        weights: adjustedWeights,
+        currentWeights,
+        sectors,
+        expectedReturns,
+        covarianceMatrix,
+        returnsMatrix: alignedReturnsMatrix,
+        benchmarkReturns: alignedBenchmarkReturns
+      })
+    });
+  }
+
   const recommendations: AllocationRecommendation[] = variants.map((variant) => {
-    const candidate = buildRecommendation(variant);
+    const candidate = candidateByVariant.get(variant)!;
+    const targetTotal = candidate.weights.reduce((sum, weight) => sum + weight, 0);
+    const normalizedCandidateWeights =
+      Math.abs(targetTotal - 1) > 1e-8
+        ? projectWeights(candidate.weights, sectors, constraints)
+        : candidate.weights;
+    const normalizedMetrics =
+      Math.abs(targetTotal - 1) > 1e-8
+        ? evaluateWeights({
+            weights: normalizedCandidateWeights,
+            currentWeights,
+            sectors,
+            expectedReturns,
+            covarianceMatrix,
+            returnsMatrix: alignedReturnsMatrix,
+            benchmarkReturns: alignedBenchmarkReturns
+          })
+        : candidate.metrics;
     return {
       variant,
       label: buildRecommendationLabel(variant),
@@ -650,23 +950,23 @@ export async function buildAllocationRecommendationSet(input: {
         companyName: holding.companyName ?? holding.ticker,
         sector: sectors[index] ?? "ETFs / Funds / Other",
         currentWeight: currentWeights[index] ?? 0,
-        targetWeight: candidate.weights[index] ?? 0,
-        deltaWeight: (candidate.weights[index] ?? 0) - (currentWeights[index] ?? 0)
+        targetWeight: normalizedCandidateWeights[index] ?? 0,
+        deltaWeight: (normalizedCandidateWeights[index] ?? 0) - (currentWeights[index] ?? 0)
       })),
       expected: {
-        annualReturn: candidate.metrics.annualReturn,
-        annualVolatility: candidate.metrics.annualVolatility,
-        sharpe: candidate.metrics.sharpe,
-        var95: candidate.metrics.var95,
-        betaToBenchmark: candidate.metrics.betaToBenchmark,
-        correlationToBenchmark: candidate.metrics.correlationToBenchmark
+        annualReturn: normalizedMetrics.annualReturn,
+        annualVolatility: normalizedMetrics.annualVolatility,
+        sharpe: normalizedMetrics.sharpe,
+        var95: normalizedMetrics.var95,
+        betaToBenchmark: normalizedMetrics.betaToBenchmark,
+        correlationToBenchmark: normalizedMetrics.correlationToBenchmark
       },
       diagnostics: {
-        turnover: candidate.metrics.turnover,
-        topWeight: candidate.metrics.topWeight,
-        topSector: candidate.metrics.topSector,
-        topSectorWeight: candidate.metrics.topSectorWeight,
-        effectiveHoldings: candidate.metrics.effectiveHoldings,
+        turnover: normalizedMetrics.turnover,
+        topWeight: normalizedMetrics.topWeight,
+        topSector: normalizedMetrics.topSector,
+        topSectorWeight: normalizedMetrics.topSectorWeight,
+        effectiveHoldings: normalizedMetrics.effectiveHoldings,
         dataCoverage
       }
     };
@@ -684,7 +984,8 @@ export async function buildAllocationRecommendationSet(input: {
       topSectorWeight: primaryRecommendation.diagnostics.topSectorWeight,
       effectiveHoldings: primaryRecommendation.diagnostics.effectiveHoldings
     },
-    recommendation: primaryRecommendation
+    recommendation: primaryRecommendation,
+    constraints
   });
 
   return {
@@ -695,8 +996,8 @@ export async function buildAllocationRecommendationSet(input: {
       objective: "max_sharpe_v1",
       constraints: {
         longOnly: true,
-        maxSingleWeight: MAX_SINGLE_WEIGHT,
-        maxSectorWeight: MAX_SECTOR_WEIGHT,
+        maxSingleWeight: constraints.singleCap,
+        maxSectorWeight: constraints.sectorCap,
         universe: "current_holdings"
       }
     },

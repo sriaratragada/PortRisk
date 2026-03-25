@@ -131,6 +131,30 @@ test("buildAllocationRecommendationSet is deterministic and constraint-compliant
   assert.equal(first.recommendations.length, 3);
   assert.deepEqual(first, second);
 
+  const primary = first.recommendations.find(
+    (recommendation) => recommendation.variant === "primary"
+  );
+  const conservative = first.recommendations.find(
+    (recommendation) => recommendation.variant === "conservative"
+  );
+  const growth = first.recommendations.find(
+    (recommendation) => recommendation.variant === "growth"
+  );
+  assert.ok(primary);
+  assert.ok(conservative);
+  assert.ok(growth);
+  const conservativeDistance = conservative!.weights.reduce(
+    (sum, row, index) =>
+      sum + Math.abs(row.targetWeight - (primary!.weights[index]?.targetWeight ?? 0)),
+    0
+  );
+  const growthDistance = growth!.weights.reduce(
+    (sum, row, index) =>
+      sum + Math.abs(row.targetWeight - (primary!.weights[index]?.targetWeight ?? 0)),
+    0
+  );
+  assert.ok(conservativeDistance > 0.01 || growthDistance > 0.01);
+
   for (const recommendation of first.recommendations) {
     const totalWeight = recommendation.weights.reduce(
       (sum, row) => sum + row.targetWeight,

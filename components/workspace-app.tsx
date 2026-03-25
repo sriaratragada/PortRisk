@@ -5722,17 +5722,23 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       ) ??
       allocationRecommendation?.recommendations[0] ??
       null;
-    const topRecommendedRows = [...(activeRecommendation?.weights ?? [])]
-      .sort(
-        (left, right) => Math.abs(right.deltaWeight) - Math.abs(left.deltaWeight)
-      )
-      .slice(0, 8);
-    const recommendationChartRows = topRecommendedRows.map((row) => ({
+    const recommendedRows = [...(activeRecommendation?.weights ?? [])].sort(
+      (left, right) => right.targetWeight - left.targetWeight
+    );
+    const recommendationChartRows = recommendedRows.slice(0, 12).map((row) => ({
       ticker: row.ticker,
       currentWeight: row.currentWeight,
       targetWeight: row.targetWeight,
       deltaWeight: row.deltaWeight
     }));
+    const currentTotalWeight = recommendedRows.reduce(
+      (sum, row) => sum + row.currentWeight,
+      0
+    );
+    const targetTotalWeight = recommendedRows.reduce(
+      (sum, row) => sum + row.targetWeight,
+      0
+    );
     const constraints = allocationRecommendation?.model.constraints;
 
     return (
@@ -5923,6 +5929,28 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   </ResponsiveContainer>
                 </div>
 
+                <div className="flex items-center justify-between rounded border border-subtle bg-surface px-3 py-2 text-xs text-muted-foreground">
+                  <span>
+                    Current total:{" "}
+                    <span className="font-mono-data text-foreground">
+                      {formatPercent(currentTotalWeight)}
+                    </span>
+                  </span>
+                  <span>
+                    Target total:{" "}
+                    <span
+                      className={cn(
+                        "font-mono-data",
+                        Math.abs(targetTotalWeight - 1) <= 1e-4
+                          ? "text-positive"
+                          : "text-risk"
+                      )}
+                    >
+                      {formatPercent(targetTotalWeight)}
+                    </span>
+                  </span>
+                </div>
+
                 <div className="overflow-hidden rounded border border-subtle">
                   <table className="min-w-full text-left text-sm">
                     <thead className="bg-surface-bright text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
@@ -5935,7 +5963,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {topRecommendedRows.map((row) => (
+                      {recommendedRows.map((row) => (
                         <tr key={row.ticker}>
                           <td className="px-3 py-2 text-foreground">{row.ticker}</td>
                           <td className="px-3 py-2 text-muted-foreground">{row.sector}</td>
@@ -5952,6 +5980,30 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                           </td>
                         </tr>
                       ))}
+                      <tr className="bg-surface-bright/60">
+                        <td className="px-3 py-2 font-medium text-foreground">Total</td>
+                        <td className="px-3 py-2 text-muted-foreground">All holdings</td>
+                        <td className="px-3 py-2 text-right font-mono-data">
+                          {formatPercent(currentTotalWeight)}
+                        </td>
+                        <td
+                          className={cn(
+                            "px-3 py-2 text-right font-mono-data",
+                            Math.abs(targetTotalWeight - 1) <= 1e-4
+                              ? "text-positive"
+                              : "text-risk"
+                          )}
+                        >
+                          {formatPercent(targetTotalWeight)}
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono-data text-muted-foreground">
+                          {Math.abs(targetTotalWeight - currentTotalWeight) < 1e-4
+                            ? "0.00%"
+                            : `${targetTotalWeight > currentTotalWeight ? "+" : ""}${formatPercent(
+                                targetTotalWeight - currentTotalWeight
+                              )}`}
+                        </td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
