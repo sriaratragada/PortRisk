@@ -280,16 +280,16 @@ const portfolioTemplates = PORTFOLIO_TEMPLATE_BENCHMARKS.map((template) => ({
 }));
 
 const tierStyles: Record<RiskTier, string> = {
-  LOW: "bg-success/15 text-success ring-success/30",
-  MODERATE: "bg-warning/15 text-warning ring-warning/30",
-  ELEVATED: "bg-elevated/15 text-elevated ring-elevated/30",
-  HIGH: "bg-danger/15 text-danger ring-danger/30"
+  LOW: "border border-[var(--border-default)] bg-[rgba(45,122,79,0.08)] text-[var(--positive-color)]",
+  MODERATE: "border border-[var(--border-default)] bg-[rgba(201,169,110,0.12)] text-[var(--text-primary)]",
+  ELEVATED: "border border-[rgba(184,64,64,0.18)] bg-[rgba(184,64,64,0.08)] text-[var(--negative-color)]",
+  HIGH: "border border-[rgba(184,64,64,0.28)] bg-[rgba(184,64,64,0.12)] text-[var(--negative-color)]"
 };
 
 const signalStyles = {
-  INFO: "border-slate-700 bg-slate-900/70 text-slate-200",
-  WATCH: "border-warning/40 bg-warning/10 text-warning",
-  HIGH: "border-danger/40 bg-danger/10 text-danger"
+  INFO: "border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-secondary)]",
+  WATCH: "border-[var(--border-accent)] bg-[var(--accent-muted)] text-[var(--text-primary)]",
+  HIGH: "border-[rgba(184,64,64,0.28)] bg-[rgba(184,64,64,0.08)] text-[var(--negative-color)]"
 } as const;
 
 function Panel({
@@ -306,13 +306,13 @@ function Panel({
   return (
     <section
       className={cn(
-        "animate-[fadeIn_220ms_ease-out] flex min-h-0 flex-col rounded-xl border border-white/8 bg-panel px-5 py-4 shadow-panel",
+        "animate-[fadeIn_220ms_ease-out] flex min-h-0 flex-col rounded-sm border border-[var(--border-default)] bg-[var(--bg-base)] px-5 py-4",
         className
       )}
     >
-      <div className="mb-4 flex shrink-0 items-start justify-between gap-4 border-b border-white/8 pb-3">
+      <div className="mb-4 flex shrink-0 items-start justify-between gap-4 border-b border-[var(--border-default)] pb-3">
         <div>
-          <p className="text-sm font-semibold text-white">{title}</p>
+          <p className="font-display text-[18px] font-semibold italic text-[var(--text-primary)]">{title}</p>
         </div>
         {action}
       </div>
@@ -323,7 +323,7 @@ function Panel({
 
 function TierBadge({ tier }: { tier: RiskTier }) {
   return (
-    <span className={cn("rounded-md px-3 py-1 text-xs font-semibold ring-1", tierStyles[tier])}>
+    <span className={cn("rounded-sm px-2 py-1 text-[10px] font-medium uppercase tracking-[0.1em]", tierStyles[tier])}>
       {tier}
     </span>
   );
@@ -341,17 +341,21 @@ function MetricStat({
   tone?: "default" | "positive" | "negative";
 }) {
   return (
-    <div className="rounded-lg border border-white/8 bg-black/20 p-4">
-      <p className="text-xs font-medium text-slate-400">{label}</p>
+    <div className="rounded-sm border border-[var(--border-default)] bg-[var(--bg-surface)] p-4">
+      <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">{label}</p>
       <p
         className={cn(
-          "mt-2 text-2xl font-semibold tracking-[-0.02em]",
-          tone === "positive" ? "text-success" : tone === "negative" ? "text-danger" : "text-white"
+          "mt-3 text-[32px] font-semibold tracking-[-0.02em]",
+          tone === "positive"
+            ? "text-[var(--positive-color)]"
+            : tone === "negative"
+              ? "text-[var(--negative-color)]"
+              : "text-[var(--text-primary)]"
         )}
       >
         {value}
       </p>
-      {helper ? <p className="mt-2 text-sm leading-6 text-slate-500">{helper}</p> : null}
+      {helper ? <p className="mt-2 text-[13px] font-light leading-[1.7] text-[var(--text-secondary)]">{helper}</p> : null}
     </div>
   );
 }
@@ -360,12 +364,12 @@ function HealthBandBadge({ band }: { band: "Strong" | "Moderate" | "Weak" }) {
   return (
     <span
       className={cn(
-        "inline-flex rounded-md border px-2 py-1 text-[11px] font-medium",
+        "inline-flex rounded-sm border px-2 py-1 text-[10px] font-medium uppercase tracking-[0.1em]",
         band === "Strong"
-          ? "border-emerald-500/30 bg-emerald-500/12 text-emerald-200"
+          ? "border-[rgba(45,122,79,0.2)] bg-[rgba(45,122,79,0.08)] text-[var(--positive-color)]"
           : band === "Moderate"
-            ? "border-amber-500/30 bg-amber-500/12 text-amber-200"
-            : "border-rose-500/30 bg-rose-500/12 text-rose-300"
+            ? "border-[var(--border-accent)] bg-[var(--accent-muted)] text-[var(--text-primary)]"
+            : "border-[rgba(184,64,64,0.28)] bg-[rgba(184,64,64,0.08)] text-[var(--negative-color)]"
       )}
     >
       {band}
@@ -388,18 +392,18 @@ function HealthScoreCard({
   return (
     <div className="panel p-4">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-xs font-medium text-slate-400">{label}</p>
+        <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">{label}</p>
         <HealthBandBadge band={detail.band} />
       </div>
-      <p className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-white">{detail.score}/100</p>
-      <p className="mt-2 text-sm leading-6 text-slate-500">{detail.summary}</p>
+      <p className="mt-3 font-mono-data text-[32px] font-semibold tracking-[-0.02em] text-[var(--text-primary)]">{detail.score}/100</p>
+      <p className="mt-2 text-[13px] font-light leading-[1.7] text-[var(--text-secondary)]">{detail.summary}</p>
       <details className="mt-4 group">
-        <summary className="cursor-pointer list-none text-xs font-medium text-slate-500 transition group-open:text-slate-300">
+        <summary className="cursor-pointer list-none text-[10px] font-medium uppercase tracking-[0.1em] text-[var(--text-tertiary)] transition group-open:text-[var(--text-primary)]">
           Score basis
         </summary>
-        <div className="mt-3 space-y-2 border-t border-border pt-3">
+        <div className="mt-3 space-y-2 border-t border-[var(--border-default)] pt-3">
           {detail.drivers.map((driver) => (
-            <p key={driver} className="text-sm text-slate-300">
+            <p key={driver} className="text-[13px] text-[var(--text-secondary)]">
               {driver}
             </p>
           ))}
@@ -419,12 +423,16 @@ function InfoPill({
   tone?: "default" | "positive" | "negative";
 }) {
   return (
-    <div className="rounded-md border border-white/8 bg-black/20 px-3 py-2">
-      <p className="text-[11px] font-medium text-slate-500">{label}</p>
+    <div className="rounded-sm border border-[var(--border-default)] bg-[var(--bg-surface)] px-3 py-2">
+      <p className="text-[10px] font-medium uppercase tracking-[0.1em] text-[var(--text-tertiary)]">{label}</p>
       <p
         className={cn(
-          "mt-1 text-sm font-medium",
-          tone === "positive" ? "text-success" : tone === "negative" ? "text-danger" : "text-white"
+          "mt-1 text-[13px] font-medium",
+          tone === "positive"
+            ? "text-[var(--positive-color)]"
+            : tone === "negative"
+              ? "text-[var(--negative-color)]"
+              : "text-[var(--text-primary)]"
         )}
       >
         {value}
@@ -444,11 +452,15 @@ function InlineMetric({
 }) {
   return (
     <div className="space-y-1">
-      <p className="text-[11px] font-medium text-slate-500">{label}</p>
+      <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">{label}</p>
       <p
         className={cn(
-          "text-sm font-medium tracking-[-0.01em]",
-          tone === "positive" ? "text-success" : tone === "negative" ? "text-danger" : "text-white"
+          "text-[13px] font-medium tracking-[-0.01em]",
+          tone === "positive"
+            ? "text-[var(--positive-color)]"
+            : tone === "negative"
+              ? "text-[var(--negative-color)]"
+              : "text-[var(--text-primary)]"
         )}
       >
         {value}
@@ -473,23 +485,21 @@ function SidebarNavItem({
       type="button"
       onClick={onClick}
       className={cn(
-        "group relative flex h-10 w-10 items-center justify-center rounded border transition",
+        "group relative flex h-10 items-center gap-2 rounded-sm border px-3 transition",
         active
-          ? "border-primary/35 bg-primary/12 text-primary"
-          : "border-transparent text-muted-foreground hover:border-border hover:bg-secondary hover:text-foreground"
+          ? "border-[var(--border-accent)] bg-[var(--accent-muted)] text-[var(--text-primary)]"
+          : "border-transparent text-[var(--text-tertiary)] hover:border-[var(--border-default)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
       )}
     >
       <Icon className="h-4 w-4" />
+      <span className="text-[11px] uppercase tracking-[0.12em]">{label}</span>
       {active ? (
         <motion.span
           layoutId="sidebar-active-indicator"
-          className="absolute -left-1 top-2.5 h-5 w-0.5 rounded-full bg-primary"
+          className="absolute inset-x-2 bottom-0 h-0.5 bg-[var(--accent-color)]"
           transition={{ type: "spring", stiffness: 380, damping: 30 }}
         />
       ) : null}
-      <span className="pointer-events-none absolute left-full top-1/2 z-30 ml-2 -translate-y-1/2 rounded bg-card px-2 py-1 text-[10px] text-foreground opacity-0 shadow-panel transition-opacity group-hover:opacity-100">
-        {label}
-      </span>
     </button>
   );
 }
@@ -504,10 +514,10 @@ function WorkspaceToolbar({
   actions?: ReactNode;
 }) {
   return (
-    <div className="flex h-12 items-center gap-2 border-b border-subtle bg-surface/80 px-3 backdrop-blur-xl sm:px-4">
+    <div className="flex h-12 items-center gap-2 border-b border-[var(--border-default)] bg-[var(--bg-base)] px-4">
       <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-foreground">{title}</p>
-        {subtitle ? <p className="truncate text-[10px] text-muted-foreground">{subtitle}</p> : null}
+        <p className="truncate font-display text-[16px] font-semibold italic text-[var(--text-primary)]">{title}</p>
+        {subtitle ? <p className="truncate text-[10px] uppercase tracking-[0.12em] text-[var(--text-tertiary)]">{subtitle}</p> : null}
       </div>
       {actions ? <div className="ml-auto flex items-center gap-2">{actions}</div> : null}
     </div>
@@ -795,8 +805,8 @@ function ResearchStatusFlow({ status }: { status: WatchlistItem["status"] | "Fee
   const activeIndex = status === "Feed candidate" ? -1 : steps.indexOf(status as (typeof steps)[number]);
 
   return (
-    <div className="rounded border border-[#1a2b43] bg-[#0a1526] p-3.5">
-      <p className="text-xs font-medium text-[#6e89ab]">Research flow</p>
+    <div className="rounded-sm border border-[var(--border-default)] bg-[var(--bg-surface)] p-3.5">
+      <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">Research flow</p>
       <div className="mt-4 flex items-center gap-2">
         {steps.map((step, index) => {
           const active = activeIndex >= index;
@@ -804,18 +814,30 @@ function ResearchStatusFlow({ status }: { status: WatchlistItem["status"] | "Fee
             <div key={step} className="flex min-w-0 flex-1 items-center gap-2">
               <div
                 className={cn(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border text-[10px] font-semibold",
-                  active ? "border-[#2a476b] bg-[#42c7ff] text-[#04111f]" : "border-[#1a2b43] bg-[#0d1c31] text-[#6e89ab]"
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border text-[10px] font-semibold",
+                  active
+                    ? "border-[var(--border-accent)] bg-[var(--accent-muted)] text-[var(--text-primary)]"
+                    : "border-[var(--border-default)] bg-[var(--bg-base)] text-[var(--text-tertiary)]"
                 )}
               >
                 {index + 1}
               </div>
               <div className="min-w-0 flex-1">
-                <p className={cn("truncate text-[11px] font-medium", active ? "text-[#d6e8ff]" : "text-[#6e89ab]")}>
+                <p
+                  className={cn(
+                    "truncate text-[11px] font-medium uppercase tracking-[0.08em]",
+                    active ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)]"
+                  )}
+                >
                   {step}
                 </p>
                 {index < steps.length - 1 ? (
-                  <div className={cn("mt-1 h-px w-full", activeIndex > index ? "bg-[#2f577f]" : "bg-[#1a2b43]")} />
+                  <div
+                    className={cn(
+                      "mt-1 h-px w-full",
+                      activeIndex > index ? "bg-[var(--border-accent)]" : "bg-[var(--border-default)]"
+                    )}
+                  />
                 ) : null}
               </div>
             </div>
@@ -836,9 +858,9 @@ function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-dashed border-white/8 bg-black/10 p-8 text-center">
-      <h3 className="text-xl font-semibold text-white">{title}</h3>
-      <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-500">{copy}</p>
+    <div className="rounded-sm border border-dashed border-[var(--border-default)] bg-[var(--bg-surface)] p-8 text-center">
+      <h3 className="font-display text-[16px] font-semibold italic text-[var(--text-tertiary)]">{title}</h3>
+      <p className="mx-auto mt-3 max-w-xl text-[13px] font-light leading-[1.7] text-[var(--text-secondary)]">{copy}</p>
       {action ? <div className="mt-6">{action}</div> : null}
     </div>
   );
@@ -854,12 +876,12 @@ function InlineNotice({
   return (
     <div
       className={cn(
-        "rounded-lg border px-4 py-3 text-sm",
+        "rounded-sm border px-4 py-3 text-[13px]",
         tone === "danger"
-          ? "border-danger/30 bg-danger/10 text-danger"
+          ? "border-[rgba(184,64,64,0.28)] bg-[rgba(184,64,64,0.08)] text-[var(--negative-color)]"
           : tone === "warning"
-            ? "border-warning/30 bg-warning/10 text-warning"
-            : "border-white/8 bg-black/20 text-slate-300"
+            ? "border-[var(--border-accent)] bg-[var(--accent-muted)] text-[var(--text-primary)]"
+            : "border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-secondary)]"
       )}
     >
       {message}
@@ -984,17 +1006,17 @@ function RangeSelector({
   onChange: (range: ChartRange) => void;
 }) {
   return (
-    <div className="inline-flex h-10 items-center rounded-md border border-[#1a2b43] bg-[#0a1526] p-1">
+    <div className="inline-flex h-8 items-center border border-[var(--border-default)] bg-[var(--bg-surface)] p-0.5">
       {chartRanges.map((range) => (
         <button
           key={range}
           type="button"
           onClick={() => onChange(range)}
           className={cn(
-            "rounded-md px-3 py-1.5 text-xs font-medium transition",
+            "border-b px-3 py-1 text-[10px] font-medium uppercase tracking-[0.12em] transition",
             value === range
-              ? "bg-[#0e304f] text-[#42c7ff]"
-              : "text-[#7387a2] hover:bg-[#10253d] hover:text-[#d6e8ff]"
+              ? "border-[var(--border-accent)] text-[var(--text-primary)]"
+              : "border-transparent text-[var(--text-tertiary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)]"
           )}
         >
           {range}
@@ -1024,15 +1046,15 @@ function ShellSelect({
         onChange={onChange}
         disabled={disabled}
         className={cn(
-          "h-12 w-full appearance-none rounded-md border border-[#1a2b43] bg-[#0a1526] pl-4 pr-11 text-sm text-[#d6e8ff] outline-none transition",
-          "focus:border-[#2a476b] focus:shadow-[0_0_0_1px_rgba(66,199,255,0.3)]",
+          "h-10 w-full appearance-none rounded-sm border border-[var(--border-default)] bg-[var(--bg-inset)] pl-3 pr-10 text-[13px] text-[var(--text-primary)] outline-none transition",
+          "focus:border-[var(--border-accent)] focus:shadow-[0_0_0_3px_var(--accent-muted)]",
           "disabled:cursor-not-allowed disabled:opacity-60",
           className
         )}
       >
         {children}
       </select>
-      <span className="pointer-events-none absolute inset-y-0 right-0 flex w-10 items-center justify-center border-l border-[#1a2b43] text-[#6e89ab]">
+      <span className="pointer-events-none absolute inset-y-0 right-0 flex w-10 items-center justify-center border-l border-[var(--border-default)] text-[var(--text-tertiary)]">
         <ChevronDownIcon className="h-3.5 w-3.5" />
       </span>
     </div>
@@ -1055,9 +1077,9 @@ function ChartTooltip({
   }
 
   return (
-    <div className="rounded-lg border border-white/10 bg-black/92 px-3 py-2 shadow-2xl backdrop-blur">
-      {label ? <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{label}</p> : null}
-      <p className="mt-1 text-sm font-medium text-white">{formatter(payload[0].value)}</p>
+    <div className="rounded-sm border border-[var(--text-primary)] bg-[var(--text-primary)] px-3 py-2">
+      {label ? <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-inverse)]/70">{label}</p> : null}
+      <p className="mt-1 text-[13px] font-medium text-[var(--text-inverse)]">{formatter(payload[0].value)}</p>
     </div>
   );
 }
@@ -3626,9 +3648,9 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   value={createPortfolioName}
                   onChange={(event) => setCreatePortfolioName(event.target.value)}
                   placeholder="Growth"
-                  className="flex-1 rounded border border-subtle bg-surface px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary/40"
+                  className="h-[34px] flex-1 border border-[var(--border-default)] bg-[var(--bg-inset)] px-3 text-[13px] text-[var(--text-primary)] outline-none transition focus:border-[var(--border-accent)] focus:shadow-[0_0_0_3px_var(--accent-muted)]"
                 />
-                <button className="rounded bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:opacity-90">
+                <button className="rounded-full bg-[var(--text-primary)] px-4 py-2 text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-inverse)] transition hover:bg-[#2A2A2A]">
                   Create Portfolio
                 </button>
               </form>
@@ -3798,52 +3820,54 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 </Panel>
                 <Panel title="Health Matrix">
                   {selectedMetrics ? (
-                    <div className="space-y-2 rounded-md border border-[#1a2b43] bg-[#0a1526] p-2">
+                    <div className="space-y-3 border border-[var(--border-default)] bg-[var(--bg-surface)] p-3">
                       <div className="grid grid-cols-2 gap-2">
                         {healthMatrixCards.map((card) => (
                           <div
                             key={card.key}
                             className={cn(
-                              "rounded-md border px-4 py-3",
-                              card.tone === "warning" ? "border-[#6a5a23]" : "border-[#1b5c58]"
+                              "border px-4 py-3",
+                              card.tone === "warning"
+                                ? "border-[var(--border-accent)] bg-[var(--accent-muted)]"
+                                : "border-[var(--border-default)] bg-[var(--bg-base)]"
                             )}
                           >
                             <p
                               className={cn(
-                                "font-mono-data text-3xl",
-                                card.tone === "warning" ? "text-[#f4d23c]" : "text-[#34d3b2]"
+                                "font-data text-[32px] font-semibold",
+                                card.tone === "warning" ? "text-[var(--text-primary)]" : "text-[var(--positive-color)]"
                               )}
                             >
                               {card.display}
                             </p>
-                            <p className="mt-1 text-xs tracking-[0.16em] text-[#6e89ab]">{card.label}</p>
+                            <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">{card.label}</p>
                           </div>
                         ))}
                       </div>
                       <div className="grid grid-cols-1 gap-1.5">
                         {qualityStrip.length > 0 ? (
                           qualityStrip.map((metric) => (
-                            <div key={metric.key} className="rounded-md border border-[#1a2b43] bg-[#0d1c31] px-3 py-2">
+                            <div key={metric.key} className="border border-[var(--border-default)] bg-[var(--bg-base)] px-3 py-2">
                               <div className="flex items-center justify-between gap-2">
-                                <p className="truncate pr-2 text-[11px] text-[#6e89ab]">{metric.label}</p>
+                                <p className="truncate pr-2 text-[11px] text-[var(--text-secondary)]">{metric.label}</p>
                                 <span
                                   className={cn(
-                                    "shrink-0 rounded border px-1.5 py-0.5 text-[10px]",
+                                    "shrink-0 rounded-sm border px-1.5 py-0.5 text-[10px]",
                                     metric.band === "Strong"
-                                      ? "border-[#1b5c58] bg-[#0f2e2b] text-[#34d3b2]"
+                                      ? "border-[var(--border-default)] bg-[rgba(45,122,79,0.08)] text-[var(--positive-color)]"
                                       : metric.band === "Moderate"
-                                        ? "border-[#6a5a23] bg-[#2b250f] text-[#f4d23c]"
-                                        : "border-[#6a2f3b] bg-[#2f1520] text-[#ff8ca5]"
+                                        ? "border-[var(--border-accent)] bg-[var(--accent-muted)] text-[var(--text-primary)]"
+                                        : "border-[rgba(184,64,64,0.24)] bg-[rgba(184,64,64,0.08)] text-[var(--negative-color)]"
                                   )}
                                 >
                                   {metric.band}
                                 </span>
                               </div>
-                              <p className="mt-1 font-mono-data text-base text-[#d6e8ff]">{metric.score}/100</p>
+                              <p className="mt-1 font-data text-base text-[var(--text-primary)]">{metric.score}/100</p>
                             </div>
                           ))
                         ) : (
-                          <p className="col-span-full px-1 text-xs text-[#7387a2]">
+                          <p className="col-span-full px-1 text-xs text-[var(--text-tertiary)]">
                             Deterministic quality scores are unavailable for this portfolio.
                           </p>
                         )}
@@ -3898,15 +3922,15 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           />
         ) : (
           <form onSubmit={handlePositionSubmit} className="space-y-4">
-            <label className="block space-y-2">
-              <span className="text-sm text-slate-300">Target portfolio</span>
-              {portfolioSelector}
-            </label>
+              <label className="block space-y-2">
+                <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">Target portfolio</span>
+                {portfolioSelector}
+              </label>
 
-            <div className="relative">
-              <label className="mb-2 block text-sm text-slate-300">Search listed ticker</label>
-              {searchError ? <div className="mb-2"><InlineNotice message={searchError} tone="warning" /></div> : null}
-              <input
+              <div className="relative">
+                <label className="mb-2 block text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">Search listed ticker</label>
+                {searchError ? <div className="mb-2"><InlineNotice message={searchError} tone="warning" /></div> : null}
+                <input
                 value={searchTerm}
                 onChange={(event) => {
                   const nextQuery = event.target.value;
@@ -3918,12 +3942,12 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   setSearchError(null);
                 }}
                 placeholder="AAPL, KO, XOM..."
-                className="w-full rounded-lg border border-white/[0.08] bg-[#0d1014] px-4 py-3 text-sm text-white outline-none focus:border-white/[0.16]"
+                className="h-[34px] w-full border border-[var(--border-default)] bg-[var(--bg-inset)] px-3 text-[13px] text-[var(--text-primary)] outline-none transition focus:border-[var(--border-accent)] focus:shadow-[0_0_0_3px_var(--accent-muted)]"
               />
               {searchTerm.trim() && !selectedSecurity ? (
-                <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-xl border border-white/[0.08] bg-panel shadow-panel">
+                <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden border border-[var(--border-default)] bg-[var(--bg-base)] shadow-[var(--shadow-sm)]">
                   {searchLoading ? (
-                    <div className="px-4 py-3 text-sm text-slate-400">Searching Yahoo Finance...</div>
+                    <div className="px-4 py-3 text-[13px] text-[var(--text-secondary)]">Searching Yahoo Finance...</div>
                   ) : searchResults.length > 0 ? (
                     <div className="max-h-72 overflow-y-auto py-2">
                       {searchResults.map((result) => (
@@ -3933,35 +3957,35 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                           onClick={() => {
                             void handleSelectSearchResult(result);
                           }}
-                          className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition hover:bg-white/[0.03]"
+                          className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition hover:bg-[var(--bg-hover)]"
                         >
                           <div>
-                            <p className="text-sm font-semibold text-white">{result.symbol}</p>
-                            <p className="mt-1 text-sm text-slate-400">{result.companyName}</p>
+                            <p className="text-[13px] font-semibold text-[var(--text-primary)]">{result.symbol}</p>
+                            <p className="mt-1 text-[13px] text-[var(--text-secondary)]">{result.companyName}</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-xs text-slate-500">{result.quoteType}</p>
-                            <p className="mt-1 text-sm text-slate-400">{result.exchange}</p>
+                            <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-tertiary)]">{result.quoteType}</p>
+                            <p className="mt-1 text-[13px] text-[var(--text-secondary)]">{result.exchange}</p>
                           </div>
                         </button>
                       ))}
                     </div>
                   ) : (
-                    <div className="px-4 py-3 text-sm text-slate-400">No listed Yahoo Finance matches found.</div>
+                    <div className="px-4 py-3 text-[13px] text-[var(--text-secondary)]">No listed Yahoo Finance matches found.</div>
                   )}
                 </div>
               ) : null}
             </div>
 
-            <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
+            <div className="border border-[var(--border-default)] bg-[var(--bg-surface)] p-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm font-medium text-white">{positionTicker || "Choose a ticker"}</p>
-                  {positionName ? <p className="mt-1 text-sm text-slate-400">{positionName}</p> : null}
+                  <p className="text-[13px] font-semibold text-[var(--text-primary)]">{positionTicker || "Choose a ticker"}</p>
+                  {positionName ? <p className="mt-1 text-[13px] text-[var(--text-secondary)]">{positionName}</p> : null}
                 </div>
                 <div className="text-right">
-                  <p className="text-[11px] text-slate-500">Current price</p>
-                  <p className="mt-1 text-lg font-semibold text-white">
+                  <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">Current price</p>
+                  <p className="mt-1 text-lg font-semibold text-[var(--text-primary)]">
                     {positionPreviewLoading ? "Loading..." : formatCurrency(positionPreview?.currentPrice ?? null)}
                   </p>
                 </div>
@@ -3977,7 +4001,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block space-y-2">
-                <span className="text-sm text-slate-300">Shares</span>
+                <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">Shares</span>
                 <input
                   type="number"
                   min="0"
@@ -3985,11 +4009,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   inputMode="decimal"
                   value={positionShares}
                   onChange={(event) => setPositionShares(event.target.value)}
-                  className="w-full rounded-lg border border-white/[0.08] bg-[#0d1014] px-4 py-3 text-sm text-white outline-none focus:border-white/[0.16]"
+                  className="h-[34px] w-full border border-[var(--border-default)] bg-[var(--bg-inset)] px-3 text-[13px] text-[var(--text-primary)] outline-none transition focus:border-[var(--border-accent)] focus:shadow-[0_0_0_3px_var(--accent-muted)]"
                 />
               </label>
               <label className="block space-y-2">
-                <span className="text-sm text-slate-300">Average cost</span>
+                <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">Average cost</span>
                 <input
                   type="number"
                   min="0"
@@ -3997,13 +4021,13 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   inputMode="decimal"
                   value={positionAvgCost}
                   onChange={(event) => setPositionAvgCost(event.target.value)}
-                  className="w-full rounded-lg border border-white/[0.08] bg-[#0d1014] px-4 py-3 text-sm text-white outline-none focus:border-white/[0.16]"
+                  className="h-[34px] w-full border border-[var(--border-default)] bg-[var(--bg-inset)] px-3 text-[13px] text-[var(--text-primary)] outline-none transition focus:border-[var(--border-accent)] focus:shadow-[0_0_0_3px_var(--accent-muted)]"
                 />
               </label>
             </div>
 
             <label className="block space-y-2">
-              <span className="text-sm text-slate-300">Asset class</span>
+              <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">Asset class</span>
               <ShellSelect
                 value={positionAssetClass}
                 onChange={(event) =>
@@ -4021,7 +4045,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               <button
                 type="submit"
                 disabled={!selectedSecurity || positionPreviewLoading}
-                className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-full bg-[var(--text-primary)] px-4 py-2 text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-inverse)] transition hover:bg-[#2A2A2A] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <PlusIcon className="h-4 w-4" />
                 {editingTicker ? "Update position" : "Add position"}
@@ -4030,7 +4054,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 <button
                   type="button"
                   onClick={resetPositionForm}
-                  className="rounded-lg border border-white/[0.08] px-4 py-3 text-sm text-slate-300 transition hover:border-white/[0.14] hover:text-white"
+                  className="border border-[var(--border-default)] px-4 py-2 text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-primary)] transition hover:border-[var(--border-strong)] hover:bg-[var(--bg-hover)]"
                 >
                   Cancel
                 </button>
@@ -5274,7 +5298,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
     return (
       <div className="flex h-[calc(100vh-9.5rem)] min-h-0 flex-col gap-2 overflow-hidden">
-        <section className="shrink-0 rounded-xl border border-white/8 bg-panel p-1.5">
+        <section className="shrink-0 border border-[var(--border-default)] bg-[var(--bg-surface)] p-1.5">
           <div className="flex items-center gap-1">
             {researchSubTabs.map((tabLabel) => (
               <button
@@ -5282,10 +5306,10 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 type="button"
                 onClick={() => setActiveResearchSubTab(tabLabel)}
                 className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition",
+                  "px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] transition",
                   activeResearchSubTab === tabLabel
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "border-b border-[var(--border-accent)] font-semibold text-[var(--text-primary)]"
+                    : "text-[var(--text-tertiary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)]"
                 )}
               >
                 {tabLabel}
@@ -5295,7 +5319,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               <button
                 type="button"
                 onClick={() => setActiveResearchSubTab("Proposals")}
-                className="flex h-8 w-8 items-center justify-center rounded border border-subtle text-muted-foreground hover:text-foreground"
+                className="flex h-8 w-8 items-center justify-center border border-[var(--border-default)] text-[var(--text-tertiary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
                 aria-label="Open proposal search"
               >
                 <Search className="h-4 w-4" />
@@ -5305,7 +5329,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 onClick={() =>
                   setResearchSourceFilter((current) => (current === "all" ? "related" : "all"))
                 }
-                className="flex h-8 w-8 items-center justify-center rounded border border-subtle text-muted-foreground hover:text-foreground"
+                className="flex h-8 w-8 items-center justify-center border border-[var(--border-default)] text-[var(--text-tertiary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
                 aria-label="Toggle source filter"
               >
                 <Filter className="h-4 w-4" />
@@ -5850,8 +5874,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       className={cn(
                         "rounded border px-3 py-1.5 text-sm transition-colors",
                         selectedAllocationVariant === option.variant
-                          ? "border-cyan-400/70 bg-cyan-500/10 text-cyan-200"
-                          : "border-subtle bg-surface text-muted-foreground hover:text-foreground"
+                          ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--text-inverse)]"
+                          : "border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-tertiary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
                       )}
                     >
                       {option.label}
@@ -5861,29 +5885,29 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
 
                 {activeRecommendation ? (
                   <div className="grid gap-3 sm:grid-cols-4">
-                    <div className="rounded border border-subtle bg-surface p-3">
-                      <p className="text-[11px] text-muted-foreground">Return</p>
-                      <p className="mt-1 font-mono-data text-sm text-foreground">
+                    <div className="border border-[var(--border-default)] bg-[var(--bg-surface)] p-3">
+                      <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">Return</p>
+                      <p className="mt-1 font-data text-sm text-[var(--text-primary)]">
                         {formatPercent(activeRecommendation.expected.annualReturn)}
                       </p>
                     </div>
-                    <div className="rounded border border-subtle bg-surface p-3">
-                      <p className="text-[11px] text-muted-foreground">Volatility</p>
-                      <p className="mt-1 font-mono-data text-sm text-foreground">
+                    <div className="border border-[var(--border-default)] bg-[var(--bg-surface)] p-3">
+                      <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">Volatility</p>
+                      <p className="mt-1 font-data text-sm text-[var(--text-primary)]">
                         {formatPercent(activeRecommendation.expected.annualVolatility)}
                       </p>
                     </div>
-                    <div className="rounded border border-subtle bg-surface p-3">
-                      <p className="text-[11px] text-muted-foreground">Sharpe</p>
-                      <p className="mt-1 font-mono-data text-sm text-foreground">
+                    <div className="border border-[var(--border-default)] bg-[var(--bg-surface)] p-3">
+                      <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">Sharpe</p>
+                      <p className="mt-1 font-data text-sm text-[var(--text-primary)]">
                         {activeRecommendation.expected.sharpe != null
                           ? activeRecommendation.expected.sharpe.toFixed(2)
                           : "N/A"}
                       </p>
                     </div>
-                    <div className="rounded border border-subtle bg-surface p-3">
-                      <p className="text-[11px] text-muted-foreground">Turnover</p>
-                      <p className="mt-1 font-mono-data text-sm text-foreground">
+                    <div className="border border-[var(--border-default)] bg-[var(--bg-surface)] p-3">
+                      <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">Turnover</p>
+                      <p className="mt-1 font-data text-sm text-[var(--text-primary)]">
                         {formatPercent(activeRecommendation.diagnostics.turnover)}
                       </p>
                     </div>
@@ -5896,35 +5920,35 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                       data={recommendationChartRows}
                       margin={{ top: 6, right: 12, left: 0, bottom: 4 }}
                     >
-                      <CartesianGrid vertical={false} stroke="rgba(148, 163, 184, 0.12)" />
+                      <CartesianGrid vertical={false} stroke="rgba(204,203,196,0.7)" />
                       <XAxis
                         dataKey="ticker"
-                        tick={{ fill: "#8CA0BF", fontSize: 11 }}
-                        axisLine={{ stroke: "rgba(148, 163, 184, 0.22)" }}
+                        tick={{ fill: "#8A8A82", fontSize: 11 }}
+                        axisLine={{ stroke: "rgba(204,203,196,1)" }}
                         tickLine={false}
                       />
                       <YAxis
                         tickFormatter={(value) => `${(value * 100).toFixed(0)}%`}
-                        tick={{ fill: "#8CA0BF", fontSize: 11 }}
-                        axisLine={{ stroke: "rgba(148, 163, 184, 0.22)" }}
+                        tick={{ fill: "#8A8A82", fontSize: 11 }}
+                        axisLine={{ stroke: "rgba(204,203,196,1)" }}
                         tickLine={false}
                         width={46}
                       />
                       <Tooltip
                         contentStyle={{
-                          backgroundColor: "#071427",
-                          border: "1px solid rgba(148, 163, 184, 0.3)",
-                          borderRadius: 8,
-                          color: "#dbeafe"
+                          backgroundColor: "#FAFAF8",
+                          border: "1px solid #E2E1DC",
+                          borderRadius: 4,
+                          color: "#0A0A0A"
                         }}
                         formatter={(value: number, _name, item) => [
                           formatPercent(value),
                           item.dataKey === "currentWeight" ? "Current" : "Target"
                         ]}
-                        cursor={{ fill: "rgba(56, 189, 248, 0.08)" }}
+                        cursor={{ fill: "rgba(201,169,110,0.12)" }}
                       />
-                      <Bar dataKey="currentWeight" fill="#334155" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="targetWeight" fill="#22d3ee" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="currentWeight" fill="#CCCBC4" radius={[2, 2, 0, 0]} />
+                      <Bar dataKey="targetWeight" fill="#C9A96E" radius={[2, 2, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -6631,82 +6655,91 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   );
 
   return (
-    <div className="relative h-screen overflow-hidden bg-background text-foreground">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute inset-0 grid-pattern opacity-20" />
-        <div className="absolute -top-24 -right-12 h-[520px] w-[520px] rounded-full bg-primary/12 blur-[140px]" />
-        <div className="absolute top-1/3 -left-32 h-[520px] w-[520px] rounded-full bg-positive/10 blur-[140px]" />
-        <div className="absolute -bottom-28 right-1/4 h-[460px] w-[460px] rounded-full bg-destructive/12 blur-[120px]" />
-      </div>
-      <div className="relative z-10 flex h-full">
-        <aside className="hidden w-16 shrink-0 flex-col items-center gap-1 border-r border-subtle bg-surface/80 py-3 backdrop-blur-xl lg:flex">
-          <div className="mb-3 flex h-8 w-8 items-center justify-center rounded bg-primary/20 text-primary">
-            <LogoMark className="h-5 w-5" />
+    <div className="relative h-screen overflow-hidden bg-[var(--bg-base)] text-[var(--text-primary)]">
+      <div className="flex h-full flex-col">
+        <header className="relative flex h-12 shrink-0 items-center justify-between border-b border-[var(--border-default)] bg-[var(--bg-base)] px-4">
+          <div className="flex min-w-0 items-center gap-4">
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              className="inline-flex h-8 w-8 items-center justify-center border border-[var(--border-default)] text-[var(--text-secondary)] lg:hidden"
+            >
+              <MenuIcon className="h-4 w-4" />
+            </button>
+            <div className="min-w-0">
+              <p className="font-display text-[16px] font-semibold italic text-[var(--text-primary)]">
+                Portfolio Risk Engine
+              </p>
+            </div>
           </div>
-          {tabs.map((tab) => (
-            <SidebarNavItem
-              key={tab.id}
-              active={activeTab === tab.id}
-              label={tab.shortLabel}
-              icon={tab.icon}
-              onClick={() => setActiveTab(tab.id)}
-            />
-          ))}
-          <button
-            type="button"
-            onClick={() => setActiveTab("holdings")}
-            className="mt-auto flex h-10 w-10 items-center justify-center rounded border border-subtle text-muted-foreground transition hover:bg-secondary hover:text-foreground"
-            title="Add position"
-          >
-            <PlusIcon className="h-4 w-4" />
-          </button>
-        </aside>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-surface)] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.1em] text-[var(--text-secondary)]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--positive-color)]" />
+              {portfolioLoading || isPending ? "Refreshing" : "Live"}
+            </span>
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-secondary)] transition hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+            >
+              <SettingsIcon className="h-4 w-4" />
+            </button>
+            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-default)] bg-[var(--bg-surface)] text-[11px] font-semibold text-[var(--text-primary)]">
+              PM
+            </div>
+          </div>
+          <div className="absolute inset-x-0 bottom-0 h-px bg-[rgba(201,169,110,0.3)]" />
+        </header>
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <WorkspaceToolbar
-            title={activeTabMeta.label}
-            subtitle={workspaceSubtitle}
-            actions={
-              <>
-                <button
-                  type="button"
-                  onClick={() => setMobileNavOpen(true)}
-                  className="inline-flex h-8 items-center gap-1 rounded border border-subtle px-2 text-xs text-muted-foreground transition hover:text-foreground lg:hidden"
-                >
-                  <MenuIcon className="h-3.5 w-3.5" />
-                  Menu
-                </button>
-                <div className="hidden min-w-[210px] max-w-[260px] lg:block">{portfolioSelector}</div>
-                <RangeSelector value={portfolioRange} onChange={setPortfolioRange} />
-                <div className="hidden items-center gap-1 md:flex">
-                  <button
-                    type="button"
-                    className="flex h-9 w-9 items-center justify-center rounded border border-subtle bg-surface text-muted-foreground transition hover:text-foreground hover:border-primary/40 hover:bg-primary/10"
-                  >
-                    <Search className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    className="relative flex h-9 w-9 items-center justify-center rounded border border-subtle bg-surface text-muted-foreground transition hover:text-foreground hover:border-primary/40 hover:bg-primary/10"
-                  >
-                    <Bell className="h-4 w-4" />
-                    <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-destructive" />
-                  </button>
-                  <div className="ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 text-[11px] font-semibold text-primary">
-                    PMP
-                  </div>
-                </div>
-              </>
-            }
-          />
+        <div className="flex h-10 shrink-0 items-stretch border-b border-[var(--border-default)] bg-[var(--bg-surface)] px-2">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "relative flex h-10 items-center px-5 text-[11px] uppercase tracking-[0.12em] transition",
+                activeTab === tab.id
+                  ? "font-semibold text-[var(--text-primary)]"
+                  : "font-normal text-[var(--text-tertiary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-secondary)]"
+              )}
+            >
+              {activeTab === tab.id ? (
+                <span className="absolute inset-x-4 bottom-0 h-0.5 bg-[var(--border-accent)]" />
+              ) : null}
+              {tab.shortLabel}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex h-[calc(100vh-88px)] min-h-0 flex-col">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border-default)] bg-[var(--bg-base)] px-4 py-3">
+            <div className="min-w-0">
+              <p className="font-display text-[28px] font-bold italic tracking-[-0.01em] text-[var(--text-primary)]">
+                {activeTabMeta.label}
+              </p>
+              <p className="mt-1 text-[13px] font-light leading-[1.7] text-[var(--text-secondary)]">
+                {workspaceSubtitle}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="hidden min-w-[210px] max-w-[260px] lg:block">{portfolioSelector}</div>
+              <RangeSelector value={portfolioRange} onChange={setPortfolioRange} />
+              <button
+                type="button"
+                className="hidden h-8 w-8 items-center justify-center border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-tertiary)] transition hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] md:inline-flex"
+              >
+                <Search className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
 
           {(statusMessage || errorMessage || portfolioLoading || isPending) && (
             <div
               className={cn(
-                "mx-3 mt-2 rounded border px-3 py-2 text-xs",
+                "mx-4 mt-3 shrink-0 border px-3 py-2 text-[12px]",
                 errorMessage
-                  ? "border-danger/30 bg-danger/10 text-danger"
-                  : "border-subtle bg-surface text-foreground"
+                  ? "border-[rgba(184,64,64,0.28)] bg-[rgba(184,64,64,0.08)] text-[var(--negative-color)]"
+                  : "border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-secondary)]"
               )}
             >
               {errorMessage ??
@@ -6715,14 +6748,15 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             </div>
           )}
 
-          <main ref={workspaceScrollRef} className="min-h-0 flex-1 overflow-auto p-3">
+          <main ref={workspaceScrollRef} className="min-h-0 flex-1 overflow-hidden px-4 py-4">
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={activeTab}
-                initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 6 }}
-                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-                exit={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
-                transition={{ duration: 0.2 }}
+                className="h-full min-h-0 overflow-auto"
+                initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, x: 8 }}
+                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
+                exit={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, x: -8 }}
+                transition={{ duration: 0.18 }}
               >
                 {activeTab === "overview" && renderOverview()}
                 {activeTab === "holdings" && renderHoldings()}
@@ -6735,16 +6769,6 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               </motion.div>
             </AnimatePresence>
           </main>
-
-          <footer className="flex h-6 shrink-0 items-center gap-3 border-t border-subtle bg-surface/80 px-4 text-[9px] text-muted-foreground backdrop-blur-xl">
-            <span className="inline-flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-positive animate-pulse-glow" />
-              System online
-            </span>
-            <span>Tab: {activeTabMeta.shortLabel}</span>
-            <span>{selectedPortfolio ? `${selectedPortfolio.positions.length} positions` : "No portfolio"}</span>
-            <span className="ml-auto font-mono-data">as-of {new Date().toISOString().slice(0, 19)}Z</span>
-          </footer>
         </div>
       </div>
 
@@ -6752,37 +6776,35 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
         <div className="fixed inset-0 z-40 lg:hidden">
           <button
             type="button"
-            className="absolute inset-0 bg-black/70"
+            className="absolute inset-0 bg-[rgba(10,10,10,0.2)]"
             onClick={() => setMobileNavOpen(false)}
           />
-          <aside className="relative z-10 h-full w-[88%] max-w-xs border-r border-white/[0.08] bg-sidebar px-4 py-4 shadow-shell">
-            <div className="flex items-center justify-between border-b border-white/[0.06] pb-4">
-              <div className="flex items-center gap-3">
-                <span className="text-white">
-                  <LogoMark />
-                </span>
-                <p className="text-sm font-semibold text-white">Portfolio Management Platform</p>
-              </div>
+          <aside className="relative z-10 h-full w-[88%] max-w-xs border-r border-[var(--border-default)] bg-[var(--bg-base)] px-4 py-4">
+            <div className="flex items-center justify-between border-b border-[var(--border-default)] pb-4">
+              <p className="font-display text-[18px] font-semibold italic text-[var(--text-primary)]">Navigation</p>
               <button
                 type="button"
                 onClick={() => setMobileNavOpen(false)}
-                className="rounded-lg border border-white/[0.08] p-2 text-slate-300"
+                className="inline-flex h-8 w-8 items-center justify-center border border-[var(--border-default)] text-[var(--text-secondary)]"
               >
                 <CloseIcon className="h-4 w-4" />
               </button>
             </div>
             <div className="mt-4 space-y-3">
-              <p className="text-xs font-medium text-slate-500">Portfolio</p>
+              <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">Portfolio</p>
               {portfolioSummaries.length > 0 ? portfolioSelector : null}
             </div>
-            <nav className="mt-6 space-y-1.5">
+            <nav className="mt-6 space-y-1">
               {tabs.map((tab) => (
                 <SidebarNavItem
                   key={tab.id}
                   active={activeTab === tab.id}
                   label={tab.shortLabel}
                   icon={tab.icon}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    setMobileNavOpen(false);
+                  }}
                 />
               ))}
             </nav>
@@ -6791,7 +6813,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
       ) : null}
 
       {(holdingDetailLoading || selectedHoldingDetail) && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/72 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex justify-end bg-[rgba(10,10,10,0.16)] backdrop-blur-sm">
           <button
             type="button"
             className="absolute inset-0 cursor-default"
@@ -6800,16 +6822,16 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
               setHoldingDetailLoading(false);
             }}
           />
-          <aside className="relative z-10 h-full w-full max-w-2xl animate-[slideUpSoft_240ms_ease-out] overflow-y-auto border-l border-white/10 bg-black/95 px-6 py-6 shadow-2xl">
+          <aside className="relative z-10 h-full w-full max-w-2xl animate-[slideUpSoft_240ms_ease-out] overflow-y-auto border-l border-[var(--border-default)] bg-[var(--bg-base)] px-6 py-6 shadow-[var(--shadow-md)]">
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
-                <p className="font-mono text-xs uppercase tracking-[0.35em] text-zinc-300">
+                <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">
                   Holding Detail
                 </p>
-                <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-white">
+                <h2 className="mt-3 font-display text-[28px] font-bold italic tracking-[-0.01em] text-[var(--text-primary)]">
                   {selectedHoldingDetail?.ticker ?? "Loading"}
                 </h2>
-                <p className="mt-2 text-sm text-slate-400">
+                <p className="mt-2 text-[13px] font-light leading-[1.7] text-[var(--text-secondary)]">
                   {selectedHoldingDetail?.companyName ??
                     "Pulling company profile, valuation, and balance-sheet detail."}
                 </p>
@@ -6820,14 +6842,14 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                   setSelectedHoldingDetail(null);
                   setHoldingDetailLoading(false);
                 }}
-                className="rounded-md border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
+                className="border border-[var(--border-default)] px-4 py-2 text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-primary)] transition hover:border-[var(--border-strong)] hover:bg-[var(--bg-hover)]"
               >
                 Close
               </button>
             </div>
 
             {holdingDetailLoading || !selectedHoldingDetail ? (
-              <div className="rounded-3xl border border-slate-800 bg-slate-950/40 p-8 text-sm text-slate-400">
+              <div className="border border-[var(--border-default)] bg-[var(--bg-surface)] p-8 text-[13px] font-light text-[var(--text-secondary)]">
                 Loading company detail...
               </div>
             ) : (

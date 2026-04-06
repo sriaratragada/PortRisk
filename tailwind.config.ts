@@ -38,13 +38,14 @@ const config: Config = {
         danger: "hsl(var(--destructive) / <alpha-value>)"
       },
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
-        mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
-        data: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"]
+        sans: ["var(--font-sora)"],
+        mono: ["var(--font-sora)"],
+        data: ["var(--font-sora)"],
+        display: ["var(--font-playfair)"]
       },
       boxShadow: {
-        panel: "0 10px 24px rgba(0, 0, 0, 0.24)",
-        shell: "0 18px 36px rgba(0, 0, 0, 0.35)"
+        panel: "0 1px 3px rgba(0, 0, 0, 0.06)",
+        shell: "0 4px 16px rgba(0, 0, 0, 0.08)"
       },
       borderRadius: {
         lg: "var(--radius)",
