@@ -6631,122 +6631,122 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
   );
 
   return (
-    <div className="relative h-screen overflow-hidden bg-background text-foreground">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute inset-0 grid-pattern opacity-20" />
-        <div className="absolute -top-24 -right-12 h-[520px] w-[520px] rounded-full bg-primary/12 blur-[140px]" />
-        <div className="absolute top-1/3 -left-32 h-[520px] w-[520px] rounded-full bg-positive/10 blur-[140px]" />
-        <div className="absolute -bottom-28 right-1/4 h-[460px] w-[460px] rounded-full bg-destructive/12 blur-[120px]" />
-      </div>
-      <div className="relative z-10 flex h-full">
-        <aside className="hidden w-16 shrink-0 flex-col items-center gap-1 border-r border-subtle bg-surface/80 py-3 backdrop-blur-xl lg:flex">
-          <div className="mb-3 flex h-8 w-8 items-center justify-center rounded bg-primary/20 text-primary">
-            <LogoMark className="h-5 w-5" />
+    <div className="relative flex h-screen flex-col overflow-hidden" style={{ background: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+      {/* TOPBAR - 48px fixed */}
+      <header className="flex h-12 shrink-0 items-center justify-between border-b px-4" style={{ borderColor: 'var(--border-default)', background: 'var(--bg-base)' }}>
+        <div className="flex items-center gap-3">
+          <span className="font-display text-base font-semibold italic" style={{ color: 'var(--text-primary)' }}>
+            Portfolio Risk Engine
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="hidden min-w-[180px] max-w-[220px] md:block">{portfolioSelector}</div>
+          <div className="flex items-center gap-2 rounded px-2 py-1 text-badge uppercase" style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}>
+            <span className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ background: 'var(--positive)' }} />
+            Live
           </div>
-          {tabs.map((tab) => (
-            <SidebarNavItem
-              key={tab.id}
-              active={activeTab === tab.id}
-              label={tab.shortLabel}
-              icon={tab.icon}
-              onClick={() => setActiveTab(tab.id)}
-            />
-          ))}
           <button
             type="button"
-            onClick={() => setActiveTab("holdings")}
-            className="mt-auto flex h-10 w-10 items-center justify-center rounded border border-subtle text-muted-foreground transition hover:bg-secondary hover:text-foreground"
-            title="Add position"
+            className="flex h-8 w-8 items-center justify-center rounded transition hover:opacity-70"
+            style={{ color: 'var(--text-tertiary)' }}
           >
-            <PlusIcon className="h-4 w-4" />
+            <SettingsIcon className="h-4 w-4" />
           </button>
-        </aside>
-
-        <div className="flex min-w-0 flex-1 flex-col">
-          <WorkspaceToolbar
-            title={activeTabMeta.label}
-            subtitle={workspaceSubtitle}
-            actions={
-              <>
-                <button
-                  type="button"
-                  onClick={() => setMobileNavOpen(true)}
-                  className="inline-flex h-8 items-center gap-1 rounded border border-subtle px-2 text-xs text-muted-foreground transition hover:text-foreground lg:hidden"
-                >
-                  <MenuIcon className="h-3.5 w-3.5" />
-                  Menu
-                </button>
-                <div className="hidden min-w-[210px] max-w-[260px] lg:block">{portfolioSelector}</div>
-                <RangeSelector value={portfolioRange} onChange={setPortfolioRange} />
-                <div className="hidden items-center gap-1 md:flex">
-                  <button
-                    type="button"
-                    className="flex h-9 w-9 items-center justify-center rounded border border-subtle bg-surface text-muted-foreground transition hover:text-foreground hover:border-primary/40 hover:bg-primary/10"
-                  >
-                    <Search className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    className="relative flex h-9 w-9 items-center justify-center rounded border border-subtle bg-surface text-muted-foreground transition hover:text-foreground hover:border-primary/40 hover:bg-primary/10"
-                  >
-                    <Bell className="h-4 w-4" />
-                    <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-destructive" />
-                  </button>
-                  <div className="ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 text-[11px] font-semibold text-primary">
-                    PMP
-                  </div>
-                </div>
-              </>
-            }
-          />
-
-          {(statusMessage || errorMessage || portfolioLoading || isPending) && (
-            <div
-              className={cn(
-                "mx-3 mt-2 rounded border px-3 py-2 text-xs",
-                errorMessage
-                  ? "border-danger/30 bg-danger/10 text-danger"
-                  : "border-subtle bg-surface text-foreground"
-              )}
-            >
-              {errorMessage ??
-                statusMessage ??
-                (portfolioLoading || isPending ? "Updating workspace..." : null)}
-            </div>
-          )}
-
-          <main ref={workspaceScrollRef} className="min-h-0 flex-1 overflow-auto p-3">
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.div
-                key={activeTab}
-                initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 6 }}
-                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-                exit={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
-                transition={{ duration: 0.2 }}
-              >
-                {activeTab === "overview" && renderOverview()}
-                {activeTab === "holdings" && renderHoldings()}
-                {activeTab === "research" && renderResearch()}
-                {activeTab === "risk" && renderRisk()}
-                {activeTab === "stress" && renderStress()}
-                {activeTab === "allocation" && renderAllocation()}
-                {activeTab === "audit" && renderAudit()}
-                {activeTab === "settings" && renderSettings()}
-              </motion.div>
-            </AnimatePresence>
-          </main>
-
-          <footer className="flex h-6 shrink-0 items-center gap-3 border-t border-subtle bg-surface/80 px-4 text-[9px] text-muted-foreground backdrop-blur-xl">
-            <span className="inline-flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-positive animate-pulse-glow" />
-              System online
-            </span>
-            <span>Tab: {activeTabMeta.shortLabel}</span>
-            <span>{selectedPortfolio ? `${selectedPortfolio.positions.length} positions` : "No portfolio"}</span>
-            <span className="ml-auto font-mono-data">as-of {new Date().toISOString().slice(0, 19)}Z</span>
-          </footer>
+          <div className="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-semibold" style={{ background: 'var(--bg-inset)', color: 'var(--text-secondary)' }}>
+            PM
+          </div>
         </div>
-      </div>
+      </header>
+      {/* Gold accent line */}
+      <div className="h-px w-full" style={{ background: 'rgba(201, 169, 110, 0.3)' }} />
+
+      {/* TAB BAR - 40px fixed */}
+      <nav className="flex h-10 shrink-0 items-center gap-0 border-b px-2 overflow-x-auto" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border-default)' }}>
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "relative h-10 px-5 text-[11px] font-ui uppercase tracking-[0.12em] transition-colors",
+                isActive
+                  ? "font-semibold"
+                  : "font-normal hover:bg-[var(--bg-hover)]"
+              )}
+              style={{
+                color: isActive ? 'var(--text-primary)' : 'var(--text-tertiary)',
+              }}
+            >
+              {tab.shortLabel}
+              {isActive && (
+                <motion.span
+                  layoutId="tab-indicator"
+                  className="absolute bottom-0 left-0 right-0 h-0.5"
+                  style={{ background: 'var(--accent)' }}
+                  transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                />
+              )}
+            </button>
+          );
+        })}
+        <div className="ml-auto flex items-center gap-2 pr-2">
+          <RangeSelector value={portfolioRange} onChange={setPortfolioRange} />
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen(true)}
+            className="inline-flex h-7 items-center gap-1 rounded px-2 text-[10px] uppercase tracking-wide transition md:hidden"
+            style={{ border: '1px solid var(--border-default)', color: 'var(--text-tertiary)' }}
+          >
+            <MenuIcon className="h-3 w-3" />
+            Menu
+          </button>
+        </div>
+      </nav>
+
+      {/* Status bar */}
+      {(statusMessage || errorMessage || portfolioLoading || isPending) && (
+        <div
+          className="mx-4 mt-2 rounded px-3 py-2 text-[12px]"
+          style={{
+            border: `1px solid ${errorMessage ? 'rgba(184, 64, 64, 0.3)' : 'var(--border-default)'}`,
+            background: errorMessage ? 'rgba(184, 64, 64, 0.08)' : 'var(--bg-surface)',
+            color: errorMessage ? 'var(--negative)' : 'var(--text-secondary)'
+          }}
+        >
+          {errorMessage ??
+            statusMessage ??
+            (portfolioLoading || isPending ? "Updating workspace..." : null)}
+        </div>
+      )}
+
+      {/* TAB CONTENT AREA - fills remaining height */}
+      <main 
+        ref={workspaceScrollRef} 
+        className="min-h-0 flex-1 overflow-auto"
+        style={{ background: 'var(--bg-base)' }}
+      >
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={activeTab}
+            initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, x: 8 }}
+            animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
+            exit={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, x: -8 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="h-full"
+          >
+            {activeTab === "overview" && renderOverview()}
+            {activeTab === "holdings" && renderHoldings()}
+            {activeTab === "research" && renderResearch()}
+            {activeTab === "risk" && renderRisk()}
+            {activeTab === "stress" && renderStress()}
+            {activeTab === "allocation" && renderAllocation()}
+            {activeTab === "audit" && renderAudit()}
+            {activeTab === "settings" && renderSettings()}
+          </motion.div>
+        </AnimatePresence>
+      </main>
 
       {mobileNavOpen ? (
         <div className="fixed inset-0 z-40 lg:hidden">
