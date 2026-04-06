@@ -85,13 +85,15 @@ type PortfolioData = {
   recommendations: AllocationRecommendationSet | null;
 };
 
-type PremiumDashboardProps = {
+export type PremiumDashboardProps = {
   initialData: PortfolioData;
   user: {
     id: string;
     email: string;
   };
 };
+
+export type { PortfolioData };
 
 // Portfolio selector dropdown
 function PortfolioSelector({
