@@ -4071,8 +4071,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           <EmptyState title="No portfolio selected" copy="Select a portfolio to monitor blotter signals." />
         ) : (
           <div className="space-y-4">
-            <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
-              <p className="text-sm font-medium text-white">Concentration</p>
+            <div className="border border-[var(--border-default)] bg-[var(--bg-surface)] p-4">
+              <p className="text-[13px] font-semibold text-[var(--text-primary)]">Concentration</p>
               <div className="mt-4 grid gap-4">
                 <InlineMetric
                   label="Top weight"
@@ -4086,8 +4086,8 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 <InlineMetric label="Median weight" value={formatPercent(medianWeight)} />
               </div>
             </div>
-            <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4">
-              <p className="text-sm font-medium text-white">Attribution</p>
+            <div className="border border-[var(--border-default)] bg-[var(--bg-surface)] p-4">
+              <p className="text-[13px] font-semibold text-[var(--text-primary)]">Attribution</p>
               <div className="mt-4 grid gap-4">
                 <InlineMetric
                   label="Best sector"
@@ -4120,7 +4120,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
     );
 
     return (
-      <div className="space-y-4">
+      <div className="space-y-3">
         <Panel title="Holdings status" action={<RangeSelector value={portfolioRange} onChange={setPortfolioRange} />}>
           {!selectedPortfolio ? (
             <EmptyState
@@ -4129,16 +4129,18 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
             />
           ) : (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
-              <div className="rounded-lg border border-white/[0.06] bg-muted/60 p-4 md:col-span-2 xl:col-span-2">
-                <p className="text-xs text-slate-400">{comparisonLabel}</p>
+              <div className="border border-[var(--border-default)] bg-[var(--bg-surface)] p-4 md:col-span-2 xl:col-span-2">
+                <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">{comparisonLabel}</p>
                 <div className="mt-2 flex flex-wrap items-end gap-3">
-                  <p className="text-2xl font-semibold tracking-[-0.04em] text-white">
+                  <p className="text-2xl font-semibold tracking-[-0.02em] text-[var(--text-primary)]">
                     {selectedMetrics ? formatCurrency(selectedMetrics.portfolioValue) : "N/A"}
                   </p>
                   <span
                     className={cn(
-                      "rounded border px-2 py-1 text-xs",
-                      dailyPnl >= 0 ? "border-success/20 bg-success/10 text-success" : "border-danger/20 bg-danger/10 text-danger"
+                      "rounded-sm border px-2 py-1 text-[10px] font-medium uppercase tracking-[0.1em]",
+                      dailyPnl >= 0
+                        ? "border-[var(--border-default)] bg-[rgba(45,122,79,0.08)] text-[var(--positive-color)]"
+                        : "border-[rgba(184,64,64,0.24)] bg-[rgba(184,64,64,0.08)] text-[var(--negative-color)]"
                     )}
                   >
                     {formatCurrency(dailyPnl)}
@@ -4146,20 +4148,20 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                   <div>
-                    <p className="text-slate-500">Portfolio</p>
-                    <p className={cn("font-mono-data", (rangePortfolioReturn ?? 0) >= 0 ? "text-success" : "text-danger")}>
+                    <p className="text-[var(--text-tertiary)]">Portfolio</p>
+                    <p className={cn("font-mono-data", (rangePortfolioReturn ?? 0) >= 0 ? "text-[var(--positive-color)]" : "text-[var(--negative-color)]")}>
                       {formatPercent(rangePortfolioReturn)}
                     </p>
                   </div>
                   <div>
-                    <p className="text-slate-500">{selectedPortfolio.benchmark}</p>
-                    <p className={cn("font-mono-data", (rangeBenchmarkReturn ?? 0) >= 0 ? "text-success" : "text-danger")}>
+                    <p className="text-[var(--text-tertiary)]">{selectedPortfolio.benchmark}</p>
+                    <p className={cn("font-mono-data", (rangeBenchmarkReturn ?? 0) >= 0 ? "text-[var(--positive-color)]" : "text-[var(--negative-color)]")}>
                       {formatPercent(rangeBenchmarkReturn)}
                     </p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Excess</p>
-                    <p className={cn("font-mono-data", (rangeExcessReturn ?? 0) >= 0 ? "text-success" : "text-danger")}>
+                    <p className="text-[var(--text-tertiary)]">Excess</p>
+                    <p className={cn("font-mono-data", (rangeExcessReturn ?? 0) >= 0 ? "text-[var(--positive-color)]" : "text-[var(--negative-color)]")}>
                       {formatPercent(rangeExcessReturn)}
                     </p>
                   </div>
@@ -4183,7 +4185,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           )}
         </Panel>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(360px,0.7fr)]">
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
           <Panel
             title="Portfolio vs Benchmark Performance"
             action={<span className="text-[10px] text-muted-foreground">{portfolioRange} • {comparisonLabel}</span>}
@@ -4194,7 +4196,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 copy="Add holdings and wait for benchmark analytics to load this comparison chart."
               />
             ) : (
-              <div className="h-56">
+              <div className="h-44">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={holdingsChartData}>
                     <CartesianGrid stroke="hsl(var(--border) / 0.35)" vertical={false} />
@@ -4209,11 +4211,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                         const portfolioValue = payload.find((point) => point.dataKey === "portfolioIndex")?.value;
                         const benchmarkValue = payload.find((point) => point.dataKey === "benchmarkIndex")?.value;
                         return (
-                          <div className="rounded border border-subtle bg-card px-3 py-2 text-xs shadow-panel">
-                            <p className="font-mono-data text-foreground">
+                          <div className="rounded-sm border border-[var(--border-default)] bg-[var(--bg-base)] px-3 py-2 text-xs">
+                            <p className="font-mono-data text-[var(--text-primary)]">
                               Portfolio {typeof portfolioValue === "number" ? portfolioValue.toFixed(2) : "N/A"}
                             </p>
-                            <p className="font-mono-data text-muted-foreground">
+                            <p className="font-mono-data text-[var(--text-tertiary)]">
                               {selectedPortfolio.benchmark} {typeof benchmarkValue === "number" ? benchmarkValue.toFixed(2) : "N/A"}
                             </p>
                           </div>
@@ -4235,7 +4237,7 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
           </div>
         </div>
 
-        <Panel title="Positions" action={<span className="text-xs text-slate-500">Portfolio blotter</span>}>
+        <Panel title="Positions" action={<span className="text-xs text-[var(--text-tertiary)]">Portfolio blotter</span>}>
           {riskError ? <div className="mb-4"><InlineNotice message={riskError} tone="warning" /></div> : null}
           {benchmarkAnalyticsError ? <div className="mb-4"><InlineNotice message={benchmarkAnalyticsError} tone="warning" /></div> : null}
           {!selectedPortfolio ? (
@@ -4289,11 +4291,11 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                 />
               </div>
 
-              <div className="overflow-hidden rounded-xl border border-white/[0.06]">
-                <div className="max-h-[620px] overflow-auto">
+              <div className="overflow-hidden rounded-sm border border-[var(--border-default)]">
+                <div className="max-h-[460px] overflow-auto">
                   <table className="min-w-full text-left text-sm">
-                    <thead className="sticky top-0 z-10 bg-panel/95 backdrop-blur">
-                      <tr className="border-b border-white/[0.06] text-slate-500">
+                    <thead className="sticky top-0 z-10 bg-[var(--bg-surface)]">
+                      <tr className="border-b border-[var(--border-strong)] text-[var(--text-tertiary)]">
                         <th className="px-4 py-3 font-medium">Ticker</th>
                         <th className="px-4 py-3 font-medium">Name</th>
                         <th className="px-4 py-3 font-medium">Price</th>
@@ -4304,68 +4306,68 @@ export function WorkspaceApp({ initialData }: { initialData: WorkspaceData }) {
                         <th className="px-4 py-3 font-medium text-right">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/[0.06]">
+                    <tbody className="divide-y divide-[var(--border-default)]">
                       {sortedHoldings.map((holding) => {
                         const contribution = holdingContributionMap.get(holding.ticker.toUpperCase())?.contribution;
                         return (
-                          <tr key={holding.ticker} className="bg-panel/40 transition hover:bg-white/[0.02]">
+                          <tr key={holding.ticker} className="bg-[var(--bg-base)] transition hover:bg-[var(--bg-hover)]">
                             <td className="px-4 py-3 align-top">
                               <button
                                 type="button"
                                 onClick={() => void openHoldingDetail(holding.ticker)}
                                 className="text-left"
                               >
-                                <p className="font-semibold text-white">{holding.ticker}</p>
-                                <p className="mt-1 text-xs text-slate-500">{holding.assetClass ?? "equities"}</p>
+                                <p className="font-semibold text-[var(--text-primary)]">{holding.ticker}</p>
+                                <p className="mt-1 text-xs text-[var(--text-tertiary)]">{holding.assetClass ?? "equities"}</p>
                               </button>
                             </td>
                             <td className="px-4 py-3 align-top">
-                              <p className="text-white">{holding.companyName ?? holding.ticker}</p>
-                              <p className="mt-1 text-xs text-slate-500">{holding.exchange ?? "Exchange N/A"}</p>
+                              <p className="text-[var(--text-primary)]">{holding.companyName ?? holding.ticker}</p>
+                              <p className="mt-1 text-xs text-[var(--text-tertiary)]">{holding.exchange ?? "Exchange N/A"}</p>
                             </td>
                             <td className="px-4 py-3 align-top">
-                              <p className="text-white">{formatCurrency(holding.currentPrice)}</p>
-                              <p className={cn("mt-1 text-xs", (holding.dailyPnl ?? 0) >= 0 ? "text-success" : "text-danger")}>
+                              <p className="text-[var(--text-primary)]">{formatCurrency(holding.currentPrice)}</p>
+                              <p className={cn("mt-1 text-xs", (holding.dailyPnl ?? 0) >= 0 ? "text-[var(--positive-color)]" : "text-[var(--negative-color)]")}>
                                 {holding.dailyPnl != null ? formatCurrency(holding.dailyPnl) : "Quote unavailable"}
                               </p>
                             </td>
                             <td className="px-4 py-3 align-top">
-                              <p className="text-white">{formatCurrency(holding.currentValue)}</p>
-                              <p className="mt-1 text-xs text-slate-500">{holding.shares.toFixed(2)} shares</p>
+                              <p className="text-[var(--text-primary)]">{formatCurrency(holding.currentValue)}</p>
+                              <p className="mt-1 text-xs text-[var(--text-tertiary)]">{holding.shares.toFixed(2)} shares</p>
                             </td>
-                            <td className="px-4 py-3 align-top text-white">{formatPercent(holding.weight)}</td>
+                            <td className="px-4 py-3 align-top text-[var(--text-primary)]">{formatPercent(holding.weight)}</td>
                             <td className="px-4 py-3 align-top">
-                              <p className={cn((holding.totalGain ?? 0) >= 0 ? "text-success" : "text-danger")}>
+                              <p className={cn((holding.totalGain ?? 0) >= 0 ? "text-[var(--positive-color)]" : "text-[var(--negative-color)]")}>
                                 {formatCurrency(holding.totalGain)}
                               </p>
-                              <p className="mt-1 text-xs text-slate-500">{formatPercent(holding.totalGainPercent)}</p>
+                              <p className="mt-1 text-xs text-[var(--text-tertiary)]">{formatPercent(holding.totalGainPercent)}</p>
                             </td>
                             <td className="px-4 py-3 align-top">
-                              <p className={cn((contribution ?? 0) >= 0 ? "text-success" : "text-danger")}>
+                              <p className={cn((contribution ?? 0) >= 0 ? "text-[var(--positive-color)]" : "text-[var(--negative-color)]")}>
                                 {formatPercent(contribution)}
                               </p>
-                              <p className="mt-1 text-xs text-slate-500">{portfolioRange}</p>
+                              <p className="mt-1 text-xs text-[var(--text-tertiary)]">{portfolioRange}</p>
                             </td>
                             <td className="px-4 py-3 align-top">
                               <div className="flex justify-end gap-2">
                                 <button
                                   type="button"
                                   onClick={() => void openHoldingDetail(holding.ticker)}
-                                  className="rounded-lg border border-white/[0.08] px-3 py-2 text-xs text-slate-300 transition hover:border-white/[0.14] hover:text-white"
+                                  className="border border-[var(--border-default)] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
                                 >
                                   Detail
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => startEditingPosition(holding.ticker)}
-                                  className="rounded-lg border border-white/[0.08] px-3 py-2 text-xs text-slate-300 transition hover:border-white/[0.14] hover:text-white"
+                                  className="border border-[var(--border-default)] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
                                 >
                                   Edit
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => void removePosition(holding.ticker)}
-                                  className="rounded-lg border border-danger/30 px-3 py-2 text-xs text-danger"
+                                  className="border border-[rgba(184,64,64,0.28)] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--negative-color)] transition hover:bg-[rgba(184,64,64,0.08)]"
                                 >
                                   Remove
                                 </button>
