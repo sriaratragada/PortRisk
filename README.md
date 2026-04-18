@@ -95,9 +95,7 @@ The Prisma schema defines core entities:
 - `StressTest`
 - `AuditLog`
 
-See full schema at:
-
-- `./prisma/schema.prisma`
+Full schema location: `./prisma/schema.prisma`
 
 ## Getting Started
 
@@ -148,10 +146,12 @@ Defined in `.env.example`:
 - `AI_API_KEY`
 - `AI_BASE_URL`
 - `AI_MODEL`
-- `TWELVE_DATA_API_KEY` *(legacy placeholder)*
-- `FMP_API_KEY` *(legacy placeholder)*
+### Legacy (optional, usually unset for new installs)
 
-Legacy placeholders are kept for compatibility with older local setups; the current market-data implementation is Yahoo-based, so these are not required for normal operation.
+- `TWELVE_DATA_API_KEY`
+- `FMP_API_KEY`
+
+These are kept only for compatibility with older local setups. The current market-data implementation is Yahoo-based, so new installations can leave them unset.
 
 ## Database Setup (Prisma)
 
