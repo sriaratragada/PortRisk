@@ -45,7 +45,7 @@ It combines deterministic risk analytics, benchmark-aware performance views, an 
 ## Project Structure
 
 ```text
-/home/runner/work/PortRisk/PortRisk
+.
 ├── app/                 # App Router pages and API route handlers
 ├── components/          # UI and workspace components
 ├── lib/                 # Business logic, adapters, analytics, auth/data helpers
@@ -97,14 +97,14 @@ The Prisma schema defines core entities:
 
 See full schema at:
 
-- `/home/runner/work/PortRisk/PortRisk/prisma/schema.prisma`
+- `./prisma/schema.prisma`
 
 ## Getting Started
 
 ### 1) Install dependencies
 
 ```bash
-cd /home/runner/work/PortRisk/PortRisk
+# from the project root
 npm install
 ```
 
@@ -129,7 +129,7 @@ App runs at `http://localhost:3000` by default.
 
 ## Environment Variables
 
-Defined in `/home/runner/work/PortRisk/PortRisk/.env.example`:
+Defined in `.env.example`:
 
 ### Required
 
@@ -151,6 +151,8 @@ Defined in `/home/runner/work/PortRisk/PortRisk/.env.example`:
 - `TWELVE_DATA_API_KEY` *(legacy placeholder)*
 - `FMP_API_KEY` *(legacy placeholder)*
 
+Legacy placeholders are kept for compatibility with older local setups; the current market-data implementation is Yahoo-based, so these are not required for normal operation.
+
 ## Database Setup (Prisma)
 
 - Generate client: `npm run prisma:generate`
@@ -159,7 +161,7 @@ Defined in `/home/runner/work/PortRisk/PortRisk/.env.example`:
 
 ## Available Scripts
 
-From `/home/runner/work/PortRisk/PortRisk`:
+From the project root:
 
 - `npm run dev` — start dev server
 - `npm run build` — production build
