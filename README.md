@@ -1,6 +1,6 @@
 # Portfolio Management Platform
 
-PortRisk is a Next.js portfolio risk and research workspace for building, tracking, and stress-testing investment portfolios.
+Portfolio Management Platofrm is a Next.js portfolio risk and research workspace for building, tracking, and stress-testing investment portfolios.
 
 It combines deterministic risk analytics, benchmark-aware performance views, an auditable activity trail, and a research-to-position workflow in one application.
 
