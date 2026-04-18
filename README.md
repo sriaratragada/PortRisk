@@ -9,6 +9,23 @@ This project started as a portfolio dashboard and evolved into a full workflow s
 - audit/compliance traceability
 - research-to-position pipeline with watchlist promotion
 
+## Table of Contents
+
+- [Why I Built This](#why-i-built-this)
+- [What This Product Does](#what-this-product-does)
+- [Architecture](#architecture)
+- [Engineering Methodologies Behind the Scenes](#engineering-methodologies-behind-the-scenes)
+- [Accuracy & Degradation Rules](#accuracy--degradation-rules)
+- [Risk Engine Principles](#risk-engine-principles)
+- [What I Learned (Builder Perspective)](#what-i-learned-builder-perspective)
+- [What I Achieved](#what-i-achieved)
+- [Routes](#routes)
+- [Local Setup](#local-setup)
+- [Scripts](#scripts)
+- [Testing](#testing)
+- [Security Notes Before Making Repo Public](#security-notes-before-making-repo-public)
+- [Project Status](#project-status)
+
 ---
 
 ## Why I Built This
@@ -72,6 +89,20 @@ My goal was to build a system where:
 - `AuditLog`
 
 See [`prisma/schema.prisma`](./prisma/schema.prisma).
+
+---
+
+## Engineering Methodologies Behind the Scenes
+
+To keep this platform reliable under real-world data/API conditions, I used a few deliberate engineering methodologies:
+
+- **Deterministic core, assistive AI edge**: risk and attribution computations are deterministic so outputs stay auditable and repeatable; AI is only used to explain results, not to define them.
+- **Progressive enrichment (two-phase data model)**: saved holdings render first for correctness and continuity, then live market/fundamental enrichment is layered in so the workspace stays usable even during partial outages.
+- **Graceful degradation over hard failure**: each major tab is designed to fail locally; if one subsystem has missing data, the rest of the workspace remains intact.
+- **Explicit nullability over fabricated defaults**: unavailable provider fields stay unavailable instead of being guessed, preserving analytical integrity.
+- **Traceability-first workflow design**: append-only audit logging and explicit research state transitions make portfolio decisions inspectable after the fact.
+
+These choices prioritize correctness, explainability, and operational resilience over cosmetic completeness.
 
 ---
 
@@ -231,4 +262,3 @@ Next expansions could include:
 - stronger per-field fundamentals coverage
 - broader risk model diagnostics
 - richer portfolio-relative research ranking heuristics
-
