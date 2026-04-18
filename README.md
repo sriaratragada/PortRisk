@@ -1,4 +1,4 @@
-# PortRisk
+# Portfolio Management Platform
 
 PortRisk is a Next.js portfolio risk and research workspace for building, tracking, and stress-testing investment portfolios.
 
